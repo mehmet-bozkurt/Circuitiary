@@ -20,6 +20,8 @@ describe('curated anatomy scope and measurement boundaries', () => {
     for (const [id, value] of Object.entries(populations)) {
       expect(count(id, 'neurons')).toMatchObject({ value, unit: 'neurons' })
     }
+    // The preprint reports 166.691; the published 166.700 is kept as the count but the record says it may be rounded.
+    expect(count('male-cns2026', 'neurons')!.definition).toContain('166.691')
     expect(count('hemibrain2020', 'neurons')!.approximate).toBe(true)
     expect(count('flywire2024', 'neurons')!.approximate).toBe(false)
     expect(recordFor('cook2019-hermaphrodite').reconstruction.kind).toBe('composite')

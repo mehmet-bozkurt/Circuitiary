@@ -22,6 +22,9 @@ const pageTitles: Record<Page, string> = {
   atlas: 'Türler atlası · Circuitiary',
 }
 const mainIds: Record<Page, string> = { experiment: 'top', lesson: 'neuron-lesson', guided: 'guided-experiments', reading: 'circuit-reading', assumptions: 'real-assumptions', atlas: 'species-atlas' }
+const knownPaths = ['', lessonPath, guidedPath, readingPath, assumptionsPath, atlasPath]
+// An address outside the app still opens the experiment page, but says so.
+const unknownPath = (pathname: string) => knownPaths.includes(pathname.replace(/\/$/, '')) ? '' : pathname
 function pageFor(pathname: string): Page {
   const path = pathname.replace(/\/$/, '')
   if (path === lessonPath) return 'lesson'
@@ -32,6 +35,7 @@ function pageFor(pathname: string): Page {
   return 'experiment'
 }
 const page = ref<Page>(pageFor(location.pathname))
+const notFoundPath = ref(unknownPath(location.pathname))
 const experimentMounted = ref(page.value === 'experiment')
 const lessonMounted = ref(page.value === 'lesson')
 const guidedMounted = ref(page.value === 'guided')
@@ -67,7 +71,7 @@ const handoffLoading = ref(false)
 const handoffError = ref('')
 
 function updateTitle() {
-  document.title = pageTitles[page.value]
+  document.title = notFoundPath.value ? 'Sayfa bulunamadı · Circuitiary' : pageTitles[page.value]
 }
 
 function completeFocus() {
@@ -101,6 +105,7 @@ function showPage(url: URL, scroll: boolean) {
   inspectionToken++
   handoffError.value = ''
   page.value = pageFor(url.pathname)
+  notFoundPath.value = unknownPath(url.pathname)
   if (page.value === 'experiment') experimentMounted.value = true
   else if (page.value === 'lesson') lessonMounted.value = true
   else if (page.value === 'guided') guidedMounted.value = true
@@ -150,7 +155,7 @@ async function inspectFromReading(request: { neuronId: string }) {
 
 function historyChanged() {
   const url = new URL(location.href)
-  if (pageFor(url.pathname) !== page.value) showPage(url, false)
+  if (pageFor(url.pathname) !== page.value || unknownPath(url.pathname) !== notFoundPath.value) showPage(url, false)
   // Same-page fragment traversal stays under the browser's scroll restoration.
 }
 
@@ -192,6 +197,10 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
       </div>
       <p class="term-help">Noktalı altı çizili sözcüklerin anlamı ve kökeni için üzerine gel veya dokun. Klavyeyle odaklanarak da okuyabilirsin.</p>
     </nav>
+    <div v-if="notFoundPath" class="route-notice" role="status">
+      <p>“{{ notFoundPath }}” adresinde bir sayfa yok; devre deneyleri sayfasını gösteriyoruz.</p>
+      <a href="/">Devre deneyleri sayfasına git</a>
+    </div>
     <!-- First visit mounts each view. Later visits preserve its independent state. -->
     <div v-show="page === 'experiment'" ref="experimentRegion" class="view-page">
       <ExperimentPage v-if="experimentMounted" ref="experimentPage" :suspended="page !== 'experiment'" />
@@ -215,6 +224,10 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
 </template>
 
 <style scoped>
+.route-notice { max-width: 1320px; margin: 12px auto 0; padding: 12px 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; border-left: 3px solid #a57b40; background: var(--theme-surface-soft, #f3eddf); color: var(--theme-text, #263b35); font-size: 13px; line-height: 1.8; }
+.route-notice p { overflow-wrap: anywhere; }
+.route-notice a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 760px) { .route-notice { padding-left: 18px; padding-right: 18px; } }
 .term-help { font-size: 11px; line-height: 1.8; color: var(--muted); }
 .navigation-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
 .theme-picker { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }

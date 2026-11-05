@@ -1,0 +1,31 @@
+name: CI
+
+# Tarayıcı senaryoları sistemdeki Chrome'u ve yerel veriyi kullanır; burada yalnız
+# tür denetimi, birim testleri, üretim derlemesi ve Python içe aktarıcı testleri koşar.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-importer.txt
+      - run: python -m unittest discover -s scripts/tests -v

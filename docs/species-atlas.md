@@ -14,7 +14,7 @@ Her kart bir türe değil, belirli bir veri kaydına aittir: yaşam evresi, cins
 | Winding2023 larva | Altı saatlik dişi, birinci larva evresi | Beyin, 3.016 nöron (480 giriş + 2.536 beyin nöronu); yaklaşık 548.000 işaretli sinaptik bölge. Yayımlanmış Science2023 sayımı. |
 | Hemibrain2020 | Erişkin dişi | Kısmi merkezi beyin; yaklaşık 25.000 nöron ve bu yayın kapsamındaki yaklaşık 20 milyon kimyasal sinaps. Güncel neuPrint sürümünün yeniden hesaplanmış sayıları değildir. |
 | FlyWire2024 | Erişkin dişi | Bütün beyin, merkezi beyin ve optik loblar; v783, 139.255 nöron ve aralarında yaklaşık 54,5 milyon kimyasal sinaps. |
-| MaleCNS2026 | Erişkin erkek | Beyin + ventral sinir kordonu; yayında 166.700 nöron. Resmî v1.0, 8 Haziran2026, `male-cns:v1.0`; Cell yayını 3 Eylül2026. |
+| MaleCNS2026 | Erişkin erkek | Beyin + ventral sinir kordonu; yayında 166.700 nöron (ön baskının ikinci sürümü 166.691 bildirir; yayındaki sayı yuvarlanmış olabilir). Resmî v1.0, 8 Haziran2026, `male-cns:v1.0`; Cell yayını 3 Eylül2026. |
 
 Cook'un 460/579 bütün-hücre grafı nöronların yanında kas ve uç organlar içerir; yayın kenar toplamları nöronlar arasındaki sinaps sayısı diye okunmaz. Bu atlas SI5 ham ağırlıklarının birimini verir, tüm matrisin kesit toplamını hesaplamaz. Larva yayını beyin rekonstrüksiyonudur; kaynak EM hacminin CNS'yi kapsaması, bu beyin grafını tam beyin+VNC grafına dönüştürmez. Larvada nöronların %99'dan fazlası tamamlanmış, işaretlenen sinaptik noktaların yaklaşık %75'i nöronlara bağlanmıştır. Bu iki tamamlanmışlık ölçüsü aynı değildir.
 

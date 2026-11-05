@@ -223,7 +223,7 @@ export const atlasRecords: readonly AtlasRecord[] = freezeTree([
     scope: { coverage: 'whole-cns', label: 'Beyin ve ventral sinir kordonu', region: 'Merkezi sinir sistemi: beyin + VNC; bütün hayvanın bedeni veya çevresel sinir sisteminin tamamı değildir.' },
     reconstruction: { kind: 'single-specimen', label: 'Tek erişkin erkek örneği', note: 'Beyin ve sinir kordonunun aynı CNS rekonstrüksiyonu; FlyWire dişi beyniyle aynı örnek ve kapsam değildir.' },
     version: { label: 'Male CNS v1.0 · 8 Haziran 2026; Cell · 3 Eylül 2026', pinned: 'male-cns:v1.0; 2026-06-08; doi:10.1016/j.cell.2026.08.015' },
-    counts: [neurons(166_700, false, 'Yayında bildirilen düzeltilmiş CNS nöron sayımı; beyin, optik loblar ve ventral sinir kordonu kapsamındadır.')],
+    counts: [neurons(166_700, false, 'Yayında bildirilen düzeltilmiş CNS nöron sayımı; beyin, optik loblar ve ventral sinir kordonu kapsamındadır. Ön baskının ikinci sürümü 166.691 bildirir; yayındaki 166.700 yuvarlanmış olabilir.')],
     limitations: ['Bütün beyin ile bütün CNS kapsamını eşitleme; ek sinir kordonu farklı bir anatomik bölgedir.', 'Bu katalog yeni veri indirmez; portal sürümü ile yayın sayımını ayrı tutar.'],
     chemicalCoverage: 'EM ile eşlenen kimyasal bağlantılar; kaynak yayına göre okunmalı, beyin-only kaydının paydasıyla karıştırılmamalı.',
     gapCoverage: 'Bu kayıtta doğrulanmış kapsamlı elektriksel bağ haritası sunulmuyor; biyolojik gap yokluğu ileri sürülmez.',

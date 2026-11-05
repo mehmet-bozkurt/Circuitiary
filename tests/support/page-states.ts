@@ -21,6 +21,7 @@ const assumptionVariable = (variable: 'gap-gain' | 'time-constant') => async (pa
 
 /** Each route lists the UI states to measure, in order; every state is measured with all <details> open. */
 const states: Record<string, Array<{ name: string; enter: (page: Page) => Promise<void> }>> = {
+  '/bilinmeyen-adres': [{ name: 'unknown address notice', enter: async () => {} }],
   '/': [
     { name: 'illustrative 2D', enter: async () => {} },
     { name: 'open term card', enter: async page => {

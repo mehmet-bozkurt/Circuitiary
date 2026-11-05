@@ -175,3 +175,36 @@ test('a lesson page chunk that keeps failing shows a visible error with a way to
   await expect(main(page).first()).toBeVisible()
   expect(errors).toEqual([])
 })
+
+const notice = (page: Page) => page.getByRole('status').filter({ hasText: 'adresinde bir sayfa yok' })
+
+test('an address outside the app opens the experiment page and says so, with a link home', async ({ page }) => {
+  await page.goto('/yanlis/adres?x=1')
+  await expect(notice(page)).toContainText('“/yanlis/adres” adresinde bir sayfa yok')
+  await expect(main(page)).toBeVisible()
+  await expect(page).toHaveTitle('Sayfa bulunamadı · Circuitiary')
+  await notice(page).getByRole('link', { name: 'Devre deneyleri sayfasına git' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  await expect(notice(page)).toHaveCount(0)
+  await expect(page).toHaveTitle('Circuitiary · Devre deneyleri')
+  // Both addresses show the experiment page, so only the notice tells them apart.
+  await page.goBack()
+  await expect(notice(page)).toContainText('“/yanlis/adres”')
+  await page.goForward()
+  await expect(notice(page)).toHaveCount(0)
+})
+
+test('the unknown-address notice follows the history and never shows on the app\'s own addresses', async ({ page }) => {
+  await page.goto('/yanlis/adres')
+  await expect(notice(page)).toBeVisible()
+  await lessonLink(page).click()
+  await expect(notice(page)).toHaveCount(0)
+  await page.goBack()
+  await expect(notice(page)).toBeVisible()
+  await expect(page).toHaveTitle('Sayfa bulunamadı · Circuitiary')
+  for (const path of ['/', '/ogren/norondan-devreye/', '/ogren/rehberli-deneyler', '/ogren/devreyi-okumak', '/ogren/gercek-veri-ve-varsayimlar/', '/ogren/turler-atlasi']) {
+    await page.goto(path)
+    await expect(main(page)).toBeVisible()
+    await expect(notice(page), path).toHaveCount(0)
+  }
+})
