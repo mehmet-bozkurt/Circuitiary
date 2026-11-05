@@ -10,6 +10,7 @@ import { parseRealConnectome, buildRealCircuit, defaultRealModelParameters } fro
 import type { SimulationConfig } from './model/types'
 import { prepareRealInspection } from './learning/readingHandoff'
 import type { ExperimentDraft } from './learning/readingHandoff'
+import { decimal } from './format'
 
 type Condition = 'baseline' | 'silenced' | 'tau'
 type GraphView = '2d' | '3d'
@@ -94,7 +95,7 @@ const convergenceError = computed(() => {
   return maxError
 })
 const roleName = (role: string) => ({ input: 'Giriş hücresi', interneuron: 'Ara hücre', output: 'Çıktı hücresi', unspecified: 'Kaynak nöronu' } as Record<string, string>)[role] ?? role
-const format = (value: number, digits = 3) => value.toLocaleString('tr-TR', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+const format = (value: number, digits = 3) => decimal(value, digits)
 const edgeLabel = (edge: typeof circuit.value.connections[number]) => `${edge.source} ${edge.kind === 'gap' ? '↔' : '→'} ${edge.target}`
 const selectedConnection = computed(() => circuit.value.connections.find(e => e.id === selectedEdge.value))
 const interpretation = computed(() => activeCondition.value === 'baseline'
@@ -313,7 +314,7 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
           <div v-else class="graph-key"><span><i class="input-key"></i>Giriş</span><span><i class="interneuron-key"></i>Ara hücre</span><span><i class="output-key"></i>Çıktı</span><span class="inhibition-key">⊣ Baskılayıcı bağlantı</span></div>
           <div class="timeline">
             <button class="play-button" @click="togglePlayback" :aria-label="playing ? 'Oynatmayı duraklat' : 'Etkinliği oynat'">{{ playing ? 'Ⅱ' : '▶' }}</button>
-            <input type="range" min="0" :max="defaultConfig.durationMs" :step="dt" :value="displayedTimeMs" aria-label="Simülasyon zamanı" @input="seek(Number(($event.target as HTMLInputElement).value))">
+            <input type="range" min="0" :max="defaultConfig.durationMs" :step="dt" :value="displayedTimeMs" :aria-valuetext="`${format(displayedTimeMs, timeDigits)} ms`" aria-label="Simülasyon zamanı" @input="seek(Number(($event.target as HTMLInputElement).value))">
             <output>{{ format(displayedTimeMs, timeDigits) }} <span>ms</span></output>
           </div>
           <p class="graph-caption">Düğüme tıkla veya aşağıdan bir hücre seç. Parlaklık hesaplanan etkinliği gösterir.<template v-if="isReal"> {{ visibleEdgeCount }}/{{ circuit.connections.length }} bağlantı çiziliyor; görünüm filtresi hesaplamayı değiştirmez. Yerleşim şematiktir, anatomik konum değildir.<template v-if="graphView === '2d'"> Çizgi kalınlığı model ağırlığına bağlıdır. Grafiği sürükle, yakınlaştır veya sığdır.</template><template v-else> Çizgiler bağlantı türünü ve yönünü gösterir; ağırlıkları tabloda inceleyebilirsin.</template></template></p>
@@ -339,7 +340,7 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
           <label for="stimulus-target">Uyaranın girdiği hücre</label>
           <select id="stimulus-target" v-model="stimulusTarget"><option v-for="neuron in inputNeurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}{{ isReal ? '' : ' · Giriş hücresi' }}</option></select><p v-if="isReal" class="field-note">Uyaran hedefi ve okunan hücre deney seçimleridir; duyusal veya motor hücre oldukları anlamına gelmez.</p>
           <label class="slider-label" for="amplitude">Uyaran gücü <output>{{ format(amplitude, 2) }}</output></label>
-          <input id="amplitude" v-model.number="amplitude" type="range" min="0" max="1" step="0.05">
+          <input id="amplitude" v-model.number="amplitude" type="range" :aria-valuetext="format(amplitude, 2)" min="0" max="1" step="0.05">
           <label class="slider-label" for="duration">Uyaran süresi <output>{{ pulseDuration }} ms</output></label>
           <input id="duration" v-model.number="pulseDuration" type="range" min="50" max="400" step="10">
           <p class="field-note">Uyaran <TermText :text="defaultConfig.stimulus.onsetMs" /> ms'de başlar. Başlangıç etkinlikleri sıfırdır.</p>
@@ -361,8 +362,8 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
         </div>
         <div v-if="isReal" class="control-section model-gains">
           <span class="condition-label">VARSAYIMSAL DİNAMİK ÖLÇEKLER</span>
-          <label class="slider-label" for="chemical-gain">Kimyasal katsayı <output>{{ format(chemicalGain, 2) }}</output></label><input id="chemical-gain" v-model.number="chemicalGain" type="range" min="0" max="2" step="0.1">
-          <label class="slider-label" for="gap-gain">Gap katsayısı <output>{{ format(gapGain, 2) }}</output></label><input id="gap-gain" v-model.number="gapGain" type="range" min="0" max="1" step="0.1">
+          <label class="slider-label" for="chemical-gain">Kimyasal katsayı <output>{{ format(chemicalGain, 2) }}</output></label><input id="chemical-gain" v-model.number="chemicalGain" type="range" :aria-valuetext="format(chemicalGain, 2)" min="0" max="2" step="0.1">
+          <label class="slider-label" for="gap-gain">Gap katsayısı <output>{{ format(gapGain, 2) }}</output></label><input id="gap-gain" v-model.number="gapGain" type="range" :aria-valuetext="format(gapGain, 2)" min="0" max="1" step="0.1">
           <p class="field-note">Ham anatomi değişmez. Kimyasal etkilerin tümü bu modelde pozitif varsayılır; gerçek işaretleri bu kaynaktan bilinmiyor. Katsayılar ölçülmüş iletkenlik değildir.</p>
         </div>
         <div class="interpretation"><span class="eyebrow">BU KOŞULU NASIL OKUMALI?</span><p><TermText :text="interpretation" /></p></div>

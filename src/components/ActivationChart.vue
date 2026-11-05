@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { decimal } from '../format'
 
 interface Trace { id: string; label: string; color: string; values: number[] }
 const props = withDefaults(defineProps<{
@@ -50,11 +51,11 @@ onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
-  <svg ref="chart" class="activation-chart" :viewBox="`0 0 ${width} ${height}`" role="img" :aria-label="`Üç koşulun boyutsuz etkinlik değerlerini zamana göre karşılaştıran grafik. Ortak dikey eksen 0–${axisMax.toFixed(tickDecimals)}.`" @click="seek">
+  <svg ref="chart" class="activation-chart" :viewBox="`0 0 ${width} ${height}`" role="img" :aria-label="`Üç koşulun boyutsuz etkinlik değerlerini zamana göre karşılaştıran grafik. Ortak dikey eksen 0–${decimal(axisMax, tickDecimals)}.`" @click="seek">
     <rect :x="x(stimulus.onsetMs)" :y="pad.top" :width="x(Math.min(maxTime, stimulus.onsetMs + stimulus.durationMs)) - x(stimulus.onsetMs)" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity="0.13" />
     <g v-for="tick in tickValues" :key="tick">
       <line :x1="pad.left" :x2="width - pad.right" :y1="y(tick)" :y2="y(tick)" stroke="var(--theme-border, #e1e4db)" />
-      <text :x="pad.left - 10" :y="y(tick) + 4" text-anchor="end" class="chart-tick">{{ tick.toFixed(tickDecimals) }}</text>
+      <text :x="pad.left - 10" :y="y(tick) + 4" text-anchor="end" class="chart-tick">{{ decimal(tick, tickDecimals) }}</text>
     </g>
     <g v-for="tick in tickTimes" :key="tick">
       <text :x="x(tick)" :y="height - 15" text-anchor="middle" class="chart-tick">{{ Math.round(tick) }}</text>

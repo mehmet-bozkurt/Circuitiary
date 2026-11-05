@@ -2,6 +2,7 @@ import {
   buildRealCircuit, defaultRealModelParameters, parseRealConnectome,
   realDefaultConfig, realDefaultReadout,
 } from '../model/realConnectome'
+import { withComma } from '../format'
 import { simulate } from '../model/simulation'
 import type {
   Circuit, DeepReadonly, ReadonlyRealConnectome, RealModelParameters,
@@ -145,12 +146,12 @@ export function runAssumptionExperiment(
     baselineValue = baselineParameters.chemicalGain
     comparisonParameters.chemicalGain = comparisonValue
     scope = 'chemical-edges'
-    comparisonLabel = `Kimyasal model ölçeği ${comparisonValue}`
+    comparisonLabel = `Kimyasal model ölçeği ${withComma(String(comparisonValue))}`
   } else if (variable === 'gap-gain') {
     baselineValue = baselineParameters.gapGain
     comparisonParameters.gapGain = comparisonValue
     scope = 'physical-gap-pairs'
-    comparisonLabel = `Gap model ölçeği ${comparisonValue}`
+    comparisonLabel = `Gap model ölçeği ${withComma(String(comparisonValue))}`
   } else {
     baselineValue = baselineConfig.tauMs
     comparisonConfig.tauMs = comparisonValue

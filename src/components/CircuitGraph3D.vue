@@ -4,6 +4,7 @@ import type * as ThreeTypes from 'three'
 import type { OrbitControls as OrbitControlsType } from 'three/addons/controls/OrbitControls.js'
 import type { Circuit, Connection } from '../model/types'
 import { schematicPositions } from '../view/layout3d'
+import { decimal } from '../format'
 
 const props = withDefaults(defineProps<{
   circuit: Circuit
@@ -520,7 +521,7 @@ onBeforeUnmount(() => { disposed = true; releaseGraphics(); THREE = undefined })
         <line v-for="label in labels.filter(item => item.visible)" :key="label.id" :x1="label.projectedX" :y1="label.projectedY" :x2="label.x" :y2="label.y" />
       </svg>
       <div class="node-labels-3d">
-        <button v-for="label in labels" v-show="label.visible" :key="label.id" type="button" class="node-label-3d" :class="{ selected: label.id === selectedNode }" :style="{ left: `${label.x}px`, top: `${label.y}px`, zIndex: label.layer }" :data-node-id="label.id" :data-activity="activityFor(label.id)" :data-projected-x="label.projectedX" :data-projected-y="label.projectedY" :data-visible="label.visible" :aria-pressed="label.id === selectedNode" :aria-label="`${label.id} hücresini seç; etkinlik ${activityFor(label.id).toFixed(3)}`" @click="emit('select', label.id)">{{ label.id }}</button>
+        <button v-for="label in labels" v-show="label.visible" :key="label.id" type="button" class="node-label-3d" :class="{ selected: label.id === selectedNode }" :style="{ left: `${label.x}px`, top: `${label.y}px`, zIndex: label.layer }" :data-node-id="label.id" :data-activity="activityFor(label.id)" :data-projected-x="label.projectedX" :data-projected-y="label.projectedY" :data-visible="label.visible" :aria-pressed="label.id === selectedNode" :aria-label="`${label.id} hücresini seç; etkinlik ${decimal(activityFor(label.id), 3)}`" @click="emit('select', label.id)">{{ label.id }}</button>
       </div>
       <p v-if="rendererStatus === 'loading'" class="loading-3d" role="status">3D devre hazırlanıyor…</p>
     </div>

@@ -95,7 +95,7 @@ Playwright çıktısı `test-results/latest/` altına yazılır ve her koşuda y
 
 ### Güncel doğrulama durumu
 
-5 Kasım 2026: **190 birim testi, 15 Python testi geçti; 198 tarayıcı senaryosundan 196'sı geçti, 2'si kapsamı gereği atlandı** (masaüstünde mobil dokunma, mobilde fareyle üzerine gelme). Senaryolara iki temada bütün sayfaların WCAG AA metin kontrastı denetimi (`tests/contrast.spec.ts`) ve beş profilde sayfalar arası kanıt senaryosu (`tests/evidence.spec.ts`, 320 px azaltılmış hareket ve üretim önizlemesi dahil) dahildir. Tam tür kontrolü ve üretim derlemesi geçti. Tarayıcı: sistemdeki Google Chrome 156.0.8078.81, Playwright 1.63.0. Aşağıdaki bölümlerdeki “Bu aşamanın doğrulaması” cümleleri o aşamaya ait geçmiş kayıtlardır. O cümlelerdeki 320 px, azaltılmış hareket ve üretim önizlemesi denetimleri o tarihte projede bulunmayan bir kerelik betiklerle yapılmıştı; bugün `tests/evidence.spec.ts` ile tekrarlanır. “N korunan dosya aynı kaldı” türü SHA-256 karşılaştırmaları ise o aşamaya aittir ve tekrarlanamaz; değişiklik geçmişi artık git'tedir.
+5 Kasım 2026: **194 birim testi, 15 Python testi geçti; 200 tarayıcı senaryosundan 198'i geçti, 2'si kapsamı gereği atlandı** (masaüstünde mobil dokunma, mobilde fareyle üzerine gelme). Senaryolara iki temada bütün sayfaların WCAG AA metin kontrastı (`tests/contrast.spec.ts`) ve ondalık virgül (`tests/decimals.spec.ts`) denetimi ile beş profilde sayfalar arası kanıt senaryosu (`tests/evidence.spec.ts`, 320 px azaltılmış hareket ve üretim önizlemesi dahil) dahildir. Tam tür kontrolü ve üretim derlemesi geçti. Tarayıcı: sistemdeki Google Chrome 156.0.8078.81, Playwright 1.63.0. Aşağıdaki bölümlerdeki “Bu aşamanın doğrulaması” cümleleri o aşamaya ait geçmiş kayıtlardır. O cümlelerdeki 320 px, azaltılmış hareket ve üretim önizlemesi denetimleri o tarihte projede bulunmayan bir kerelik betiklerle yapılmıştı; bugün `tests/evidence.spec.ts` ile tekrarlanır. “N korunan dosya aynı kaldı” türü SHA-256 karşılaştırmaları ise o aşamaya aittir ve tekrarlanamaz; değişiklik geçmişi artık git'tedir.
 
 ## Yerel veri / paylaşım sınırı
 
@@ -112,7 +112,7 @@ Veriyi veya gerçek veri içeren deney JSON'unu halka açık paylaşmadan önce 
 - `src/learning/`: öğrenme sayfalarının hesapları, metinleri, ders grafikleri ve birim testleri.
 - `src/terms/`: sözcük anlamı/kökeni sözlüğü ve testleri.
 - `src/view/`: 3D şematik yerleşim (anatomik konum değildir) ve testi.
-- `tests/`: Playwright tarayıcı senaryoları (masaüstü ve mobil), kontrast denetimi ve 320 px/üretim önizlemesi profillerinde de koşan sayfalar arası kanıt senaryosu (`evidence.spec.ts`) dahil.
+- `tests/`: Playwright tarayıcı senaryoları (masaüstü ve mobil), kontrast ve ondalık virgül denetimleri ile 320 px/üretim önizlemesi profillerinde de koşan sayfalar arası kanıt senaryosu (`evidence.spec.ts`) dahil. Sayfa durumlarının ortak listesi `tests/support/page-states.ts` içindedir.
 - `docs/`: her aşamanın kapsamı, kaynakları ve doğrulama kayıtları.
 - `vite.local-data.ts`: yerel veri erişimi; veri tarayıcı paketine gömülmez.
 - [Bilimsel kapsam](docs/scientific-scope.md): anatomi, dinamik, davranış ve emülasyon ayrımı.

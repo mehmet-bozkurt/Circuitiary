@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { decimal } from '../format'
 
 export interface LessonTrace {
   id: string
@@ -51,10 +52,10 @@ onBeforeUnmount(() => observer?.disconnect())
     <svg ref="svg" :viewBox="`0 0 ${width} ${height}`" role="img" :aria-label="`${title}. Dikey eksen ${yLabel}, 0 ile 1 arasında. Yatay eksen öğretici zaman; biyolojik zaman birimi değildir.`">
       <g v-for="tick in ticks" :key="tick">
         <line :x1="left" :x2="width - right" :y1="y(tick)" :y2="y(tick)" stroke="var(--theme-border, #dce1d3)" :stroke-dasharray="tick ? '3 5' : undefined" />
-        <text :x="left - 9" :y="y(tick) + 3" text-anchor="end">{{ tick.toFixed(2) }}</text>
+        <text :x="left - 9" :y="y(tick) + 3" text-anchor="end">{{ decimal(tick, 2) }}</text>
       </g>
       <g v-for="fraction in [0, .25, .5, .75, 1]" :key="fraction">
-        <text :x="x(lastTime * fraction)" :y="height - bottom + 18" text-anchor="middle">{{ (lastTime * fraction).toFixed(2) }}</text>
+        <text :x="x(lastTime * fraction)" :y="height - bottom + 18" text-anchor="middle">{{ decimal(lastTime * fraction, 2) }}</text>
       </g>
       <text :x="left" y="11" class="axis-name">{{ yLabel }}</text>
       <text :x="left + plotWidth / 2" :y="height - 5" text-anchor="middle" class="axis-name">Öğretici zaman · boyutsuz</text>

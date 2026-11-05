@@ -222,6 +222,16 @@ describe('defensive immutable experiment snapshots and invalid requests', () => 
   })
 })
 
+describe('comparison labels use the Turkish decimal comma', () => {
+  const labelOf = (options: AssumptionRunOptions) => runAssumptionExperiment(parseRealConnectome(fixture()), 1, options).comparison.label
+  it('writes fractional multipliers with a comma and whole values without one', () => {
+    expect(labelOf({ variable: 'chemical-gain', comparisonValue: 1.2 })).toBe('Kimyasal model ölçeği 1,2')
+    expect(labelOf({ variable: 'chemical-gain', comparisonValue: 0 })).toBe('Kimyasal model ölçeği 0')
+    expect(labelOf({ variable: 'gap-gain', comparisonValue: .5 })).toBe('Gap model ölçeği 0,5')
+    expect(labelOf({ variable: 'time-constant', comparisonValue: 90 })).toBe('Bütün hücrelerde zaman sabiti 90 model ms')
+  })
+})
+
 const localDatasetPath = process.env.CIRCUITIARY_ASSUMPTIONS_DATA ?? fileURLToPath(new URL('../../data/local/cook-subset.json', import.meta.url))
 describe('locally available pinned Cook2019 anatomy (not redistributed)', () => {
   it.skipIf(!existsSync(localDatasetPath))('matches all 30 traces against the existing builder/engine for all variables and boundary values', () => {

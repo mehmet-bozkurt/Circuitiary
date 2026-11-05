@@ -26,7 +26,7 @@ Bu örnek devrede gap junction yoktur. Ağırlıklar, işaretler ve zaman sabitl
 - Son değer: 700 model ms'de kaydedilen O1 değeri. Sonlu bir kayıt, hücrenin tabana tamamen döndüğünü garanti etmez.
 - Farklar: Değişiklik eksi temel. Bir zaman yoksa farkı da sayı olarak uydurulmaz. Daha erken sabit düzey geçişi, biyolojik iletim hızının arttığı sonucunu vermez.
 
-Tahmin geri bildirimi O1'in gerçek hesaplanmış tepe farkının işaretini kullanır; mutlak fark `1e-8` altında ise “aynı veya sayısal olarak çok yakın” sınıfındadır. “Yakın veya aynı kalabilir” tahmini, tepe farkı temel tepenin %5’ine eşit veya ondan küçükse de örtüşüyor sayılır (O1 τ=40 model ms: −%2,6); artış/azalış tahminleri yine farkın işaretiyle değerlendirilir. Bu sınıflandırma biyolojik istatistiksel anlamlılık testi değildir.
+Uyaranı değiştir deneyi (0,40 → 0,80) bu devrede hiçbir hücre 0–1 üst sınırına ulaşmadığı için tam doğrusaldır: bütün hücre eğrileri iki katına çıkar ve tepe zamanı değişmez. Sonuç açıklaması bunu söyler; birim testi (`guidedExperiments.test.ts`) aynı eşitliği bütün hücre ve zaman örneklerinde denetler. Tahmin geri bildirimi O1'in gerçek hesaplanmış tepe farkının işaretini kullanır; mutlak fark `1e-8` altında ise “aynı veya sayısal olarak çok yakın” sınıfındadır. “Yakın veya aynı kalabilir” tahmini, tepe farkı temel tepenin %5’ine eşit veya ondan küçükse de örtüşüyor sayılır (O1 τ=40 model ms: −%2,6); artış/azalış tahminleri yine farkın işaretiyle değerlendirilir. Bu sınıflandırma biyolojik istatistiksel anlamlılık testi değildir.
 
 ## Kayıt ve taslak güvenliği
 

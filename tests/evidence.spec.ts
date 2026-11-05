@@ -9,6 +9,7 @@ import { createReadingGraph, findShortestRoute, inspectNeuron } from '../src/lea
 import { runGuidedExperiment, type GuidedExperimentId } from '../src/learning/guidedExperiments'
 import { chemicalLesson, gapLesson, smallCircuitLesson, thresholdLesson } from '../src/learning/lessonMath'
 import { atlasDefaults, atlasRecords } from '../src/learning/speciesAtlas'
+import { decimal } from '../src/format'
 import { parseRealConnectome } from '../src/model/realConnectome'
 import { simulate } from '../src/model/simulation'
 import type { Circuit, RealConnectome, SimulationResult } from '../src/model/types'
@@ -188,19 +189,19 @@ test('neuron lesson: lesson numbers match the lesson math and the circuit can be
 
   const threshold = thresholdLesson(.38, .6)
   await expect(page.getByTestId('threshold-status')).toHaveText(threshold.fired ? 'Tek olay oluştu' : 'Olay oluşmadı')
-  await expect(page.getByTestId('threshold-peak')).toHaveText((threshold.fired ? 1 : 0).toFixed(2))
+  await expect(page.getByTestId('threshold-peak')).toHaveText(decimal(threshold.fired ? 1 : 0, 2))
   const chemical = chemicalLesson(.65, .25)
-  await expect(page.getByTestId('chemical-activity')).toHaveText(chemical.activity.toFixed(2))
+  await expect(page.getByTestId('chemical-activity')).toHaveText(decimal(chemical.activity, 2))
   const gap = gapLesson(.6)
-  await expect(page.getByTestId('gap-a-value')).toHaveText(gap.a[50]!.toFixed(3))
-  await expect(page.getByTestId('gap-b-value')).toHaveText(gap.b[50]!.toFixed(3))
+  await expect(page.getByTestId('gap-a-value')).toHaveText(decimal(gap.a[50]!, 3))
+  await expect(page.getByTestId('gap-b-value')).toHaveText(decimal(gap.b[50]!, 3))
   const intact = smallCircuitLesson({ stimulus: .8, inhibitory: false, ablated: false })
-  await expect(page.getByTestId('circuit-max')).toHaveText(intact.outputMaximum.toFixed(3))
+  await expect(page.getByTestId('circuit-max')).toHaveText(decimal(intact.outputMaximum, 3))
 
   await main(page).getByRole('checkbox', { name: /B→C bağlantısını kaldır/ }).check()
   const cut = smallCircuitLesson({ stimulus: .8, inhibitory: false, ablated: true })
-  await expect(page.getByTestId('circuit-min')).toHaveText(cut.outputMinimum.toFixed(3))
-  await expect(page.getByTestId('circuit-max')).toHaveText(cut.outputMaximum.toFixed(3))
+  await expect(page.getByTestId('circuit-min')).toHaveText(decimal(cut.outputMinimum, 3))
+  await expect(page.getByTestId('circuit-max')).toHaveText(decimal(cut.outputMaximum, 3))
   await surface(page, testInfo, evidence, 'circuit-cut', page.getByTestId('circuit-max'))
   evidence.values = { thresholdFired: threshold.fired, chemicalActivity: chemical.activity, intactMax: intact.outputMaximum, cutMax: cut.outputMaximum }
   await fragmentReload(page, route, evidence)
@@ -225,6 +226,7 @@ test('guided experiments: all three runs match the source engine', async ({ page
       for (const [metric, value] of Object.entries(values)) await expectDataValue(page.getByTestId(`guided-${id}-${condition}-${metric}`), value, `${id} ${condition} ${metric}`)
     }
     await expectDataValue(page.getByTestId(`guided-peak-difference-${id}`), expected.delta.peak, `${id} peak difference`)
+    if (id === 'stimulus') await expect(page.getByTestId('guided-explanation-stimulus')).toContainText('tam iki katına çıkar')
     evidence.values[id] = { baselinePeak: expected.baseline.metrics.peak, comparisonPeak: expected.comparison.metrics.peak }
     await surface(page, testInfo, evidence, `${id}-result`, section.getByTestId(`guided-result-${id}`))
   }

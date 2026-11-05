@@ -79,6 +79,8 @@ Altı sayfanın her durumunda şunlar denetlenir:
 - konsol veya sayfa hatası olmaması,
 - bölüm bağlantısıyla doğrudan açılan adresin yenilemede aynı hedefte kalması.
 
+Ayrı olarak `tests/decimals.spec.ts` aynı sayfa durumlarında görünen metinde ve erişilebilir adlarda (aria-label, aria-valuetext) ondalık noktası kalmadığını denetler: arayüz Türkçedir, sayılar ondalık virgülle yazılır. Tanımlayıcı, sürüm, DOI, lisans ve Türkçe binlik ayırıcı (139.255) istisnadır; `data-*` öznitelikleri ve SVG yol verisi makine okunur kalır.
+
 Sayısal denetimler şunlardır:
 
 - Ana deneyde iki modun indirilen kaydı Node'da yeniden simüle edilir ve birebir aynı çıkmalıdır; gösterilen tepe değerleri de bu izlerle aynı olmalıdır.

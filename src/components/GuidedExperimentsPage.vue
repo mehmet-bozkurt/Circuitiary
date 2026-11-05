@@ -7,6 +7,7 @@ import type { GuidedStepId } from '../learning/guidedContent'
 import { lessonSources } from '../learning/lessonContent'
 import { runGuidedExperiment } from '../learning/guidedExperiments'
 import type { GuidedRunSnapshot } from '../learning/guidedExperiments'
+import { decimal } from '../format'
 
 const emit = defineEmits<{ ready: [] }>()
 onMounted(() => emit('ready'))
@@ -27,7 +28,7 @@ const newState = (): ExperimentState => ({ prediction: '', connectionId: 'I3-O1'
 const biologicalReadings = ['receptors', 'inhibition', 'action'] as const
 const experiments = reactive<Record<GuidedStepId, ExperimentState>>({ stimulus: newState(), connection: newState(), tau: newState() })
 const completedCount = computed(() => guidedSteps.filter(step => experiments[step.id].snapshot !== null).length)
-const format = (value: number, digits = 3) => value.toFixed(digits)
+const format = (value: number, digits = 3) => decimal(value, digits)
 const signed = (value: number) => `${value > 0 ? '+' : ''}${format(value)}`
 const metricTime = (value: number | null) => value === null ? '—' : `${format(value, 0)} ms`
 const edgeLabel = (id: string) => id === 'I4-O1' ? 'I4→O1 (baskılayıcı, −0,3)' : 'I3→O1 (uyarıcı, +1)'
@@ -76,7 +77,7 @@ function resultExplanation(id: GuidedStepId): string {
   if (!snapshot) return ''
   const trend = peakTrend(snapshot)
   const observation = trend === 'increase' ? `O1’in tepe değeri ${format(snapshot.delta.peak)} arttı.` : trend === 'decrease' ? `O1’in tepe değeri ${format(-snapshot.delta.peak)} azaldı.` : 'İki koşulda O1’in tepe değeri aynı veya sayısal olarak çok yakın.'
-  if (id === 'stimulus') return `${observation} Bu kayıt yalnız 0,40 ve 0,80 uyaranlarının karşılaştırmasıdır. Tepe zamanını ve 0,10 düzeyine ulaşma zamanını ayrı oku: sabit bir düzeye daha erken ulaşmak, sinyalin biyolojik iletim hızının arttığını göstermez.`
+  if (id === 'stimulus') return `${observation} Bu kayıt yalnız 0,40 ve 0,80 uyaranlarının karşılaştırmasıdır. Tepe zamanını ve 0,10 düzeyine ulaşma zamanını ayrı oku: sabit bir düzeye daha erken ulaşmak, sinyalin biyolojik iletim hızının arttığını göstermez. Bu karşılaştırmada hiçbir hücre 0–1 üst sınırına ulaşmaz; bu yüzden devre orantılı davranır ve bütün hücrelerin eğrisi tam iki katına çıkar. Baskılayıcı kol da aynı oranda büyüdüğü için tepe zamanı değişmez. Uyaran üst sınıra çarpacak kadar büyük olsaydı bu orantı bozulurdu.`
   if (id === 'connection') {
     const reason = state.recordedConnectionId === 'I4-O1'
       ? 'Baskılayıcı I4→O1 katkısı kaldırıldı. I3’ün uyarıcı girdisine karşı koyan negatif katkı artık eklenmiyor; I4 hücresi ise etkin kalıyor.'

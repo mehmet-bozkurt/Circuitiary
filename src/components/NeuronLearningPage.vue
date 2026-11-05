@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import LessonTracePlot from '../learning/LessonTracePlot.vue'
 import { glossary, lessonSections, lessonSources, neuronParts, selfChecks } from '../learning/lessonContent'
 import { chemicalLesson, gapLesson, smallCircuitLesson, thresholdLesson } from '../learning/lessonMath'
+import { decimal } from '../format'
 
 const emit = defineEmits<{ ready: [] }>()
 onMounted(() => emit('ready'))
@@ -32,7 +33,7 @@ const gapDirection = computed(() => gapStrength.value === 0 ? 'Akım yok' : gapA
 const circuit = computed(() => smallCircuitLesson({ stimulus: circuitStimulus.value, inhibitory: circuitInhibitory.value, ablated: circuitAblated.value }))
 const correctCount = computed(() => selfChecks.filter(question => answers.value[question.id] === question.correct).length)
 const answeredCount = computed(() => Object.keys(answers.value).length)
-const format = (value: number, digits = 2) => value.toFixed(digits)
+const format = (value: number, digits = 2) => decimal(value, digits)
 const signed = (value: number) => `${value > 0 ? '+' : ''}${format(value)}`
 function resetLesson() {
   selectedPart.value = 'dendrite'
@@ -123,8 +124,8 @@ function resetLesson() {
           <div v-else-if="section.id === 'lesson-signal'" class="lesson-demo">
             <p class="demo-eyebrow">DENE / EŞİĞİN İKİ YANI</p>
             <div class="slider-grid">
-              <div><label for="lesson-stimulus">Uyaran <output for="lesson-stimulus">{{ format(stimulus) }}</output></label><input id="lesson-stimulus" v-model.number="stimulus" type="range" min="0" max="1" step="0.01" /></div>
-              <div><label for="lesson-threshold">Eşik <output for="lesson-threshold">{{ format(threshold) }}</output></label><input id="lesson-threshold" v-model.number="threshold" type="range" min="0" max="1" step="0.01" /></div>
+              <div><label for="lesson-stimulus">Uyaran <output for="lesson-stimulus">{{ format(stimulus) }}</output></label><input id="lesson-stimulus" v-model.number="stimulus" type="range" :aria-valuetext="format(stimulus)" min="0" max="1" step="0.01" /></div>
+              <div><label for="lesson-threshold">Eşik <output for="lesson-threshold">{{ format(threshold) }}</output></label><input id="lesson-threshold" v-model.number="threshold" type="range" :aria-valuetext="format(threshold)" min="0" max="1" step="0.01" /></div>
             </div>
             <div class="demo-readouts">
               <div><span>Eşik kararı</span><strong data-testid="threshold-status">{{ thresholdResult.fired ? 'Tek olay oluştu' : 'Olay oluşmadı' }}</strong></div>
@@ -144,8 +145,8 @@ function resetLesson() {
           <div v-else-if="section.id === 'lesson-ei'" class="lesson-demo">
             <p class="demo-eyebrow">DENE / İKİ ATANMIŞ ETKİYİ BİRLEŞTİR</p>
             <div class="slider-grid">
-              <div><label for="lesson-excitation">Uyarıcı girdi <output for="lesson-excitation">{{ format(excitation) }}</output></label><input id="lesson-excitation" v-model.number="excitation" type="range" min="0" max="1" step="0.01" /></div>
-              <div><label for="lesson-inhibition">Baskılayıcı girdi <output for="lesson-inhibition">{{ format(inhibition) }}</output></label><input id="lesson-inhibition" v-model.number="inhibition" type="range" min="0" max="1" step="0.01" /></div>
+              <div><label for="lesson-excitation">Uyarıcı girdi <output for="lesson-excitation">{{ format(excitation) }}</output></label><input id="lesson-excitation" v-model.number="excitation" type="range" :aria-valuetext="format(excitation)" min="0" max="1" step="0.01" /></div>
+              <div><label for="lesson-inhibition">Baskılayıcı girdi <output for="lesson-inhibition">{{ format(inhibition) }}</output></label><input id="lesson-inhibition" v-model.number="inhibition" type="range" :aria-valuetext="format(inhibition)" min="0" max="1" step="0.01" /></div>
             </div>
             <div class="effect-bars" aria-hidden="true"><div><span>+ Uyarıcı</span><i><b :style="{ width: `${excitation * 100}%` }"></b></i></div><div class="inhibitory-bar"><span>− Baskılayıcı</span><i><b :style="{ width: `${inhibition * 100}%` }"></b></i></div><div><span>Çıktı</span><i><b :style="{ width: `${chemical.activity * 100}%` }"></b></i></div></div>
             <div class="demo-readouts"><div><span>Net girdi: uyarıcı − baskılayıcı</span><output data-testid="chemical-drive">{{ signed(chemical.drive) }}</output></div><div><span>0–1 aralığına sınırlanan çıktı</span><output data-testid="chemical-activity">{{ format(chemical.activity) }}</output></div></div>
@@ -154,7 +155,7 @@ function resetLesson() {
 
           <div v-else-if="section.id === 'lesson-gap'" class="lesson-demo">
             <p class="demo-eyebrow">DENE / FARKI VE YÖNÜ DEĞİŞTİR</p>
-            <div class="slider-grid"><div><label for="lesson-gap-strength">Elektriksel bağ kuvveti <output for="lesson-gap-strength">{{ format(gapStrength) }}</output></label><input id="lesson-gap-strength" v-model.number="gapStrength" type="range" min="0" max="1" step="0.01" /></div><div><label for="lesson-gap-time">İncelenen öğretici zaman <output for="lesson-gap-time">{{ format(gapTime) }}</output></label><input id="lesson-gap-time" v-model.number="gapTime" type="range" min="0" max="5" step="0.05" /></div></div>
+            <div class="slider-grid"><div><label for="lesson-gap-strength">Elektriksel bağ kuvveti <output for="lesson-gap-strength">{{ format(gapStrength) }}</output></label><input id="lesson-gap-strength" v-model.number="gapStrength" type="range" :aria-valuetext="format(gapStrength)" min="0" max="1" step="0.01" /></div><div><label for="lesson-gap-time">İncelenen öğretici zaman <output for="lesson-gap-time">{{ format(gapTime) }}</output></label><input id="lesson-gap-time" v-model.number="gapTime" type="range" :aria-valuetext="format(gapTime)" min="0" max="5" step="0.05" /></div></div>
             <button type="button" class="demo-button" :aria-pressed="reverseGap" @click="reverseGap = !reverseGap">Başlangıcı ters çevir</button>
             <div class="coupled-cells" aria-hidden="true"><span>A <b>{{ format(gapAtA) }}</b></span><i>{{ gapStrength === 0 ? '⋯' : '↔' }}</i><span>B <b>{{ format(gapAtB) }}</b></span></div>
             <div class="demo-readouts"><div><span>A’nın düzeyi</span><output data-testid="gap-a-value">{{ format(gapAtA, 3) }}</output></div><div><span>B’nin düzeyi</span><output data-testid="gap-b-value">{{ format(gapAtB, 3) }}</output></div><div><span>Modelde etki yönü</span><strong data-testid="gap-direction">{{ gapDirection }}</strong></div></div>
@@ -164,7 +165,7 @@ function resetLesson() {
 
           <div v-else-if="section.id === 'lesson-circuit'" class="lesson-demo">
             <p class="demo-eyebrow">DENE / BİR DEĞİŞKEN, BİR KARŞILAŞTIRMA</p>
-            <div class="slider-grid circuit-controls"><div><label for="lesson-circuit-stimulus">A’ya verilen uyaran <output for="lesson-circuit-stimulus">{{ format(circuitStimulus) }}</output></label><input id="lesson-circuit-stimulus" v-model.number="circuitStimulus" type="range" min="0" max="1" step="0.01" /></div><div class="check-controls"><label for="lesson-circuit-inhibitory"><input id="lesson-circuit-inhibitory" v-model="circuitInhibitory" type="checkbox" /> B→C baskılayıcı olsun</label><label for="lesson-circuit-ablated"><input id="lesson-circuit-ablated" v-model="circuitAblated" type="checkbox" /> B→C bağlantısını kaldır</label></div></div>
+            <div class="slider-grid circuit-controls"><div><label for="lesson-circuit-stimulus">A’ya verilen uyaran <output for="lesson-circuit-stimulus">{{ format(circuitStimulus) }}</output></label><input id="lesson-circuit-stimulus" v-model.number="circuitStimulus" type="range" :aria-valuetext="format(circuitStimulus)" min="0" max="1" step="0.01" /></div><div class="check-controls"><label for="lesson-circuit-inhibitory"><input id="lesson-circuit-inhibitory" v-model="circuitInhibitory" type="checkbox" /> B→C baskılayıcı olsun</label><label for="lesson-circuit-ablated"><input id="lesson-circuit-ablated" v-model="circuitAblated" type="checkbox" /> B→C bağlantısını kaldır</label></div></div>
             <div class="small-circuit" role="img" :aria-label="`A, B'yi uyarır. B ile C bağlantısı ${circuitAblated ? 'kaldırılmış' : circuitInhibitory ? 'baskılayıcı' : 'uyarıcı'}. C ayrıca sabit 0,35 taban girdisi alır.`"><span>A</span><i>→</i><span>B</span><i :class="{ muted: circuitAblated, negative: circuitInhibitory && !circuitAblated }">{{ circuitAblated ? '⋯' : circuitInhibitory ? '⊣' : '→' }}</i><span>C<small>taban: 0,35</small></span></div>
             <LessonTracePlot :times="circuit.times" :traces="[{ id: 'a', label: 'A', color: 'var(--theme-trace-blue, #456e91)', values: circuit.a }, { id: 'b', label: 'B', color: 'var(--theme-trace-gold, #9b7242)', values: circuit.b, dashed: true }, { id: 'c', label: 'C', color: 'var(--theme-trace-green, #35694f)', values: circuit.c }]" title="Üç hücrenin boyutsuz aktivitesi" y-label="Model aktivitesi" />
             <div class="demo-readouts"><div><span>C’nin en düşük değeri</span><output data-testid="circuit-min">{{ format(circuit.outputMinimum, 3) }}</output></div><div><span>C’nin en yüksek değeri</span><output data-testid="circuit-max">{{ format(circuit.outputMaximum, 3) }}</output></div><div><span>Girdi bitiminde C − taban</span><output data-testid="circuit-delta">{{ signed(circuit.deltaAtPulseEnd) }}</output></div></div>

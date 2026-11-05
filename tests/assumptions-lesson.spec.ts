@@ -173,9 +173,11 @@ async function traceMatches(path: Locator, simulation: SimulationResult) {
   expect(points.yLabels).toHaveLength(5)
   for (const [index, label] of points.yLabels.entries()) {
     expect(label.value).toBeCloseTo(axis.yMax * index / 4, 12)
-    const displayed = Number(label.text)
+    // The interface writes a decimal comma; data-value keeps the machine-readable number.
+    const displayed = Number(label.text.replace(',', '.'))
     expect(Number.isFinite(displayed), 'Every visible vertical tick must be numeric').toBe(true)
-    const fractionalDigits = label.text.split('.')[1]?.length ?? 0
+    expect(label.text, 'Visible ticks use the Turkish decimal comma').not.toContain('.')
+    const fractionalDigits = label.text.split(',')[1]?.length ?? 0
     expect(Math.abs(displayed - label.value), 'Visible y-axis labels must match the actual shared axis within their displayed rounding')
       .toBeLessThanOrEqual(.5 * 10 ** -fractionalDigits + Number.EPSILON)
   }
@@ -279,7 +281,7 @@ async function expectEngineResult(page: Page, controlled: Variable, value: numbe
   await expect(plot).toHaveAttribute('data-scale-mode', /^(response|unit)$/)
   const mode = await plot.getAttribute('data-scale-mode')
   const peak = Math.max(before.peak, after.peak)
-  const expectedScale = mode === 'response' && peak > 0 ? peak * 1.1 : 1
+  const expectedScale = mode === 'response' && peak > 0 ? Math.min(1, peak * 1.1) : 1
   expect(Number(await plot.getAttribute('data-y-max'))).toBeCloseTo(expectedScale, 12)
   const axisLimit = result(page).getByTestId('assumptions-axis-limit')
   expect(await readDataNumber(axisLimit)).toBeCloseTo(expectedScale, 12)
@@ -427,6 +429,8 @@ test('draft changes preserve the recorded chemical comparison until explicit rer
   const plot = result(page).getByTestId('assumptions-result-plot')
   await expect(scale).toBeChecked()
   await expect(plot).toHaveAttribute('data-scale-mode', 'response')
+  // The 1.2 comparison peaks near 0.98; the zoomed axis stops at the activity limit instead of 1.075.
+  await expect(plot).toHaveAttribute('data-y-max', '1')
   const pair = enginePair('chemical-gain', 1.2)
   await scale.uncheck()
   await expect(plot).toHaveAttribute('data-scale-mode', 'unit')

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { decimal } from '../format'
 
 const props = defineProps<{
   timesMs: readonly number[]
@@ -40,9 +41,9 @@ onBeforeUnmount(() => observer?.disconnect())
   <figure class="assumption-trace">
     <figcaption>AVAR’ın iki hesaplanan yanıtı</figcaption>
     <div class="assumption-trace-legend"><span><i></i>{{ baselineLabel }}</span><span><i class="comparison-line"></i>{{ comparisonLabel }}</span><span><b></b>AVER darbesi açık</span></div>
-    <svg ref="chart" data-testid="assumptions-result-plot" :data-y-max="axisMax" :data-scale-mode="responseScale ? 'response' : 'unit'" role="img" :aria-label="`AVAR’ın iki koşuldaki boyutsuz model aktivitesi. Ortak dikey eksen 0–${axisMax.toFixed(5)}; yatay eksen model zamanı, milisaniye. Temel koşul düz, değişiklik kesikli çizgi.`" :viewBox="`0 0 ${width} ${height}`">
+    <svg ref="chart" data-testid="assumptions-result-plot" :data-y-max="axisMax" :data-scale-mode="responseScale ? 'response' : 'unit'" role="img" :aria-label="`AVAR’ın iki koşuldaki boyutsuz model aktivitesi. Ortak dikey eksen 0–${decimal(axisMax, decimals)}; yatay eksen model zamanı, milisaniye. Temel koşul düz, değişiklik kesikli çizgi.`" :viewBox="`0 0 ${width} ${height}`">
       <rect data-testid="assumptions-pulse-band" :x="x(onsetMs)" :y="pad.top" :width="Math.max(0, x(Math.min(maxTime, onsetMs + stimulusDurationMs)) - x(onsetMs))" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity=".17" />
-      <g v-for="fraction in [0, .25, .5, .75, 1]" :key="fraction"><line :x1="pad.left" :x2="width - pad.right" :y1="y(axisMax * fraction)" :y2="y(axisMax * fraction)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="fraction ? '3 5' : undefined" /><text data-axis="y" :data-value="axisMax * fraction" :x="pad.left - 8" :y="y(axisMax * fraction) + 3" text-anchor="end">{{ (axisMax * fraction).toFixed(decimals) }}</text></g>
+      <g v-for="fraction in [0, .25, .5, .75, 1]" :key="fraction"><line :x1="pad.left" :x2="width - pad.right" :y1="y(axisMax * fraction)" :y2="y(axisMax * fraction)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="fraction ? '3 5' : undefined" /><text data-axis="y" :data-value="axisMax * fraction" :x="pad.left - 8" :y="y(axisMax * fraction) + 3" text-anchor="end">{{ decimal(axisMax * fraction, decimals) }}</text></g>
       <text :x="pad.left" y="12">Boyutsuz AVAR aktivitesi</text>
       <g v-for="fraction in [0, .25, .5, .75, 1]" :key="fraction"><text data-axis="x" :data-value="maxTime * fraction" :x="x(maxTime * fraction)" :y="height - pad.bottom + 17" text-anchor="middle">{{ Math.round(maxTime * fraction) }}</text></g>
       <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 5" text-anchor="middle">Model zamanı · ms</text>

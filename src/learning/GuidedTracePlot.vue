@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { decimal } from '../format'
 
 const props = defineProps<{
   timesMs: readonly number[]
@@ -38,7 +39,7 @@ onBeforeUnmount(() => observer?.disconnect())
     <div class="guided-trace-legend"><span><i></i>{{ baselineLabel }}</span><span><i class="changed-line"></i>{{ changedLabel }}</span><span><b></b>Uyaran açık</span></div>
     <svg ref="chart" data-testid="guided-result-plot" role="img" :aria-label="`O1 için iki koşulun boyutsuz aktivite grafiği. ${baselineLabel} düz çizgi; ${changedLabel} kesikli çizgi. Ortak dikey eksen 0 ile 1. Yatay eksen model zamanı, milisaniye.`" :viewBox="`0 0 ${width} ${height}`">
       <rect :x="x(onsetMs)" :y="pad.top" :width="Math.max(0, x(Math.min(maxTime, onsetMs + stimulusDurationMs)) - x(onsetMs))" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity=".17" />
-      <g v-for="tick in [0, .25, .5, .75, 1]" :key="tick"><line :x1="pad.left" :x2="width - pad.right" :y1="y(tick)" :y2="y(tick)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="tick ? '3 5' : undefined" /><text :x="pad.left - 8" :y="y(tick) + 3" text-anchor="end">{{ tick.toFixed(2) }}</text></g>
+      <g v-for="tick in [0, .25, .5, .75, 1]" :key="tick"><line :x1="pad.left" :x2="width - pad.right" :y1="y(tick)" :y2="y(tick)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="tick ? '3 5' : undefined" /><text :x="pad.left - 8" :y="y(tick) + 3" text-anchor="end">{{ decimal(tick, 2) }}</text></g>
       <text :x="pad.left" y="12">Boyutsuz model aktivitesi</text>
       <g v-for="fraction in [0, .25, .5, .75, 1]" :key="fraction"><text :x="x(maxTime * fraction)" :y="height - pad.bottom + 17" text-anchor="middle">{{ Math.round(maxTime * fraction) }}</text></g>
       <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 5" text-anchor="middle">Model zamanı · ms</text>
