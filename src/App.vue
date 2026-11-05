@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TermText from './components/TermText.vue'
+import { BASE, DEMO, DEMO_DATA_NOTICE, LOCAL_DATA_URL, appPath } from './siteBase'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import CircuitGraph from './components/CircuitGraph.vue'
 import CircuitGraph3D from './components/CircuitGraph3D.vue'
@@ -180,11 +181,13 @@ async function chooseMode(next: 'illustrative' | 'real') {
   }
   if (next === mode.value) return
   if (next === 'real' && !realData.value) {
+    // The online demo has no local data endpoint: say so instead of asking for it.
+    if (DEMO) { dataError.value = DEMO_DATA_NOTICE; return }
     dataLoading.value = true; dataError.value = ''
     dataRequest = new AbortController()
     const timeout = setTimeout(() => dataRequest?.abort(), 10000)
     try {
-      const response = await fetch('/api/local-connectome', { cache: 'no-store', signal: dataRequest.signal })
+      const response = await fetch(LOCAL_DATA_URL, { cache: 'no-store', signal: dataRequest.signal })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       realData.value = parseRealConnectome(await response.json())
     } catch {
@@ -220,11 +223,12 @@ async function inspectAnatomicalNeuron(neuronId: string, shouldCommit: () => boo
   if (!shouldCommit()) return { ok: false, message: '', cancelled: true }
   if (dataLoading.value) return { ok: false, message: 'Ana deneyde veri yükleniyor. Yükleme tamamlandıktan sonra yeniden dene.' }
   if (!realData.value) {
+    if (DEMO) return { ok: false, message: DEMO_DATA_NOTICE }
     dataLoading.value = true; dataError.value = ''
     dataRequest = new AbortController()
     const timeout = setTimeout(() => dataRequest?.abort(), 10000)
     try {
-      const response = await fetch('/api/local-connectome', { cache: 'no-store', signal: dataRequest.signal })
+      const response = await fetch(LOCAL_DATA_URL, { cache: 'no-store', signal: dataRequest.signal })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       realData.value = parseRealConnectome(await response.json())
     } catch {
@@ -283,17 +287,18 @@ const shareState = computed<ShareState>(() => ({
   baseTau: baseTau.value, changedTau: changedTau.value, changedNeuron: changedNeuron.value,
   selectedEdge: selectedEdge.value, outputNeuron: outputNeuron.value, selectedNeuron: selectedNeuron.value, dt: dt.value,
 }))
-const shareUrl = computed(() => buildShareUrl(shareState.value, new URL('/', location.href).href))
+const shareUrl = computed(() => buildShareUrl(shareState.value, new URL(BASE, location.href).href))
 const activeConditionLabel = computed(() => conditions.find(condition => condition.id === activeCondition.value)?.label ?? '')
 const csvExport = () => csvFile({ mode: mode.value, condition: activeCondition.value, circuit: circuit.value, result: currentResult.value })
 const jsonExport = () => jsonFile({ mode: mode.value, circuit: circuit.value, results: results.value, outputCell: outputNeuron.value, appVersion, dataset: realData.value?.dataset })
 async function loadRealForLink(): Promise<boolean> {
   if (realData.value) return true
+  if (DEMO) return false
   dataLoading.value = true
   dataRequest = new AbortController()
   const timeout = setTimeout(() => dataRequest?.abort(), 10000)
   try {
-    const response = await fetch('/api/local-connectome', { cache: 'no-store', signal: dataRequest.signal })
+    const response = await fetch(LOCAL_DATA_URL, { cache: 'no-store', signal: dataRequest.signal })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     realData.value = parseRealConnectome(await response.json())
     return true
@@ -333,7 +338,7 @@ async function applyShareLink(parsed: ShareParse) {
   shareNoticeText.value = shareNotice({ applied: Object.keys(v).length, ignored: link.ignored, realUnavailable })
 }
 // Only the experiment page reads a link; another page's own query is none of its business.
-if (!location.pathname.replace(/\/$/, '').startsWith('/ogren/')) void applyShareLink(parseShareQuery(location.search))
+if (!appPath(location.pathname).replace(/\/$/, '').startsWith('/ogren/')) void applyShareLink(parseShareQuery(location.search))
 onBeforeUnmount(() => { pause(); dataRequest?.abort() })
 </script>
 

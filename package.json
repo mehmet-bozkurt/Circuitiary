@@ -1,6 +1,29 @@
 {
   "name": "circuitiary",
   "version": "0.1.0",
+  "description": "Interactive teaching notebook for small neuron circuits: parameterised rate model, 2D/3D views, lessons and a circuit builder (Turkish UI); optional C. elegans connectome subgraph from locally imported data · Sinir devrelerini kurarak öğrenmek için etkileşimli deney defteri",
+  "keywords": [
+    "neuroscience",
+    "connectome",
+    "c-elegans",
+    "neural-circuits",
+    "education",
+    "turkish",
+    "simulation",
+    "vue",
+    "typescript",
+    "visualization"
+  ],
+  "license": "MIT",
+  "author": "Mehmet Bozkurt",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mehmet-bozkurt/Circuitiary.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mehmet-bozkurt/Circuitiary/issues"
+  },
+  "homepage": "https://mehmet-bozkurt.github.io/Circuitiary/",
   "private": true,
   "type": "module",
   "engines": {
@@ -13,6 +36,7 @@
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test:browser": "playwright test",
+    "test:pages": "playwright test --config=playwright.pages.config.ts",
     "test:evidence": "CIRCUITIARY_EVIDENCE_DIR=test-results/evidence-$(date +%Y%m%d-%H%M%S) playwright test"
   },
   "dependencies": {

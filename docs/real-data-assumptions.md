@@ -51,11 +51,11 @@ Varsayımlar değişince model izlerinin değişmesi, gerçek hayvan davranış�
 - [Liu ve ark., 2017](https://www.nature.com/articles/ncomms14818): belirli AVA–VA5/VA8 bağlantılarında doğrultucu elektriksel iletim; seçilen her gap çiftinin akım yönü hakkında sonuç değildir.
 - [Randi ve ark., 2023](https://www.nature.com/articles/s41586-023-06683-4): anatomiden ayrı deneysel işlevsel sinyal yayılımı ölçümü; bu projeye kalsiyum verileri yüklenmedi.
 
-Kaynak sürümü, seçim kuralı, URL’ler, gerçek edinim zamanları ve SHA-256 özetleri görünürdür. Dosyaya özgü yeniden dağıtım izni doğrulanmadı; `unverified-local-only` geçerlidir. Ham/türetilmiş veri `public/` veya `dist/` içine konmaz; aynı-origin loopback GET ile yerel okunur. Yükleniyor/eksik/hatalı/geçersiz durumları ayrı açıklanır; hata örnek sonuçla örtülmez, açık yeniden deneme vardır. Yeni bağımlılık, hesap, ücretli hizmet, kurulum veya yayımlama yoktur.
+Kaynak sürümü, seçim kuralı, URL’ler, gerçek edinim zamanları ve SHA-256 özetleri görünürdür. Dosyaya özgü yeniden dağıtım izni doğrulanmadı; `unverified-local-only` geçerlidir. Ham/türetilmiş veri `public/` veya `dist/` içine konmaz; aynı-origin loopback GET ile yerel okunur. Yükleniyor/eksik/hatalı/geçersiz durumları ayrı açıklanır; hata örnek sonuçla örtülmez, açık yeniden deneme vardır. Bu aşamada yeni bağımlılık, hesap veya ücretli hizmet eklenmedi.
 
 ## Doğrulama kaydı
 
-2026-10-03, aynı `Mehmet-Mac-mini.local` üzerinde:
+2026-10-03, aynı geliştirme bilgisayarında:
 
 - `npm test`: **173 birim testi geçti**. Önceki 153 teste, 20 yeni anlamlı modül testi eklendi. Üç değişkenin sınır/azaltma/sıfır/temelle eşit koşulları, aynı anatomide tek parametre değişimi, tüm hücre izleri, kaynak koordinatları, ayrı ve değişmez kayıtlar, sıfır çıktıda `null` tepe zamanı ve hatalı istekler denetlendi. Gerçek 30 hücrelik kaynakta iki koşulun bütün zaman serileri mevcut motorla bağımsız çağrılar üzerinden karşılaştırıldı.
 - `.venv/bin/python -m unittest discover -s scripts/tests -v`: **15 veri/içe aktarma testi geçti**.
@@ -67,7 +67,7 @@ Kaynak sürümü, seçim kuralı, URL’ler, gerçek edinim zamanları ve SHA-25
 - Gerçek Chrome’da 1440 px masaüstü, 390 px mobil ve 320 px reduced-motion ekranları incelendi; taşma ve tarayıcı hatası yoktu. Üç gerçek hesap karşılaştırması, ortak küçük yanıt ölçeği, eski kayıt korunması, üçüncü ders durumu ve kaynak fragment’i/yenileme doğrulandı. Derlenmiş yerel üretim önizlemesinde masaüstü/mobil kontroller tekrar geçti; gerçek Metal WebGL2 3D bağlamı sağlıklı, ana deneyin JSON’u aynı kaldı.
 - Önceki **59 kaynak/test/belge/veri/yapılandırma dosyası** SHA-256 ile aynıdır; `App.vue` bütünüyle korunur. Shell’e yalnız beşinci kalıcı görünüm, rota/menü ve veri yüklemesini bekleyen odak desteği eklenir; Shell CSS aynıdır. README’nin eski metni tam olarak korunup eklenir. Paket/lock dosyaları, gerçek ham XLSX ve türetilmiş JSON değişmez; önceki bütün kanıt klasörleri korunur; gerçek veri `dist/` veya `public/` içine eklenmez.
 
-Kanıtlar `test-results/assumptions-browser-final/` ve `test-results/assumptions-visual/` altındadır. `report.json`, `production-report.json`, `preservation.json` ve ekran görüntüleri kapsamı kaydeder. İlk tanılama izleri ayrı klasörde tutuldu. Kısa üretim önizlemesi durduruldu; geliştirme sunucusu `http://127.0.0.1:5176/` olarak açık kaldı. Safari/Firefox ve fiziksel iPhone test edilmedi. Türler atlası ve deney defteri bu aşamada eklenmedi; başka proje/cihaza aktarım veya yayımlama yapılmadı.
+Kanıtlar o tarihte yerel `test-results/assumptions-browser-final/` ve `test-results/assumptions-visual/` altına yazılmıştı (`report.json`, `production-report.json`, `preservation.json`, ekran görüntüleri). `test-results/` klasörü `.gitignore` kapsamındadır ve depoda yer almaz; ekran görüntüleri gerçek veriden türetilmiş görünümler içerdiği için paylaşılmaz. Safari/Firefox ve fiziksel iPhone test edilmedi. Türler atlası bu aşamada eklenmedi.
 
 ## Tekrarlanabilirlik notu (Kasım 2026)
 

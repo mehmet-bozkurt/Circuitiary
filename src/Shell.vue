@@ -3,6 +3,7 @@ import { defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, typ
 import ExperimentPage from './App.vue'
 import { useTheme } from './theme'
 import { activeHint } from './terms/activeHint'
+import { BASE, appPath, withBase } from './siteBase'
 
 const { preference: themePreference, changeTheme } = useTheme()
 
@@ -28,9 +29,10 @@ const pageTitles: Record<Page, string> = {
 const mainIds: Record<Page, string> = { experiment: 'top', lesson: 'neuron-lesson', guided: 'guided-experiments', reading: 'circuit-reading', assumptions: 'real-assumptions', atlas: 'species-atlas', builder: 'circuit-builder', glossary: 'glossary-page' }
 const knownPaths = ['', lessonPath, guidedPath, readingPath, assumptionsPath, atlasPath, builderPath, glossaryPath]
 // An address outside the app still opens the experiment page, but says so.
-const unknownPath = (pathname: string) => knownPaths.includes(pathname.replace(/\/$/, '')) ? '' : pathname
+// Paths are compared relative to the deployment base (siteBase.ts), and the notice names the path without it.
+const unknownPath = (pathname: string) => knownPaths.includes(appPath(pathname).replace(/\/$/, '')) ? '' : appPath(pathname)
 function pageFor(pathname: string): Page {
-  const path = pathname.replace(/\/$/, '')
+  const path = appPath(pathname).replace(/\/$/, '')
   if (path === lessonPath) return 'lesson'
   if (path === guidedPath) return 'guided'
   if (path === readingPath) return 'reading'
@@ -136,7 +138,7 @@ function navigateClick(event: MouseEvent) {
   const link = event.target instanceof Element ? event.target.closest('a[href]') : null
   if (!(link instanceof HTMLAnchorElement) || link.hasAttribute('download') || (link.target && link.target !== '_self')) return
   const url = new URL(link.href, location.href)
-  if (url.origin !== location.origin || !['/', lessonPath, `${lessonPath}/`, guidedPath, `${guidedPath}/`, readingPath, `${readingPath}/`, assumptionsPath, `${assumptionsPath}/`, atlasPath, `${atlasPath}/`, builderPath, `${builderPath}/`, glossaryPath, `${glossaryPath}/`].includes(url.pathname)) return
+  if (url.origin !== location.origin || !['/', lessonPath, `${lessonPath}/`, guidedPath, `${guidedPath}/`, readingPath, `${readingPath}/`, assumptionsPath, `${assumptionsPath}/`, atlasPath, `${atlasPath}/`, builderPath, `${builderPath}/`, glossaryPath, `${glossaryPath}/`].includes(appPath(url.pathname))) return
   // Existing same-page anchors retain native fragment and history behavior.
   if (url.pathname === location.pathname && url.search === location.search && url.hash) return
   event.preventDefault()
@@ -159,7 +161,7 @@ async function inspectFromReading(request: { neuronId: string }) {
     const outcome = await controller.inspectAnatomicalNeuron(request.neuronId, canCommit)
     if (!canCommit() || (!outcome.ok && outcome.cancelled)) return
     if (!outcome.ok) { handoffError.value = outcome.message; return }
-    const url = new URL(`/#graph-panel-${outcome.graphView}`, location.href)
+    const url = new URL(`${BASE}#graph-panel-${outcome.graphView}`, location.href)
     history.pushState(null, '', `${url.pathname}${url.hash}`)
     showPage(url, true)
   } catch {
@@ -202,20 +204,20 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
         </label>
       </div>
       <div class="section-navigation-links">
-        <a href="/" :aria-current="page === 'experiment' ? 'page' : undefined">Devre deneyleri</a>
-        <a :href="lessonPath" :aria-current="page === 'lesson' ? 'page' : undefined">Nörondan devreye</a>
-        <a :href="guidedPath" :aria-current="page === 'guided' ? 'page' : undefined">Rehberli deneyler</a>
-        <a :href="readingPath" :aria-current="page === 'reading' ? 'page' : undefined">Devreyi okumak</a>
-        <a :href="assumptionsPath" :aria-current="page === 'assumptions' ? 'page' : undefined">Gerçek veri ve varsayımlar</a>
-        <a :href="atlasPath" :aria-current="page === 'atlas' ? 'page' : undefined">Türler atlası</a>
-        <a :href="builderPath" :aria-current="page === 'builder' ? 'page' : undefined">Devre kur</a>
-        <a :href="glossaryPath" :aria-current="page === 'glossary' ? 'page' : undefined">Sözlük</a>
+        <a :href="BASE" :aria-current="page === 'experiment' ? 'page' : undefined">Devre deneyleri</a>
+        <a :href="withBase(lessonPath)" :aria-current="page === 'lesson' ? 'page' : undefined">Nörondan devreye</a>
+        <a :href="withBase(guidedPath)" :aria-current="page === 'guided' ? 'page' : undefined">Rehberli deneyler</a>
+        <a :href="withBase(readingPath)" :aria-current="page === 'reading' ? 'page' : undefined">Devreyi okumak</a>
+        <a :href="withBase(assumptionsPath)" :aria-current="page === 'assumptions' ? 'page' : undefined">Gerçek veri ve varsayımlar</a>
+        <a :href="withBase(atlasPath)" :aria-current="page === 'atlas' ? 'page' : undefined">Türler atlası</a>
+        <a :href="withBase(builderPath)" :aria-current="page === 'builder' ? 'page' : undefined">Devre kur</a>
+        <a :href="withBase(glossaryPath)" :aria-current="page === 'glossary' ? 'page' : undefined">Sözlük</a>
       </div>
       <p class="term-help">Noktalı altı çizili sözcüklerin anlamı ve kökeni için üzerine gel veya dokun. Klavyeyle odaklanarak da okuyabilirsin.</p>
     </nav>
     <div v-if="notFoundPath" class="route-notice" role="status">
       <p>“{{ notFoundPath }}” adresinde bir sayfa yok; devre deneyleri sayfasını gösteriyoruz.</p>
-      <a href="/">Devre deneyleri sayfasına git</a>
+      <a :href="BASE">Devre deneyleri sayfasına git</a>
     </div>
     <!-- First visit mounts each view. Later visits preserve its independent state. -->
     <div v-show="page === 'experiment'" ref="experimentRegion" class="view-page">

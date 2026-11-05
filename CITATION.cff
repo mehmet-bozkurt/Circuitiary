@@ -1,0 +1,24 @@
+# Bu dosya GitHub'daki "Cite this repository" düğmesini besler (CFF 1.2.0).
+# Henüz DOI yok; Zenodo-GitHub bağlantısı kurulduktan sonra `doi:` alanı eklenecek (docs/publishing.md).
+cff-version: 1.2.0
+message: "If you use Circuitiary in teaching or research material, please cite it as below. It is a parameterised teaching model, not a measurement or a brain emulation."
+type: software
+title: "Circuitiary"
+version: 0.1.0
+authors:
+  - given-names: "Mehmet"
+    family-names: "Bozkurt"
+license: MIT
+repository-code: "https://github.com/mehmet-bozkurt/Circuitiary"
+url: "https://mehmet-bozkurt.github.io/Circuitiary/"
+abstract: "Circuitiary is an interactive teaching notebook for small neuron circuits, with a Turkish user interface. It lets learners build and probe an eight-cell illustrative circuit and a 30-neuron anatomical subgraph of the C. elegans connectome (Cook et al. 2019 wiring data, imported locally and not redistributed), run a parameterised continuous rate model on it, and compare the effect of changed connections, time constants and thresholds in 2D and 3D views, guided lessons, a glossary, a species atlas and a circuit builder. The anatomy comes from the cited source; all dynamics are explicit teaching assumptions. It is not a measurement, a behaviour simulation or a biological brain emulation."
+keywords:
+  - neuroscience
+  - connectome
+  - c-elegans
+  - neural-circuits
+  - computational-neuroscience
+  - education
+  - simulation
+  - visualization
+  - turkish

@@ -6,6 +6,7 @@ import type { DeepReadonly, ReadonlyRealConnectome, SourceReference } from '../m
 import { createReadingGraph, findChemicalCycle, findShortestRoute, inspectNeuron } from '../learning/circuitReading'
 import type { ReadingGraph, ReadingHop, ReadingMode, ReadingRoute } from '../learning/circuitReading'
 import { readingNotes, readingPrompts, readingSources } from '../learning/readingContent'
+import { BASE, DEMO, DEMO_DATA_NOTICE, LOCAL_DATA_URL, withBase } from '../siteBase'
 
 withDefaults(defineProps<{ handoffLoading?: boolean; handoffError?: string }>(), { handoffLoading: false, handoffError: '' })
 const emit = defineEmits<{ ready: []; inspect: [payload: { neuronId: string }] }>()
@@ -92,7 +93,9 @@ async function loadData() {
   stepIndex.value = 0
   pathAnnouncement.value = ''
   try {
-    const response = await fetch('/api/local-connectome', { cache: 'no-store', signal: controller.signal })
+    // The online demo has no local data endpoint: say so instead of asking for it.
+    if (DEMO) { loadState.value = 'missing'; loadMessage.value = ''; errorMessage.value = DEMO_DATA_NOTICE; return }
+    const response = await fetch(LOCAL_DATA_URL, { cache: 'no-store', signal: controller.signal })
     if (disposed || version !== requestVersion) return
     if (response.status === 404) {
       loadState.value = 'missing'
@@ -146,7 +149,7 @@ onBeforeUnmount(() => {
 
     <section id="reading-data" tabindex="-1" aria-labelledby="reading-data-title" class="reading-section">
       <p class="reading-eyebrow">01 / KAYDI TANI</p><h2 id="reading-data-title">Anatominin kaydı nasıl tutuluyor?</h2><p class="reading-paragraph"><TermText :text="readingNotes.anatomy" /></p><p class="reading-paragraph"><TermText :text="readingNotes.weight" /></p>
-      <div data-testid="reading-load-status" :data-state="loadState" class="reading-load-state"><p role="status" aria-live="polite" aria-atomic="true">{{ loadMessage }}</p><div v-if="errorMessage" role="alert" class="reading-error"><p>{{ errorMessage }}</p><button type="button" @click="loadData">Tekrar dene</button></div></div>
+      <div data-testid="reading-load-status" :data-state="loadState" class="reading-load-state"><p role="status" aria-live="polite" aria-atomic="true">{{ loadMessage }}</p><div v-if="errorMessage" :role="DEMO ? 'status' : 'alert'" class="reading-error"><p>{{ errorMessage }}</p><button v-if="!DEMO" type="button" @click="loadData">Tekrar dene</button></div></div>
       <div v-if="graph" data-testid="reading-data-summary" :data-neuron-count="graph.neurons.length" :data-chemical-count="graph.chemicalEdges.length" :data-gap-count="graph.gapEdges.length" :data-self-loop-count="allSelfLoops.length" class="reading-data-summary"><div><span>Hücre</span><strong>{{ graph.neurons.length }}</strong></div><div><span>Kimyasal kayıt</span><strong>{{ graph.chemicalEdges.length }}</strong></div><div><span>Fiziksel elektriksel çift</span><strong>{{ graph.gapEdges.length }}</strong></div><p><TermText :text="graph.chemicalEdges.length" /> kimyasal kaydın <TermText :text="allSelfLoops.length" /> tanesi öz döngüdür. Elektriksel çiftler iki kez sayılmaz.</p><p>Ham birim: seri EM kesiti ağırlığı.</p></div>
       <p class="reading-model-note">Ham kayıtları okuyoruz; burada bağlantılara uyarıcı/baskılayıcı işaret, dinamik ağırlık veya etkinlik değeri atanmıyor.</p>
     </section>
@@ -205,7 +208,7 @@ onBeforeUnmount(() => {
       <details v-if="data" class="source-files"><summary>Yerel veri kaynaklarının kimliğini gör</summary><div v-for="source in data.dataset.sources" :key="source.sha256"><a :href="source.url">{{ source.name }}</a><p>Yerel veri kaydındaki edinim zamanı: <TermText :text="source.downloadedAtUtc" /></p><p>SHA-256: <code>{{ source.sha256 }}</code></p></div></details>
       <ul class="primary-sources"><li v-for="source in readingSources" :key="source.id"><a :href="source.url">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul>
     </section>
-    <div class="reading-next"><a href="/ogren/rehberli-deneyler">Rehberli deneylere dön <span aria-hidden="true">←</span></a><a href="/" class="reading-primary">Devre deneyine geç <span aria-hidden="true">→</span></a></div>
+    <div class="reading-next"><a :href="withBase('/ogren/rehberli-deneyler')">Rehberli deneylere dön <span aria-hidden="true">←</span></a><a :href="BASE" class="reading-primary">Devre deneyine geç <span aria-hidden="true">→</span></a></div>
   </main>
 </template>
 

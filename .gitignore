@@ -12,3 +12,15 @@ data/local/
 __pycache__/
 .playwright-cli/
 .vite/
+
+# Veri lisansı doğrulanmadı: veri klasörünün tamamı ve olası tablo dosyaları asla eklenmesin.
+data/
+*.xlsx
+*.xls
+*.csv.gz
+# Gizli bilgi dosyaları
+.env
+.env.*
+*.pem
+*.key
+*.p12

@@ -51,7 +51,7 @@ Kaynak kontrol tarihi: **2026-10-03**. Bu ilk atlas seçilmiş kayıtlarla sın�
 
 ## Doğrulama kaydı
 
-2026-10-03, aynı `Mehmet-Mac-mini.local` üzerinde:
+2026-10-03, aynı geliştirme bilgisayarında:
 
 - `npm test`: **185 birim testi geçti**. Önceki 173 teste 12 yeni atlas testi eklendi. Derin değişmezlik, bağımsız filtreleme, geçersiz kimlikler, aynı kayıt karşılaştırması, farklı birimler/kapsamlar, eksik sayıların sıfır olmaması, kaynak/sürüm ilişkileri ve soruların doğru/yanlış açıklamaları denetlendi.
 - `.venv/bin/python -m unittest discover -s scripts/tests -v`: **15 veri/içe aktarma testi geçti**; gerçek ham kaynak ve 246 yerel bağlantı kayıtları korunur.
@@ -64,7 +64,7 @@ Kaynak kontrol tarihi: **2026-10-03**. Bu ilk atlas seçilmiş kayıtlarla sın�
 - Gerçek Chrome'da 1440 px masaüstü, 390 px mobil ve 320 px reduced-motion görünümleri incelendi; yatay taşma, yinelenen ID veya tarayıcı hatası yoktu. Altı yayın kartı, küçük ekranda sayı/birim açıklamaları, iki kayıt karşılaştırması, sorular ve kaynak bölümü doğrulandı. Derlenmiş yerel üretim önizlemesinde masaüstü/mobil tekrar geçti; Apple M4/Metal WebGL2 bağlamı sağlıklı, mevcut gerçek deneyin JSON'u aynı kaldı.
 - Önceki **66 kaynak/test/veri/belge/yapılandırma dosyası** SHA-256 ile aynıdır. `App.vue` bütünü, dört ders, bütün eski testler ve ham/türetilmiş yerel veri korunur. Shell yalnız altıncı kalıcı görünüm, menü ve rota desteği alır; Shell CSS aynıdır. README'nin önceki metni tam olarak korunup eklenir. Önceki dokuz kanıt klasörü saklanır; gerçek veri `public/` veya `dist/` içine konmaz.
 
-Kanıtlar `test-results/atlas-browser/` ve `test-results/atlas-visual/` altındadır. `report.json`, `production-report.json`, `preservation.json` ve ekran görüntüleri kapsamı kaydeder. Kısa üretim önizlemesi durduruldu; geliştirme sunucusu `http://127.0.0.1:5176/` olarak açık kaldı. Safari/Firefox ve fiziksel iPhone test edilmedi. Yeni bağımlılık/kurulum, büyük veri indirme, yeni motor, Deney defteri, başka projeye/cihaza aktarım veya yayımlama yapılmadı. Kalan engel yoktur.
+Kanıtlar o tarihte yerel `test-results/atlas-browser/` ve `test-results/atlas-visual/` altına yazılmıştı (`report.json`, `production-report.json`, `preservation.json`, ekran görüntüleri). `test-results/` klasörü `.gitignore` kapsamındadır ve depoda yer almaz; ekran görüntüleri gerçek veriden türetilmiş görünümler içerdiği için paylaşılmaz. Safari/Firefox ve fiziksel iPhone test edilmedi. Bu aşamada yeni bağımlılık, büyük veri indirme veya yeni motor eklenmedi.
 
 ## Tekrarlanabilirlik notu (Kasım 2026)
 

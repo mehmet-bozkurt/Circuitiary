@@ -1,22 +1,131 @@
 # Circuitiary
 
-Hayvanların sinir devrelerini kurarak öğrenmek için kişisel deney defteri. İki çalışma modu hazırdır: sekiz hücreli kurgusal öğretici devre ve Cook2019 / Temmuz2020 bağlantı tablosundan seçilen **30 nöronluk yerel C. elegans altgrafı**. Anatomik graf ile dinamik varsayımlar ayrı tutulur. Davranış, ölçülmüş fizyoloji veya biyolojik beyin emülasyonu iddiası yoktur.
+**Küçük sinir devrelerini kurarak, deneyerek öğrenmek için etkileşimli bir Türkçe deney defteri.** Parametreli bir öğretim modelidir: ölçüm değildir, davranış simülasyonu değildir ve biyolojik beyin emülasyonu değildir.
 
-Proje yalnız Mac mini'de `/Users/mehmetbozkurt/Projects/Circuitiary` konumundadır.
+[![CI](https://github.com/mehmet-bozkurt/Circuitiary/actions/workflows/ci.yml/badge.svg)](https://github.com/mehmet-bozkurt/Circuitiary/actions/workflows/ci.yml)
+[![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-3e7962.svg)](LICENSE)
 
-## Çalıştırma
+## Canlı demo
 
-Kurulum bu makinede hazırdır. Proje klasöründe:
+**[mehmet-bozkurt.github.io/Circuitiary](https://mehmet-bozkurt.github.io/Circuitiary/)**: kurulum gerektirmeden tarayıcıda deneyin. Site GitHub Pages ile yayımlanır; depo özel olduğu sürece bağlantı açılmaz. Demo sekiz hücreli kurgusal devreyi ve verisiz sayfaları kullanır; yerel gerçek veri çevrimiçi demoda yoktur, “yerel veri gerekir” işaretli bölümler orada çalışmaz. [English summary](#english-summary) aşağıdadır.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/experiment-2d-circuit.png" alt="Sekiz hücreli kurgusal devrenin 2D bağlantı haritası: S1 ve S2 giriş, I1–I4 ara hücre, O1 ve O2 çıktı hücresi; baskılayıcı bağlantılar kırmızımsı çizilir"><br><sub>2D bağlantı haritası: sekiz hücreli kurgusal devre, S1 uyarılıyor</sub></td>
+<td width="50%"><img src="docs/images/experiment-activity-chart.png" alt="Aynı uyaran için üç koşulun O1 hücresindeki boyutsuz etkinlik eğrileri: referans, bağlantı susturuldu, zaman sabiti değişti"><br><sub>Aynı uyaran, üç koşul: referans, susturulan bağlantı, değişen zaman sabiti</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/experiment-3d-view.png" alt="Aynı devrenin 3D şematik uzay görünümü: renkli küreler hücreleri, oklar bağlantıları gösterir; konumlar anatomik değildir"><br><sub>3D şematik uzay (konumlar anatomik konum değildir)</sub></td>
+<td width="50%"><img src="docs/images/circuit-builder-result.png" alt="Devre kur sayfası: hazır uyarma ve baskılama örneği çalıştırılmış; A, B ve C hücrelerinin eğrileri ve tepe değerleri tablosu görünür"><br><sub>Devre kur: hazır örneği çalıştır, her hücrenin eğrisini ve tablosunu oku</sub></td>
+</tr>
+</table>
+
+<details>
+<summary>Daha fazla ekran görüntüsü</summary>
+
+<table>
+<tr>
+<td width="33%"><img src="docs/images/lesson-threshold-demo.png" alt="Nörondan devreye dersinde eşiğin iki yanı etkileşimli örneği: uyaran ve eşik kaydırıcıları ile tek yerel yanıtın çizimi"><br><sub>Nörondan devreye: eşiğin iki yanı</sub></td>
+<td width="33%"><img src="docs/images/glossary-search.png" alt="Sözlük sayfasında noron araması: Türkçe harfe duyarlı arama Akson dahil beş madde bulur"><br><sub>Sözlük: Türkçe harfe duyarlı arama</sub></td>
+<td width="33%"><img src="docs/images/species-atlas.png" alt="Türler atlası sayfasında FlyWire 2024 yayımlanmış kaynak kaydının tür, evre, cinsiyet, kapsanan bölge ve sürüm bilgileri"><br><sub>Türler atlası: yayımlanmış bir kaydın kapsamı</sub></td>
+</tr>
+</table>
+
+</details>
+
+Ekran görüntüleri yalnız sekiz hücreli kurgusal devreden ve yerel veri gerektirmeyen sayfalardan alınmıştır.
+
+## Neler var
+
+Her satır bir sayfayı ya da özelliği tanıtır; ayrıntı, sınırlar ve doğrulama kaydı bağlantılı belgededir. “Yerel veri gerekir” işaretli parçalar, sizin içe aktardığınız C. elegans altgrafı olmadan çalışmaz ([Veri ve lisans](#veri-ve-lisans)).
+
+- **Deney** (`/`): sekiz hücreli kurgusal devrede bir uyaranın izini sürün. Aynı uyaranı üç koşulda (referans, bağlantı susturma, zaman sabiti değişimi) yan yana karşılaştırın; devreyi 2D bağlantı haritasında ya da 3D şematik uzayda görün. Yerel veri varsa ikinci mod, 30 nöronluk gerçek altgraftır. [Bilimsel kapsam](docs/scientific-scope.md), [3D görünüm](docs/3d-verification.md).
+- **Nörondan devreye** (`/ogren/norondan-devreye`): nöronun parçalarından elektriksel sinyale, sinapslara ve üç hücreli devreye altı bölümlük ders; etkileşimli örnekler ve sekiz soru. [Belge](docs/neuron-lesson.md).
+- **Rehberli deneyler** (`/ogren/rehberli-deneyler`): tahmin et, çalıştır, farkı oku; üç kontrollü karşılaştırma. [Belge](docs/guided-experiments.md).
+- **Devreyi okumak** (`/ogren/devreyi-okumak`, yerel veri gerekir): bağlantı kayıtlarını, yolları ve döngüleri anatomi olarak okumak; bunun sinyal geçişi kanıtı olmadığını görmek. [Belge](docs/circuit-reading.md).
+- **Gerçek veri ve varsayımlar** (`/ogren/gercek-veri-ve-varsayimlar`, yerel veri gerekir): kaynaktaki kayıt ile seçilmiş dinamik varsayımları ayırın; **eşik taraması** kimyasal çarpanı tarayıp 1 eşiğinin modelin özelliği olduğunu gösterir. [Varsayımlar](docs/real-data-assumptions.md), [eşik taraması](docs/threshold-sweep.md).
+- **Türler atlası** (`/ogren/turler-atlasi`): C. elegans ve Drosophila için yayımlanmış kayıtların kapsam, sayı birimi, sürüm ve erişim farkları; statik katalogdur, veri yüklemez. [Belge](docs/species-atlas.md).
+- **Devre kur** (`/ogren/devre-kur`): 2–6 hücreli oyuncak bir devre kurun, bir hücreyi uyarın, her hücrenin eğrisini ve tablosunu görün; dört hazır örnek. [Belge](docs/circuit-builder.md).
+- **Sözlük ve sözcük kartları** (`/ogren/sozluk`): metindeki noktalı altı çizili terimlerin anlamı, kökeni ve kaynakları; Türkçe harfe duyarlı arama. [Sözlük](docs/glossary-page.md), [kartlar](docs/term-hints.md).
+- **Paylaş ve dışa aktar**: deney ayarları bağlantı olarak paylaşılır; grafik CSV, okunan hücre JSON olarak indirilir; hepsi tarayıcıda üretilir. [Belge](docs/share-and-export.md).
+- **Grafik veri tablosu ve klavye kısayolları**: grafikle aynı değerler gerçek bir tabloda; Boşluk, ←/→ ve Home ile oynatma. [Belge](docs/chart-table-and-shortcuts.md).
+- **Yazdırma**: her sayfa A4'e açık renkli ve düğmesiz çıkar; alt bilgide “eğitim amaçlı model; ölçüm değildir”. [Belge](docs/printing.md).
+- **Çevrimdışı kullanım**: üretim derlemesi bir kez açıldıktan sonra sayfalar ve sekiz hücreli deney ağsız çalışır. [Belge](docs/offline.md).
+- **Tema ve erişilebilirlik**: Sistem, Açık ve Karanlık tema; iki temada WCAG AA metin kontrastı otomatik test edilir.
+
+## Hızlı başlangıç
 
 ```sh
-npm run dev -- --port 5176
+git clone https://github.com/mehmet-bozkurt/Circuitiary.git && cd Circuitiary
+npm ci --ignore-scripts
+npm run dev
 ```
 
-Adres: `http://127.0.0.1:5176/`. Gerçek veri düğmesine basarak ikinci deneye geçin. Vite yalnız loopback adresinde dinler; hesap, ücretli API veya GPU gerekmez. Simülasyon tarayıcıda çalışır. Etkinlik oynatıcısı önceden hesaplanan sonuçları gösterir.
+Üçüncü adım Vite'in yazdığı yerel adresi açar (varsayılan `http://127.0.0.1:5173/`). Node 22.12+, 24 veya 26+ gerekir; hesap, ücretli API veya GPU gerekmez, simülasyon tarayıcıda çalışır.
+
+Sekiz hücreli örnek, dersler, devre kurucu, sözlük ve atlas kurulumdan hemen sonra çalışır. **Gerçek veri modu** (30 nöronluk C. elegans altgrafı) yerel veri ister: veri bu depoda yoktur, kaynaktan kendiniz indirip `scripts/import_cook2019.py` ile içe aktarırsınız ([adımlar](#gerçek-veri-ve-tekrar-üretim)). Veri yoksa uygulama bunu açıklayan bir mesaj gösterir ve sekiz hücreli mod çalışmaya devam eder.
+
+## Bilimsel kapsam
+
+Circuitiary, bir devrenin bağlantı yapısı ile onun üstüne kurulan dinamik varsayımlar arasındaki farkı öğretmek için yapılmış **parametreli bir öğretim modelidir**. Etkinlik 0–1 arasında, boyutsuz ve sürekli bir değişkendir; zar potansiyeli, ateşleme hızı ya da kalsiyum sinyali olarak kalibre edilmemiştir. Zaman sabitleri ve milisaniye ekseni modelin seçilmiş ölçeğidir. Bağlantı işaretleri ve ağırlıkları deney için seçilmiş varsayımlardır. Sonuçlar **ölçüm değildir**, bir hayvanın davranışını göstermez ve **beyin emülasyonu** iddiası taşımaz. Anatomik graf (kaynağın bildirdiği hücreler ve bağlantılar) ile dinamik varsayımlar uygulamada her yerde ayrı tutulur. Ayrıntı: [docs/scientific-scope.md](docs/scientific-scope.md).
+
+## Veri ve lisans
+
+- **Kod:** MIT lisansı ([LICENSE](LICENSE)). Kullanılan kitaplıkların (Vue, Cytoscape.js, three.js: MIT) lisansları, veri kaynaklarının durumu ve atıflar: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Bu depoda veri yoktur.** Gerçek veri modu, Cook ve ark. (Nature 2019) bağlantı tablosundan yapılmış 30 nöronluk bir altgrafa dayanır; kaynak [WormWiring](https://wormwiring.org/pages/adjacency.html) ve [makale](https://doi.org/10.1038/s41586-019-1352-7). Bu dosyaların yeniden dağıtım lisansı **doğrulanmadığı** için `data/raw/` ve `data/local/` git'in dışında tutulur, yayımlanan demoya konmaz.
+- Veriyi içe aktarırsanız kaynağı anın; gerçek veri içeren bir çıktıyı halka açık paylaşmadan önce lisans ve yazar iznini doğrulayın. Ayrıntı: [Yerel veri / paylaşım sınırı](#yerel-veri--paylaşım-sınırı).
+
+## Katkı
+
+Her büyüklükte katkı değerlidir: yazım düzeltmesi, kaynaklı bir sözlük maddesi, bir ders cümlesine itiraz, yeni bir önayar.
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): kurulum, kurallar, ilk katkı fikirleri. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) davranış kurallarıdır.
+- [SECURITY.md](SECURITY.md): güvenlik açığını herkese açık issue olarak değil, özel bildirimle iletin.
+- [Issue şablonları](.github/ISSUE_TEMPLATE): hata, özellik önerisi ve bilimsel düzeltme için ayrı formlar. Bilimsel bir cümleye itiraz etmek de değerli bir katkıdır.
+
+## Atıf
+
+Öğretim ya da araştırma materyalinde kullanırsanız [CITATION.cff](CITATION.cff) dosyasına bakın; GitHub'ın “Cite this repository” düğmesi de bu dosyayı kullanır. Düz metin: Bozkurt, M. (2026). *Circuitiary* (sürüm 0.1.0) [yazılım]. https://github.com/mehmet-bozkurt/Circuitiary. Henüz DOI yoktur.
+
+## English summary
+
+**Circuitiary** is an interactive, Turkish-language teaching notebook about small neuron circuits. You trace a stimulus through an eight-cell illustrative circuit, compare the same stimulus under three conditions (reference, a silenced connection, a changed time constant) in 2D and 3D, follow guided lessons, look words up in a glossary, compare published connectome records in a species atlas, and assemble your own 2–6-cell toy circuits.
+
+**What it is not.** It is a parameterised teaching model, not a measurement, not a behaviour simulation and not a biological brain emulation. Activity is dimensionless (0–1) and the time units are uncalibrated teaching choices; anatomy (where a source is cited) is kept apart from the dynamics assumptions. See [docs/scientific-scope.md](docs/scientific-scope.md) (Turkish).
+
+**Run it.** Node 22.12+, 24 or 26+. Everything runs in the browser; no account, paid API or GPU is needed.
+
+```sh
+npm ci --ignore-scripts
+npm run dev        # open the address Vite prints (default http://127.0.0.1:5173/)
+```
+
+**Real-data mode (optional).** A second mode uses a 30-neuron subgraph of the *C. elegans* connectome built from Cook et al. 2019 (via WormWiring). The data files are not in this repository because their redistribution licence has not been verified; you download and import them yourself with `scripts/import_cook2019.py`. Without them the app explains this and the eight-cell mode keeps working. The online demo has no real-data mode.
+
+**Status.** Version 0.1.0. Type check, unit tests, production build and Python importer tests run in CI; the browser tests run locally with the system Chrome. Test counts are in the section “Güncel doğrulama durumu” (Turkish).
+
+**Licence and contributing.** Code: MIT ([LICENSE](LICENSE)); no data is included. Cite via [CITATION.cff](CITATION.cff). Contributions and security reports: [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md), each with an English summary.
+
+---
+
+## Ayrıntılı belge
+
+Bundan sonrası projenin Türkçe ayrıntılı belgesidir: [Gerçek veri ve tekrar üretim](#gerçek-veri-ve-tekrar-üretim) · [Dinamik ve sınır koşulu](#dinamik-ve-sınır-koşulu) · [Kontroller](#kontroller) · [Güncel doğrulama durumu](#güncel-doğrulama-durumu) · [Yerel veri / paylaşım sınırı](#yerel-veri--paylaşım-sınırı) · [Ek özellikler](#ek-özellikler) · [Dosyalar](#dosyalar). Her aşamanın kapsamı ve kaynakları `docs/` klasöründedir.
+
+### Çalıştırma
+
+Proje klasöründe:
+
+```sh
+npm ci --ignore-scripts
+npm run dev
+```
+
+Adres, Vite'in yazdığı yerel adrestir (varsayılan `http://127.0.0.1:5173/`; başka bir port için `npm run dev -- --port 5176`). Gerçek veri düğmesi yalnız yerel veri içe aktarıldıysa ikinci deneye geçirir (bkz. [Gerçek veri ve tekrar üretim](#gerçek-veri-ve-tekrar-üretim)); veri yoksa uygulama açıklayıcı bir mesaj gösterir ve sekiz hücreli mod çalışır. Vite yalnız loopback adresinde dinler; hesap, ücretli API veya GPU gerekmez. Simülasyon tarayıcıda çalışır. Etkinlik oynatıcısı önceden hesaplanan sonuçları gösterir.
 
 Temiz Node kurulumu için Node 22.12+, 24 veya 26+ (Vitest 23 ve 25'i desteklemez; aralık `package.json` içindeki `engines` alanındadır) ve `npm ci --ignore-scripts` kullanılır. Bağımlılıklar `package-lock.json` ile sabittir.
 
-## Görünüm teması
+### Görünüm teması
 
 Üst menüdeki **Tema** alanından **Sistem**, **Açık** veya **Karanlık** seçilebilir. İlk açılış sistem tercihini izler; seçim bu tarayıcıda hatırlanır ve açık sekmeler arasında eşleşir. Sistem seçiliyken işletim sisteminin tema değişiklikleri anında uygulanır. Tarayıcı depolaması kapalıysa seçim mevcut sayfa oturumunda çalışır.
 
@@ -24,11 +133,11 @@ Tema bütün öğrenme sayfaları, kontroller, tablolar ve etkinlik grafikleri i
 
 Tema kontrolleri: `npx playwright test tests/theme.spec.ts`.
 
-## Sözcük anlamı ve kökeni
+### Sözcük anlamı ve kökeni
 
 Deney ve öğrenme metinlerindeki noktalı altı çizili terimlerin üzerine gelerek veya klavyeyle odaklanarak **anlamı, sözcük kökeni ve kaynakları** görülebilir. Tıklama/dokunma kartı açık tutar; Escape, kapatma düğmesi veya dışarı tıklama kapatır. Hermafrodit, nöron, dendrit, akson, sinaps, konnektom ve ablasyon gibi 15 madde bulunur. Açıklamalar açık/karanlık temaya uyar ve çevrimdışı okunabilir; kaynak bağlantıları yeni sekmede açılır. [Kapsam ve kaynak notları](docs/term-hints.md).
 
-## İlk iki deney
+### İlk iki deney
 
 1. Sekiz hücreli modda S1 uyarımını O1'den okuyun. `I3 → O1` susturulunca O1 sıfır kalır; `I4 → O1` baskılayıcı bağlantısını susturmak ise O1 yanıtını artırır. Bunlar elle tanımlanmış örnek bağlantılardır.
 2. Gerçek veri modunda AVER varsayılan uyaran hedefi, AVAR okunan hücredir. Bunlar deney rolleridir; duyusal/motor sınıflandırma değildir. SI4 hücre sınıfı inspector içinde ayrıca gösterilir.
@@ -39,9 +148,9 @@ Deney ve öğrenme metinlerindeki noktalı altı çizili terimlerin üzerine gel
 
 Grafikte seçili hücrenin bağlantılarına odaklanma **yalnız görsel filtredir**; tüm altgraf simüle edilir. Gerçek modda küçük yanıtlar için dikey eksen otomatik yakınlaşır; üç koşul aynı ve açıkça etiketlenen ekseni kullanır. Bu seçenek verileri değiştirmez; istenirse 0–1 eksenine dönülür. Izgara bir okuma düzenidir, anatomik konum değildir. Tüm 30 hücre, klavyeyle kullanılabilen hücre düğmelerinde de bulunur. Kimyasal yönler ok, gap çiftleri yönsüz kesikli çizgiyle gösterilir.
 
-## Gerçek veri ve tekrar üretim
+### Gerçek veri ve tekrar üretim
 
-Resmi kaynak [WormWiring](https://wormwiring.org/pages/adjacency.html), makale [Cook ve ark., Nature 2019](https://doi.org/10.1038/s41586-019-1352-7). Düzeltilmiş SI5 ve aynı çalışmanın SI4 listesi `data/raw/` altında, türetilmiş altgraf `data/local/` altındadır. Bu makinede içe aktarım tamamlanmıştır. Sürüm, URL, indirme zamanı, dosya özeti, hücre koordinatları, seçim sırası ve dışarıda kalan bağlantılar JSON'da korunur.
+Resmi kaynak [WormWiring](https://wormwiring.org/pages/adjacency.html), makale [Cook ve ark., Nature 2019](https://doi.org/10.1038/s41586-019-1352-7). Bu depoda veri yoktur: düzeltilmiş SI5 ve aynı çalışmanın SI4 listesini kaynaktan indirip `data/raw/` altına koyarsınız, türetilmiş altgraf `data/local/` altına yazılır; ikisi de git'in dışındadır (bkz. [Yerel veri / paylaşım sınırı](#yerel-veri--paylaşım-sınırı)). Sürüm, URL, indirme zamanı, dosya özeti, hücre koordinatları, seçim sırası ve dışarıda kalan bağlantılar JSON'da korunur.
 
 Ham ağırlık **seri EM kesiti ağırlığıdır**; sinaps sayısı, elektriksel iletkenlik veya ölçülmüş dinamik güç değildir. Kimyasal satır kaynak, sütun hedeftir. Matris kare değildir; ithalat bunu bilerek denetler. CANL/CANR kaynak satırı eksikliği raporlanır; beklenmedik eksiklikler reddedilir. Simetrik gap tablosundaki diagonal kayıtlar raporda korunur, dinamik çift olarak yorumlanmaz.
 
@@ -59,11 +168,11 @@ python3 -m venv .venv
   --acquisition-output data/local/acquisition.json
 ```
 
-Yukarıdaki zamanlar bu makinedeki gerçek edinim kaydıdır; yeni indirmede yeni gerçek UTC zamanları verilmelidir. İthalat ağ kullanmaz ve beklenen SHA-256 özetlerini denetler. Kaynak dosyalar değiştirilmez. Veri seçimi: AVAR/AVER, bir komşuluk adımı, kimyasal toplam azalan/gap toplam azalan/ad artan, ilk 28 aday; seçilen hücreler arasındaki tüm kimyasal ve tekil gap bağlantıları.
+Yukarıdaki zamanlar projenin geliştirildiği makinedeki edinim kaydıdır; kendi indirmenizde kendi gerçek UTC zamanlarınızı verin. İthalat ağ kullanmaz ve beklenen SHA-256 özetlerini denetler. Kaynak dosyalar değiştirilmez. Veri seçimi: AVAR/AVER, bir komşuluk adımı, kimyasal toplam azalan/gap toplam azalan/ad artan, ilk 28 aday; seçilen hücreler arasındaki tüm kimyasal ve tekil gap bağlantıları.
 
 Kaynak edinimi ve bütünlük ayrıntıları [veri raporunda](docs/real-data-next-step.md) yer alır.
 
-## Dinamik ve sınır koşulu
+### Dinamik ve sınır koşulu
 
 ```text
 tau_i * dx_i/dt = -x_i + clip(sum_j(w_ij*x_j) + I_i(t), 0, 1)
@@ -76,9 +185,9 @@ Etkinlik 0–1 ve boyutsuzdur. τ ve ms zaman ölçeği ölçüme göre kalibre 
 
 **Dış bağlantılar kesildi.** Dış kimyasal girdi sıfır kabul edilir; dış gap etkisi modellenmez. Bu, dış hücreleri sıfıra sabitlemekten farklıdır. Devre işlevsel olarak kapalı sayılmaz. Beden, kas mekaniği, çevre, spike ve öğrenme bu kapsamda yoktur.
 
-**Deney kaydını indir**, kaynak anatomisini, varsayımları, üç koşulun ayarlarını ve zaman serilerini yerel JSON olarak kaydeder. Gerçek veri kaydı yalnız kişisel yerel inceleme içindir.
+**Deney kaydını indir**, kaynak anatomisini, varsayımları, üç koşulun ayarlarını ve zaman serilerini yerel JSON olarak kaydeder. Gerçek veri kaydı yalnız yerel inceleme içindir; paylaşım sınırı için bkz. [Yerel veri / paylaşım sınırı](#yerel-veri--paylaşım-sınırı).
 
-## Kontroller
+### Kontroller
 
 ```sh
 .venv/bin/python -m unittest discover -s scripts/tests -v
@@ -89,21 +198,21 @@ npm run test:browser
 npm run test:evidence
 ```
 
-Tarayıcı testleri Mac mini'de zaten kurulu Google Chrome ile çalışır. Bütün senaryolar masaüstü (1440×1050) ve mobil (iPhone 13, 390×664) profillerinde koşar. `tests/evidence.spec.ts` ayrıca 320×800 azaltılmış hareket profilinde ve `npm run build` ile derlenen paketin `vite preview` sunucusunda (4177) masaüstü/mobil olarak çalışır. Bu sayfalar arası kanıt senaryosu her sayfada yatay taşmayı, yinelenen ID'yi, azaltılmış hareket tercihini, konsol hatasını ve bölüm bağlantısıyla doğrudan açıp yenilemeyi denetler. Gösterilen sayıları Node'daki kaynak motorla karşılaştırır, ekran görüntüsü ve `evidence.json` kaydı yazar. Üretim profillerinde yalnız hash'li `/assets/` paketlerinin yüklendiği ve `dist/` içinde veri dosyası bulunmadığı da sınanır; yeni tarayıcı kurulumu gerekmez. Alternatif konum için `CIRCUITIARY_CHROME_PATH` kullanılabilir. Geliştirme sunucusu 4176, üretim önizlemesi 4177 portunda `strictPort` ile açılır; bu portlardan biri doluysa koşu başlamaz. İki koşunun çakışması gerekiyorsa `CIRCUITIARY_DEV_PORT` ve `CIRCUITIARY_PREVIEW_PORT` başka portlar verir. Playwright her koşuda `webServer` olarak ikisini de başlattığı (üretim önizlemesi için `npm run build` dahil) için ikisi birlikte verilmelidir, örneğin `CIRCUITIARY_DEV_PORT=4276 CIRCUITIARY_PREVIEW_PORT=4277 npx playwright test tests/theme.spec.ts --project=desktop`; `playwright.config.ts` sunucu komutlarını ve `baseURL` değerlerini bu portlardan türetir. Her koşu aynı `dist/` klasörünü derler. [İlk aşamanın doğrulama kaydı](docs/verification.md) (3 Ekim 2026) o günkü kontrolleri ve sınırları belirtir; bugünkü sayılar aşağıdaki bölümdedir.
+Tarayıcı testleri sistemde kurulu Google Chrome ile çalışır; gerçek veri senaryoları yerel veriyi gerektirir. Bütün senaryolar masaüstü (1440×1050) ve mobil (iPhone 13, 390×664) profillerinde koşar. `tests/evidence.spec.ts` ayrıca 320×800 azaltılmış hareket profilinde ve `npm run build` ile derlenen paketin `vite preview` sunucusunda (4177) masaüstü/mobil olarak çalışır. Bu sayfalar arası kanıt senaryosu her sayfada yatay taşmayı, yinelenen ID'yi, azaltılmış hareket tercihini, konsol hatasını ve bölüm bağlantısıyla doğrudan açıp yenilemeyi denetler. Gösterilen sayıları Node'daki kaynak motorla karşılaştırır, ekran görüntüsü ve `evidence.json` kaydı yazar. Üretim profillerinde yalnız hash'li `/assets/` paketlerinin yüklendiği ve `dist/` içinde veri dosyası bulunmadığı da sınanır; yeni tarayıcı kurulumu gerekmez. Varsayılan Chrome konumu macOS'unkidir; başka bir sistemde veya konumda `CIRCUITIARY_CHROME_PATH` kullanılır. Geliştirme sunucusu 4176, üretim önizlemesi 4177 portunda `strictPort` ile açılır; bu portlardan biri doluysa koşu başlamaz. İki koşunun çakışması gerekiyorsa `CIRCUITIARY_DEV_PORT` ve `CIRCUITIARY_PREVIEW_PORT` başka portlar verir. Playwright her koşuda `webServer` olarak ikisini de başlattığı (üretim önizlemesi için `npm run build` dahil) için ikisi birlikte verilmelidir, örneğin `CIRCUITIARY_DEV_PORT=4276 CIRCUITIARY_PREVIEW_PORT=4277 npx playwright test tests/theme.spec.ts --project=desktop`; `playwright.config.ts` sunucu komutlarını ve `baseURL` değerlerini bu portlardan türetir. Her koşu aynı `dist/` klasörünü derler. [İlk aşamanın doğrulama kaydı](docs/verification.md) (3 Ekim 2026) o günkü kontrolleri ve sınırları belirtir; bugünkü sayılar aşağıdaki bölümdedir.
 
-Playwright çıktısı `test-results/latest/` altına yazılır ve her koşuda yalnız bu klasör temizlenir; `test-results/` altındaki tarihli kanıt klasörleri korunur. `--output` ile bir klasör verilirse o klasör koşu başında silinip yeniden yazılır. Son koşunun geçen/atlanan sayıları `test-results/latest/report.json` dosyasına da yazılır; `--output` verilse de bu rapor aynı yerde güncellenir. Saklanacak bir kanıt koşusu için `npm run test:evidence` kullanılır: bütün senaryoları yeni, zaman damgalı `test-results/evidence-YYYYMMDD-HHMMSS/` klasörüne yazar (rapor dahil) ve önceki klasörlere dokunmaz. Her `evidence.json` koşunun git commit'ini ve çalışma ağacının temiz olup olmadığını da kaydeder.
+Playwright çıktısı `test-results/latest/` altına yazılır ve her koşuda yalnız bu klasör temizlenir; `test-results/` altındaki tarihli kanıt klasörleri korunur. `--output` ile bir klasör verilirse o klasör koşu başında silinip yeniden yazılır. Son koşunun geçen/atlanan sayıları `test-results/latest/report.json` dosyasına da yazılır; `--output` verilse de bu rapor aynı yerde güncellenir. Saklanacak bir kanıt koşusu için `npm run test:evidence` kullanılır: bütün senaryoları yeni, zaman damgalı `test-results/evidence-YYYYMMDD-HHMMSS/` klasörüne yazar (rapor dahil) ve önceki klasörlere dokunmaz. Her `evidence.json` koşunun git commit'ini ve çalışma ağacının temiz olup olmadığını da kaydeder. `test-results/` `.gitignore` kapsamındadır, depoda yoktur: aşağıdaki aşama kayıtlarında geçen `test-results/...` yolları geliştiricinin yerel kanıtlarıdır (gerçek veri görünümlerinin ekran görüntüleri, veri lisansı doğrulanmadığı için paylaşılmaz); `npm run test:evidence` ile kendi kanıtınızı üretebilirsiniz.
 
-### Güncel doğrulama durumu
+#### Güncel doğrulama durumu
 
-5 Kasım 2026: **400 birim testi, 26 Python testi geçti; 468 tarayıcı senaryosundan 440'ı geçti, 28'i kapsamı gereği atlandı** (masaüstünde mobil dokunma; mobilde fareyle üzerine gelme, pencere yeniden boyutlandırmayı deneyen grafik ve devre kurucu senaryoları ile cihazdan bağımsız yazdırma senaryoları, çünkü bunlar masaüstü profilinde koşar). Senaryolara iki temada bütün sayfaların WCAG AA metin kontrastı (`tests/contrast.spec.ts`), ondalık virgül (`tests/decimals.spec.ts`) ve rolsüz `aria-label` (`tests/accessible-names.spec.ts`) denetimi ile yeni özelliklerin senaryoları, beş profilde sayfalar arası kanıt senaryosu (`tests/evidence.spec.ts`, 320 px azaltılmış hareket ve üretim önizlemesi dahil) dahildir. Tam tür kontrolü ve üretim derlemesi geçti. Tarayıcı: sistemdeki Google Chrome 156.0.8078.81, Playwright 1.63.0. Aşağıdaki bölümlerdeki “Bu aşamanın doğrulaması” cümleleri o aşamaya ait geçmiş kayıtlardır. O cümlelerdeki 320 px, azaltılmış hareket ve üretim önizlemesi denetimleri o tarihte projede bulunmayan bir kerelik betiklerle yapılmıştı; bugün `tests/evidence.spec.ts` ile tekrarlanır. “N korunan dosya aynı kaldı” türü SHA-256 karşılaştırmaları ise o aşamaya aittir ve tekrarlanamaz; değişiklik geçmişi artık git'tedir.
+5 Kasım 2026: **406 birim testi, 26 Python testi geçti; 468 tarayıcı senaryosundan 440'ı geçti, 28'i kapsamı gereği atlandı** (masaüstünde mobil dokunma; mobilde fareyle üzerine gelme, pencere yeniden boyutlandırmayı deneyen grafik ve devre kurucu senaryoları ile cihazdan bağımsız yazdırma senaryoları, çünkü bunlar masaüstü profilinde koşar). Senaryolara iki temada bütün sayfaların WCAG AA metin kontrastı (`tests/contrast.spec.ts`), ondalık virgül (`tests/decimals.spec.ts`) ve rolsüz `aria-label` (`tests/accessible-names.spec.ts`) denetimi ile yeni özelliklerin senaryoları, beş profilde sayfalar arası kanıt senaryosu (`tests/evidence.spec.ts`, 320 px azaltılmış hareket ve üretim önizlemesi dahil) dahildir. Tam tür kontrolü ve üretim derlemesi geçti. Tarayıcı: sistemdeki Google Chrome 156.0.8078.81, Playwright 1.63.0. Aşağıdaki bölümlerdeki “Bu aşamanın doğrulaması” cümleleri o aşamaya ait geçmiş kayıtlardır. O cümlelerdeki 320 px, azaltılmış hareket ve üretim önizlemesi denetimleri o tarihte projede bulunmayan bir kerelik betiklerle yapılmıştı; bugün `tests/evidence.spec.ts` ile tekrarlanır. “N korunan dosya aynı kaldı” türü SHA-256 karşılaştırmaları ise o aşamaya aittir ve tekrarlanamaz; değişiklik geçmişi artık git'tedir.
 
-## Yerel veri / paylaşım sınırı
+### Yerel veri / paylaşım sınırı
 
 Dosyaya özgü yeniden dağıtım lisansı **doğrulanmadı**. XLSX ve türetilmiş gerçek altküme `.gitignore` kapsamındadır; `public/` veya `dist/` içine eklenmez. `/api/local-connectome`, yalnız loopback ve aynı yerel origin üzerinden, kesin tek yerel dosyayı okur. Dev sunucusu `data/raw/` ve `data/local/` dosyalarını doğrudan adresle sunmaz (`server.fs.deny`, 403); veri yalnız bu uç noktadan okunur. Dev ve `npm run preview` bu uç noktayı sağlar (ikisi de tarayıcı testlerinde sınanır); statik bir dağıtımda veri olmadığında uygulama açıklayıcı hata gösterir ve öğretici mod çalışır.
 
-Veriyi veya gerçek veri içeren deney JSON'unu halka açık paylaşmadan önce açık lisans/yazar izni doğrulanmalıdır. Bu çalışmada yayımlama yapılmadı. Kod için paylaşım lisansı henüz seçilmedi; bağımlılıkların kendi lisansları paketlerinde korunur.
+Veriyi veya gerçek veri içeren deney JSON'unu halka açık paylaşmadan önce açık lisans/yazar izni doğrulanmalıdır. Bu depo yalnız kodu, sekiz hücreli örneği ve metinleri içerir; veri dosyaları git'te yoktur ve yayımlanmamıştır. Kod MIT lisanslıdır ([LICENSE](LICENSE)); bu lisans veri için geçerli değildir. Bağımlılıkların lisansları [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dosyasındadır.
 
-## Ek özellikler
+### Ek özellikler
 
 Her özelliğin ayrıntısı, sınırları ve doğrulaması kendi belgesindedir.
 
@@ -117,7 +226,7 @@ Her özelliğin ayrıntısı, sınırları ve doğrulaması kendi belgesindedir.
 - **Yazdırma:** her sayfa A4'e temiz çıkar; karanlık temada bile açık renk, gezinme ve düğmeler gizli, katlanmış bölümler açık, alt bilgide "eğitim amaçlı model; ölçüm değildir". Bkz. [docs/printing.md](docs/printing.md).
 - **Çevrimdışı kullanım:** üretim derlemesi bir kez çevrimiçi açıldıktan sonra sayfalar ve sekiz hücreli deney ağ olmadan da açılır (HTTPS veya localhost gerekir). `/api/local-connectome` hiçbir zaman önbelleğe alınmaz; gerçek veri modu çevrimdışıyken kullanılamaz. Manifest ile uygulama olarak yüklenebilir. Bkz. [docs/offline.md](docs/offline.md). Testi `tests/offline.spec.ts` yalnız `production-desktop` projesinde (üretim önizlemesi) koşar; diğer projelerde `serviceWorkers: 'block'` vardır.
 
-## Dosyalar
+### Dosyalar
 
 - `src/model/`: doğrulanan anatomik veri sözleşmesi (`types.ts`, `realConnectome.ts`), ayrı varsayımsal devre üretimi (`circuit.ts`), sayısal motor (`simulation.ts`) ve testleri.
 - `src/format.ts`: arayüzdeki sayıların ondalık virgülü (`decimal`, `withComma`) ve testi.
@@ -131,11 +240,12 @@ Her özelliğin ayrıntısı, sınırları ve doğrulaması kendi belgesindedir.
 - `tests/`: Playwright tarayıcı senaryoları (masaüstü ve mobil): her öğrenme sayfası için bir dosya (`neuron-lesson`, `guided-experiments`, `circuit-reading`, `assumptions-lesson`, `species-atlas`), ana deney (`learning`, `real-data`, `three-d`), `theme.spec.ts` ve `term-hints.spec.ts`; uygulama kabuğu ve oynatma (`app-shell.spec.ts`), 2D/3D grafik dayanıklılığı (`graph-resilience.spec.ts`), `/api/local-connectome` işleyicisi (`local-endpoint.spec.ts`, tarayıcısız ve yapay dosyalarla), WCAG AA metin kontrastı (`contrast.spec.ts`), ondalık virgül (`decimals.spec.ts`), rolsüz `aria-label` taraması (`accessible-names.spec.ts`), paylaşma/dışa aktarma (`share-export.spec.ts`), grafik tablosu ve kısayollar (`chart-table-shortcuts.spec.ts`), sözlük (`glossary-page.spec.ts`), devre kurucu (`circuit-builder.spec.ts`), eşik taraması (`threshold-sweep.spec.ts`), yazdırma (`print.spec.ts`) ve çevrimdışı kullanım (`offline.spec.ts`) ve 320 px/üretim önizlemesi profillerinde de koşan sayfalar arası kanıt senaryosu (`evidence.spec.ts`).
 - `tests/support/`: senaryoların ortak yardımcıları. `ui.ts` Türkçe sekme/bağlantı adlarını ve ortak konumlayıcıları, `export.ts` deney kaydı indirmeyi, `page-states.ts` kontrast ve ondalık denetiminin gezdiği sayfa durumlarının listesini içerir.
 - `vite.config.ts`, `vitest.config.ts`, `playwright.config.ts`, `tsconfig.json`: yapı, birim testi ve tarayıcı testi ayarları. `vite.local-data.ts`: yerel veri erişimi; veri tarayıcı paketine gömülmez.
+- `LICENSE` (MIT), `CITATION.cff`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/` ve `.github/PULL_REQUEST_TEMPLATE.md`: açık kaynak künyesi. `docs/images/`: bu dosyadaki ekran görüntüleri ve `social-preview.png` (1280×640 sosyal önizleme).
 - `.github/workflows/ci.yml`: GitHub Actions. Her gönderimde tür denetimi, birim testleri, üretim derlemesi ve Python testleri koşar. Tarayıcı senaryoları sistemdeki Chrome'u ve yerel veriyi kullandığı için yalnız yerelde koşar; yerel veri olmadan 13 birim ve 4 Python testi atlanır.
 - `docs/`: her aşamanın kapsamı, kaynakları ve doğrulama kayıtları: [doğrulama](docs/verification.md), [gerçek veri raporu](docs/real-data-next-step.md), [3D](docs/3d-verification.md), [Nörondan devreye](docs/neuron-lesson.md), [Rehberli deneyler](docs/guided-experiments.md), [Devreyi okumak](docs/circuit-reading.md), [Gerçek veri ve varsayımlar](docs/real-data-assumptions.md), [Türler atlası](docs/species-atlas.md), [sözcük kartları](docs/term-hints.md).
 - [Bilimsel kapsam](docs/scientific-scope.md): anatomi, dinamik, davranış ve emülasyon ayrımı.
 
-## 2D ve 3D görünüm
+### 2D ve 3D görünüm
 
 Başlangıç görünümü **2D · bağlantı haritası** olarak kalır. Aynı paneldeki **3D · şematik uzay** sekmesi, öğretici sekiz hücreli devreyi ve yerel 30 nöronluk gerçek altgrafı üç boyutta incelemek içindir. Hücre konumları deterministik bir çizim düzenidir: **anatomik konum, EM morfolojisi veya sinyalin fiziksel seyahat yolu değildir**. Uzamsal uzaklık ve ızgara eksenleri biyolojik ölçü olarak okunmaz.
 
@@ -158,7 +268,7 @@ Yeni görünümün kabul senaryoları ve sonuç kaydı [3D doğrulama belgesinde
 
 Bu aşamanın doğrulaması (Ekim 2026, geçmiş kayıt): **92 birim testi, 15 Python testi, 51 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma senaryosu kasıtlı olarak atlandı, mobilde çalıştı ve geçti. Son tam tür kontrolü ve üretim derlemesi geçti. Korunan 11 model/veri/2D dosyasının SHA-256 değerleri aynı kaldı. Apple M4/Metal WebGL2 üzerinde masaüstü, mobil görünüm ve iki modun üretim önizlemesi incelendi; sayısal JSON sonuçları değişmedi. Safari/Firefox ve fiziksel iPhone test edilmedi. Kanıtlar `test-results/3d-visual/` altındadır.
 
-## Öğrenme: Nörondan devreye
+### Öğrenme: Nörondan devreye
 
 Üst menüdeki **Nörondan devreye**, `/ogren/norondan-devreye` adresinde ayrı bir öğrenme sayfası açar. Altı bölüm nöron parçalarından elektriksel sinyale, kimyasal ve elektriksel sinapslara, uyarıcı/baskılayıcı etkilere ve üç hücreli devreye ilerler. Parça seçimi, eşik, girdi toplama, gap bağlaşımı ve devre müdahalesi örnekleri; sözlük, sekiz açıklamalı soru ve görünür kaynaklar vardır.
 
@@ -169,7 +279,7 @@ Mevcut deneyin `/` adresi, bölüm bağlantıları, 2D/3D görünümleri ve say�
 Yeni paket eklenmedi. İçerik ve özgün SVG çizimleri yereldir; kaynaklar yalnız bağlantı olarak verilir. [Dersin kapsamı, kaynakları ve doğrulama kaydı](docs/neuron-lesson.md) modellerin ayrıntılarını açıklar. Mevcut veri lisansı ve paylaşım sınırları geçerlidir.
 
 
-## Öğrenme: Rehberli deneyler
+### Öğrenme: Rehberli deneyler
 
 Üst menüdeki **Rehberli deneyler**, `/ogren/rehberli-deneyler` adresinde ikinci öğrenme sayfasıdır. Üç kontrollü karşılaştırma aynı sekiz hücreli örnek devre ve mevcut motorla gerçekten hesaplanır: S1 uyaranı 0,4 → 0,8; I3→O1 veya I4→O1 bağlantı katkısını kaldırma; yalnız O1'in τ değerini 30'dan seçilen 40–180 model ms'ye değiştirme. Diğer koşullar sabit tutulur.
 
@@ -180,7 +290,7 @@ Ayar değişikliği kayıtlı sonucu değiştirmez; eski kayıt açıkça işare
 Bu aşamanın doğrulamasında (Ekim 2026, geçmiş kayıt) **134 birim testi, 15 Python testi ve 85 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma testi kasıtlı olarak atlandı, mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/dar ekran ve yerel üretim önizlemesi geçti. Önceki 40 korunan dosya aynı kaldı; yeni paket eklenmedi. [Deneylerin kapsamı, varsayımları ve doğrulama kaydı](docs/guided-experiments.md) ayrıntıları açıklar. Kanıtlar `test-results/guided-visual/` ve `test-results/guided-browser/` altındadır.
 
 
-## Öğrenme: Devreyi okumak
+### Öğrenme: Devreyi okumak
 
 Üst menüdeki **Devreyi okumak**, `/ogren/devreyi-okumak` adresinde üçüncü öğrenme sayfasıdır. Mevcut gerçek 30 hücrelik altgrafın gelen/giden kimyasal kayıtlarını, tekil elektriksel çiftlerini, öz bağlantılarını ve kaynak koordinatlarını gösterir. Kimyasal, elektriksel veya karma modda en az kenarlı anatomik yol aranabilir; adımlar tek tek okunur. Çok hücreli yönlü kimyasal döngüler, öz bağlantılar ve altgraf dışında kalan kayıtlar ayrı açıklanır.
 
@@ -191,7 +301,7 @@ Hücre/yol incelemesi ana deneyi değiştirmez. **Ana deneyde bu hücreyi incele
 Bu aşamanın doğrulamasında (Ekim 2026, geçmiş kayıt) **153 birim testi, 15 Python testi ve 103 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma testi kasıtlı olarak atlandı, mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/320 px dar ekran ve yerel üretim önizlemesi geçti. Önceki 46 korunan dosya, deney template/styles ve Shell CSS aynı kaldı; yeni paket eklenmedi. [Sayfanın kapsamı, kaynakları ve doğrulama kaydı](docs/circuit-reading.md) ayrıntıları açıklar. Kanıtlar `test-results/reading-browser-complete/` ve `test-results/reading-visual/` altındadır.
 
 
-## Öğrenme: Gerçek veri ve varsayımlar
+### Öğrenme: Gerçek veri ve varsayımlar
 
 Üst menüdeki **Gerçek veri ve varsayımlar**, `/ogren/gercek-veri-ve-varsayimlar` adresinde dördüncü öğrenme sayfasıdır. Kaynakta raporlanan hücre/bağlantı kayıtları ile seçilmiş dinamik, normalizasyon, işaret, zaman sabiti, uyaran ve altgraf sınırı yan yana açıklanır. Yerel 30 hücre, 196 kimyasal kayıt (beşi öz döngü) ve 50 fiziksel gap çifti sinaps sayısı olarak sunulmaz; ham ağırlık seri EM kesiti ağırlığıdır.
 
@@ -200,7 +310,7 @@ Kontrollü örnekte aynı anatomi iki kez mevcut motorla hesaplanır. İkinci ko
 İlk üç ders, ana deneyin bütün ayarları, sayısal sonuçları, oynatma/zamanı ve 2D/3D görünümü korunur. Bu aşamanın doğrulamasında (Ekim 2026, geçmiş kayıt) **173 birim, 15 veri ve 121 tarayıcı testi geçti**; masaüstünde atlanan mobil dokunma senaryosu mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/320 px reduced-motion ve yerel üretim önizlemesi geçti. Önceki 59 korunan dosya, App bütünü ve Shell CSS aynı kaldı; yeni paket eklenmedi. [Kapsam, birincil kaynaklar ve doğrulama kaydı](docs/real-data-assumptions.md) ayrıntıları açıklar. Kanıtlar `test-results/assumptions-browser-final/` ve `test-results/assumptions-visual/` altındadır.
 
 
-## Öğrenme: Türler atlası
+### Öğrenme: Türler atlası
 
 Üst menüdeki **Türler atlası**, `/ogren/turler-atlasi` adresinde beşinci öğrenme sayfasıdır. C. elegans ve Drosophila için altı yayımlanmış kayıt ile mevcut yerel 30 hücrelik alt ağ ayrı okunur. Tür/kayıt filtresi, bağımsız iki kayıt karşılaştırması ve dört açıklamalı soru; yaşam evresi, cinsiyet, bölge, örnekleme, sayı birimi, sürüm ve erişim/lisans farklarını öğretir.
 

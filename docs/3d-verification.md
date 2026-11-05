@@ -1,6 +1,6 @@
 # Şematik 3D görünüm: doğrulama kaydı
 
-Tarih: 3 Ekim 2026. Proje: `/Users/mehmetbozkurt/Projects/Circuitiary`, aynı Mac mini üzerinde yerel kullanım. Bu belge 3D görüntüleme ve mevcut özelliklerin korunmasına ilişkindir; biyolojik emülasyon veya fizyoloji doğrulaması değildir.
+Tarih: 3 Ekim 2026. Proje: yerel geliştirme bilgisayarında yerel kullanım. Bu belge 3D görüntüleme ve mevcut özelliklerin korunmasına ilişkindir; biyolojik emülasyon veya fizyoloji doğrulaması değildir.
 
 **Durum: yerel 3D doğrulaması tamamlandı.** Son sürümde 92 birim testi, 15 Python kaynak testi ve 51 tarayıcı testi geçti. Bir masaüstü senaryosu mobil dokunmaya ayrıldığı için kasıtlı olarak atlandı; aynı dokunma senaryosu mobil görünümde geçti. Son tam tür kontrolü ve üretim derlemesi geçti. Önceki aşamanın sonucu [mevcut doğrulama kaydında](verification.md) ayrı tutulur.
 
@@ -32,7 +32,7 @@ Kapatma, hata ve bağlam kaybında bekleyen çizim iptal edilir; gözlemci, olay
 
 | Kontrol | Kabul ölçütü | Sonuç |
 | --- | --- | --- |
-| Model/veri/2D koruma | Koruma manifestindeki 11 mevcut dosyanın SHA-256 değerleri aynı | **11/11 aynı**; [özet kanıtı](../test-results/3d-visual/preservation-check.json) |
+| Model/veri/2D koruma | Koruma manifestindeki 11 mevcut dosyanın SHA-256 değerleri aynı | **11/11 aynı**; özet kanıtı yerel çıktıdadır, depoda yer almaz |
 | Birim testleri | Mevcut sayısal ve anatomik testler ile yeni deterministik şematik yerleşim testleri geçer | **92 geçti** |
 | Kaynak ithalatı | Yerel gerçek kaynak/matris testleri de korunur | **15 Python testi geçti** |
 | Tür kontrolü ve build | Vue/TypeScript kaynakları, son tarayıcı testleri ve yerel üretim paketi derlenir | **Son tam tür kontrolü ve üretim derlemesi geçti** |
@@ -46,7 +46,7 @@ Kapatma, hata ve bağlam kaybında bekleyen çizim iptal edilir; gözlemci, olay
 | Paket/veri sınırı | Yerel XLSX/JSON tarayıcı üretim paketine gömülmez; yeni uzak hizmet yok | **Geçti**; dist içinde kaynak veri/özet/ham koordinat işaretleri yok |
 | Görsel inceleme | Masaüstü/mobil ekranlarda etiketler, seçili hücre, çizgiler ve denetimler okunur | **Geçti**; yatay taşma ve tarayıcı hatası yok |
 
-Başlangıç koruma manifesti `/tmp/circuitiary-3d-preservation.json` dosyasında hazırlanmış, son karşılaştırma [proje içindeki kanıta](../test-results/3d-visual/preservation-check.json) kaydedilmiştir. Ana projenin model kaynakları/testleri, iki eski 2D bileşen, Cook ithalatçısı ve iki yerel veri JSON'u karşılaştırma kapsamındadır. Bu kayıt bir biyolojik veri yayını değildir.
+Başlangıç koruma manifesti geçici bir yerel dosyada hazırlanmış, son karşılaştırma yerel kanıt çıktısına kaydedilmiştir; ikisi de depoda yer almaz, değişiklik geçmişini artık git tutar. Projenin model kaynakları/testleri, iki eski 2D bileşen, Cook ithalatçısı ve iki yerel veri JSON'u karşılaştırma kapsamındadır. Bu kayıt bir biyolojik veri yayını değildir.
 
 ## Geçen son kontroller
 
@@ -60,21 +60,15 @@ npm run test:browser
 
 Tam tarayıcı koşusu **51 geçti, 1 kasıtlı atlama, 0 başarısız** sonucunu 49,8 saniyede verdi: eski 32 senaryo ile yeni 19 senaryo geçti. Masaüstündeki mobil dokunma atlaması, mobil bağlamdaki dokunma kontrolünün yerine kullanılmadı; bu kontrol mobilde çalıştı ve geçti.
 
-Yaşam döngüsü ölçümünün ilk denemesinde, ilk `Locator.evaluate` çağrısının başlattığı Playwright `InjectedScript` 13 global dinleyici ekliyordu: bir global kontrol dinleyicisi ve 12 hit-target yakalama dinleyicisi. Native CDP kaynak yığınları bunu [ayrı inceleme kaydında](../test-results/3d-visual/lifecycle-forensic.json) gösterir. Son test başlangıcı, 3D importundan önce mevcut 2D tuvalinin `tagName` değerini okuyan çağrıdan sonra alındı. Bütün global dinleyiciler sayılır; her çevrim sonunda sayının başlangıç ölçümünü aşmadığı denetlenir. Dinleyici filtresi veya ek sayı toleransı eklenmedi. Dört çevrimin tamamında test sayacı 3D'de **20**, 2D'ye dönüşte başlangıçtaki **28** değerinde kaldı; 3D'ye ait dinleyiciler kaldırıldı.
+Yaşam döngüsü ölçümünün ilk denemesinde, ilk `Locator.evaluate` çağrısının başlattığı Playwright `InjectedScript` 13 global dinleyici ekliyordu: bir global kontrol dinleyicisi ve 12 hit-target yakalama dinleyicisi. Native CDP kaynak yığınları bunu ayrı bir yerel inceleme kaydında gösterdi (depoda yer almaz). Son test başlangıcı, 3D importundan önce mevcut 2D tuvalinin `tagName` değerini okuyan çağrıdan sonra alındı. Bütün global dinleyiciler sayılır; her çevrim sonunda sayının başlangıç ölçümünü aşmadığı denetlenir. Dinleyici filtresi veya ek sayı toleransı eklenmedi. Dört çevrimin tamamında test sayacı 3D'de **20**, 2D'ye dönüşte başlangıçtaki **28** değerinde kaldı; 3D'ye ait dinleyiciler kaldırıldı.
 
 Gerçek donanım kontrolü Google Chrome'da **Apple M4 / ANGLE Metal / WebGL2** üzerinde yapıldı. Shader programı link kontrolü başarılı, bağlam kaybı yoktu. Masaüstü 1440×1050, mobil 390×664 görünümü (iPhone 13 ekranı 390×844) ve üretim önizlemesinde hem sekiz hücreli hem 30 hücreli mod kontrol edildi. İki modun dışa aktarılan sayısal sonuçları aynı kaldı; öğretici tepe yaklaşık 0,663, gerçek altgrafın varsayımsal tepe değeri yaklaşık 0,049 olarak görüldü. Bunlar boyutsuz model değerleridir.
 
-## Proje içindeki kanıtlar
+## Yerel kanıt dosyaları (depoda yok)
 
-- [Donanım, görünüm ve üretim önizleme raporu](../test-results/3d-visual/report.json)
-- [11 dosyanın koruma kontrolü](../test-results/3d-visual/preservation-check.json)
-- [Yaşam döngüsü ölçümünün kaynak incelemesi](../test-results/3d-visual/lifecycle-forensic.json)
-- [Masaüstü öğretici 3D](../test-results/3d-visual/desktop-toy-3d.png), [mobil öğretici 3D](../test-results/3d-visual/mobile-toy-3d.png)
-- [Masaüstü gerçek altgraf 3D](../test-results/3d-visual/desktop-real-3d.png), [mobil gerçek altgraf 3D](../test-results/3d-visual/mobile-real-3d.png)
-- [Masaüstü tam sayfa](../test-results/3d-visual/desktop-real-full.png), [mobil tam sayfa](../test-results/3d-visual/mobile-real-full.png)
-- [Masaüstü çıktı grafiği](../test-results/3d-visual/desktop-real-chart.png), [mobil çıktı grafiği](../test-results/3d-visual/mobile-real-chart.png)
+Bu aşamanın kanıtları o tarihte yerel `test-results/3d-visual/` klasörüne yazılmıştı: donanım, görünüm ve üretim önizleme raporu (`report.json`), 11 dosyanın koruma kontrolü (`preservation-check.json`), yaşam döngüsü ölçümünün kaynak incelemesi (`lifecycle-forensic.json`) ve masaüstü/mobil ekran görüntüleri (öğretici 3D, gerçek altgraf 3D, tam sayfa, çıktı grafiği). `test-results/` klasörü `.gitignore` kapsamındadır ve depoda yer almaz; gerçek altgraf ekran görüntüleri gerçek veriden türetilmiş görünümler içerdiği için paylaşılmaz. Aynı türden denetimleri güncel testler yeniden üretir (aşağıdaki tekrarlanabilirlik notuna bakın).
 
-Playwright çıktısı artık `test-results/latest/` altına yazılır; her koşu yalnız o klasörü temizler, bu kanıt klasörü korunur. Safari, Firefox ve fiziksel iPhone test edilmedi. Chrome mobil görünüm ve dokunma emülasyonu fiziksel cihaz doğrulaması değildir. WebGL desteğinin bu makinede çalışması bütün tarayıcı ve GPU'larda çalışmayı garanti etmez. Etkinliğin görünürde doğru çizilmesi biyolojik davranışın doğrulanması anlamına gelmez.
+Playwright çıktısı artık `test-results/latest/` altına yazılır; her koşu yalnız o klasörü temizler. Safari, Firefox ve fiziksel iPhone test edilmedi. Chrome mobil görünüm ve dokunma emülasyonu fiziksel cihaz doğrulaması değildir. WebGL desteğinin denetim ortamında çalışması bütün tarayıcı ve GPU'larda çalışmayı garanti etmez. Etkinliğin görünürde doğru çizilmesi biyolojik davranışın doğrulanması anlamına gelmez.
 
 ## Tekrarlanabilirlik notu (Kasım 2026)
 

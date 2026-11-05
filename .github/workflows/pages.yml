@@ -1,0 +1,50 @@
+name: Pages
+
+# Çevrimiçi demo: https://<kullanıcı>.github.io/<depo adı>/ adresinde yayımlanır.
+# Gerçek veri (data/ klasörü) depoda yoktur; demo yalnız sekiz hücreli örnek devreyi ve dersleri içerir
+# (docs/pages-demo.md). GitHub Pages özel depoda ücretli plan ister; bu yüzden iş yalnız genel depoda çalışır.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Yarım kalmış bir yayını yarıda kesme; yeni yayın sıraya girer.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      # `npm run build` önce tür denetimini çalıştırır. Taban yol depo adıdır; VITE_DEMO=1 gerçek veri
+      # uç noktası olmayan demo kipini açar.
+      - run: npm run build
+        env:
+          CIRCUITIARY_BASE: /${{ github.event.repository.name }}/
+          VITE_DEMO: '1'
+      # GitHub Pages bilinmeyen adresler için 404.html sunar (404 durum koduyla). Uygulama kendi yönlendirmesini
+      # yaptığı için 404.html, index.html'in kopyasıdır: /<depo>/ogren/sozluk gibi derin bağlantılar doğrudan açılır.
+      - run: cp dist/index.html dist/404.html
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v5

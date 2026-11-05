@@ -57,7 +57,7 @@ Açıklamalar özgün Türkçe metindir; kaynaklar bağlantı olarak verilir. Ye
 
 ## Doğrulama
 
-2026-10-03, aynı Mac mini’de:
+2026-10-03, aynı geliştirme bilgisayarında:
 
 - `npm test`: 153 birim testi geçti. Önceki 134 teste, 13 graf okuma ve altı aktarım testi eklendi. Gerçek sabitlenmiş veri için 30×30×3 = 2700 kaynak/hedef/mod çiftinin yol uzunlukları bağımsız Floyd–Warshall oracle ile karşılaştırıldı; kaynak koordinatları, ters gap geçişi, en kısa kimyasal döngüler, deterministik eşitlik seçimi, boş/yönsüz/yönlü fixture’lar ve kaynak değişmezliği denetlendi. Aktarım testleri üç gerçek koşulun bütün hesaplanmış izlerinin seçim değişikliğinde aynı kaldığını doğrular.
 - `.venv/bin/python -m unittest discover -s scripts/tests -v`: mevcut 15 veri/içe aktarma testi geçti.
@@ -67,7 +67,7 @@ Açıklamalar özgün Türkçe metindir; kaynaklar bağlantı olarak verilir. Ye
 - Gerçek Chrome’da 1440 px masaüstü, 390 px mobil ve 320 px reduced-motion görünümü incelendi; yatay taşma ve tarayıcı hatası yoktu. Derin kaynak bağlantısı, yenileme, üç yol türü, kaynak ayrıntıları ve dört sayfa durumu denetlendi. Yerel üretim önizlemesinde masaüstü/mobil kontroller tekrar geçti. Gerçek Metal WebGL2 3D bağlamı sağlıklı kaldı; ilk aktarım ve eski deney kaydı eşitliği doğrulandı.
 - Önceki 46 kaynak/test/yapılandırma/veri/belge dosyası SHA-256 ile aynı kaldı. App deney template/styles ve Shell CSS byte olarak aynıdır. App scriptine yalnız aktarım adaptörü, Shell’e rota/menü/odak ve aktarım koordinasyonu eklendi. README önceki içeriğini aynen koruyarak genişletildi. Paket/lock dosyaları değişmedi; önceki kanıt klasörleri korundu; ham gerçek veri `dist/` veya `public/` içine eklenmedi.
 
-Kanıtlar: `test-results/reading-browser-complete/`, `test-results/reading-visual/report.json`, `production-report.json`, `preservation.json` ve aynı klasördeki ekran görüntüleri. İlk tanılama turlarının izleri de ayrı klasörlerde tutuldu. Üretim önizlemesi testten sonra durduruldu; geliştirme adresi `http://127.0.0.1:5176/` açık kaldı. Safari/Firefox ve fiziksel iPhone test edilmedi. Başka projeye veya cihaza aktarım ve yayımlama yapılmadı.
+Kanıtlar o tarihte yerel `test-results/reading-browser-complete/` ve `test-results/reading-visual/` altına yazılmıştı (`report.json`, `production-report.json`, `preservation.json`, ekran görüntüleri). `test-results/` klasörü `.gitignore` kapsamındadır ve depoda yer almaz; ekran görüntüleri gerçek veriden türetilmiş görünümler içerdiği için paylaşılmaz. Safari/Firefox ve fiziksel iPhone test edilmedi.
 
 ## Tekrarlanabilirlik notu (Kasım 2026)
 

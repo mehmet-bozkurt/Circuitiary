@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Güvenlik açığı bildir · Report a vulnerability
+    url: https://github.com/mehmet-bozkurt/Circuitiary/security/advisories/new
+    about: Güvenlik açıklarını herkese açık issue olarak açmayın; özel bildirim formunu kullanın.

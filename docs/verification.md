@@ -1,6 +1,6 @@
 # Circuitiary doğrulama ve kabul kaydı
 
-Tarih: 3 Ekim 2026. Makine: `Mehmet-Mac-mini.local`. Konum: `/Users/mehmetbozkurt/Projects/Circuitiary`. Bu kayıt yerel yazılım/veri doğrulamasıdır; biyolojik yanıt doğrulaması değildir.
+Tarih: 3 Ekim 2026. Makine: yerel geliştirme bilgisayarı (macOS). Bu kayıt yerel yazılım/veri doğrulamasıdır; biyolojik yanıt doğrulaması değildir.
 
 ## Tamamlanan kabul ölçütleri
 
@@ -30,7 +30,7 @@ Tarih: 3 Ekim 2026. Makine: `Mehmet-Mac-mini.local`. Konum: `/Users/mehmetbozkur
 | Üretim paketi denetimi | XLSX, yerel JSON, kaynak hash'i ve serileştirilmiş ham ağırlık kayıtları yok |
 | Son görsel inceleme | Masaüstü/mobil devre, çizgiler ve varsayım defteri incelendi; yatay taşma/çalışma hatası yok |
 
-Tarayıcı testi geliştirme sunucusunu kullanır. Ek üretim kontrolü `npm run preview -- --port 4177` ile yapılmış, dışarıya yayımlanmamıştır. Playwright mevcut `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` uygulamasını headless çalıştırır; yeni tarayıcı kurulmamıştır. Mobil kontrol gerçek iPhone/Safari testi değildir, Chrome'da mobil görünüm ve dokunma emülasyonudur.
+Tarayıcı testi geliştirme sunucusunu kullanır. Ek üretim kontrolü `npm run preview -- --port 4177` ile yapılmıştır. Playwright, sistemde kurulu Google Chrome'u headless çalıştırır; varsayılan yol macOS içindir, başka bir sistemde `CIRCUITIARY_CHROME_PATH` ortam değişkeniyle verilir. Playwright'ın kendi tarayıcısı indirilmez. Mobil kontrol gerçek iPhone/Safari testi değildir, Chrome'da mobil görünüm ve dokunma emülasyonudur.
 
 İlk çalışmada uç parametreler için keyfî `<0,1` yakınsama beklentisi başarısız oldu. İnceleme, sınır korumanın sağlandığını fakat kaba Euler adımının hızlı yükselişi geciktirdiğini gösterdi. Nihai çözüm bir kontrolü gevşetmek değildir: görünür duyarlılık uyarısı, 0,0625 ms'ye kadar ince adımlar ve küçülen adımda azalan fark kontrolü eklendi. Son testte bu uç deneyin `dt/2` farkı 0,01'in altına indi. Bu eşik bir yazılım inceleme ölçütüdür; biyolojik doğruluk sertifikası değildir.
 
@@ -44,9 +44,9 @@ Her iki deney 700 ms, sıfır başlangıç, 100 ms başlangıçlı 200 ms/0,8 uy
 
 ## Kanıt dosyaları
 
-- `data/local/acquisition.json`: dosya bütünlüğü, sürüm, edinim, seçim ve sınır raporu.
-- `data/local/cook-subset.json`: yerel ham anatomi ve kaynak koordinatları.
-- `test-results/final-real-visual/`: son masaüstü/mobil devre, çıktı grafiği, varsayım ve tam sayfa ekranları. **Bu klasör artık yok**; büyük olasılıkla `--output` verilmeden yapılan sonraki bir Playwright koşusu varsayılan `test-results/` klasörünü temizlerken silindi.
+- `data/local/acquisition.json`: dosya bütünlüğü, sürüm, edinim, seçim ve sınır raporu (yerel dosya; depoda yer almaz).
+- `data/local/cook-subset.json`: yerel ham anatomi ve kaynak koordinatları (yerel dosya; depoda yer almaz).
+- `test-results/final-real-visual/`: son masaüstü/mobil devre, çıktı grafiği, varsayım ve tam sayfa ekranları. Bu yerel klasör artık yok (sonraki bir Playwright koşusu varsayılan `test-results/` klasörünü temizlerken silinmiş olabilir) ve zaten depoda yer almazdı.
 - `tests/learning.spec.ts`, `tests/real-data.spec.ts`: iki modun tarayıcı kabul senaryoları.
 - `src/model/*.test.ts`, `scripts/tests/test_import_cook2019.py`: sayısal ve kaynak doğrulaması.
 
@@ -54,11 +54,11 @@ Bu belge 3 Ekim 2026 ilk aşamasının kaydıdır; bugünkü test sayıları REA
 
 ## Açık sınırlar ve denenmeyen alanlar
 
-Yerel çalışma için erişim/kurulum engeli yok. **Dosyaya özgü yeniden dağıtım lisansı doğrulanmadı**; XLSX, türetilmiş altküme ve gerçek veri içeren deney kaydı halka açık dağıtıma hazır sayılmıyor. Veri `data/raw/`/`data/local/` içinde ve `.gitignore` kapsamındadır. Yayımlama, makine taşıma veya dış senkronizasyon yapılmadı.
+Yerel çalışma için erişim/kurulum engeli yok. **Dosyaya özgü yeniden dağıtım lisansı doğrulanmadı**; XLSX, türetilmiş altküme ve gerçek veri içeren deney kaydı paylaşıma hazır sayılmıyor; bu yüzden depoda yer almazlar. Veri `data/raw/`/`data/local/` içinde ve `.gitignore` kapsamındadır.
 
-Gerçek hayvan davranışı, voltaj, spike veya kalsiyum gözlem modeli kalibre edilmedi; deneysel biyolojik doğrulama yapılmadı. Safari/Firefox ve fiziksel mobil cihaz test edilmedi. Sürekli bir hizmet veya makine yeniden başladıktan sonra otomatik başlatma kurulmadı; gerektiğinde README komutuyla yerel sunucu tekrar açılır.
+Gerçek hayvan davranışı, voltaj, spike veya kalsiyum gözlem modeli kalibre edilmedi; deneysel biyolojik doğrulama yapılmadı. Safari/Firefox ve fiziksel mobil cihaz test edilmedi. Sürekli çalışan bir hizmet veya otomatik başlatma kurulmadı; yerel sunucu README'deki komutla açılır.
 
-Ortam: Node22.22.0, Vue3.5.43, Vite8.3.2, TypeScript5.9.3, Cytoscape3.34.3, Vitest5.0.3, Playwright1.63.0; Python3.9.6/openpyxl3.1.5/et-xmlfile2.0.0. Bağımlılıklar proje dosyalarıyla sabittir.
+Ortam (3 Ekim 2026 kaydı sırasında; güncel gereksinimler README ve `package.json` içindedir): Node22.22.0, Vue3.5.43, Vite8.3.2, TypeScript5.9.3, Cytoscape3.34.3, Vitest5.0.3, Playwright1.63.0; Python3.9.6/openpyxl3.1.5/et-xmlfile2.0.0. Bağımlılıklar proje dosyalarıyla sabittir.
 
 ## Tekrarlanabilir kanıt
 

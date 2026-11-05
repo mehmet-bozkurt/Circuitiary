@@ -1,0 +1,40 @@
+name: Özellik fikri · Feature idea
+description: Yeni bir ders, görünüm, önayar, sözlük maddesi ya da geliştirme öner.
+title: "[Fikir] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fikirler çok değerli. Projenin sınırı: parametreli bir öğretim modelidir; ölçüm, davranış simülasyonu ya da beyin emülasyonu iddiası taşımaz (docs/scientific-scope.md). Fikriniz bu çerçeveye nasıl oturuyor, bir cümleyle yazın.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Hangi öğrenme sorununu çözüyor?
+      description: Bir öğrenci, öğretmen ya da okuyucu hangi noktada takılıyor veya neyi göremiyor?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Önerilen çözüm
+      description: Nasıl çalışmasını düşünüyorsunuz? Çizim, örnek ya da benzer bir yer varsa bağlantı verin.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Biyolojik içerik varsa kaynaklar
+      description: Makale/DOI, WormAtlas, OpenWorm belgesi ya da ders kitabı bağlantıları.
+    validations:
+      required: false
+  - type: dropdown
+    id: help
+    attributes:
+      label: Bunu kendiniz yapmak ister misiniz?
+      options:
+        - Hayır, yalnız öneriyorum
+        - Evet, pull request açabilirim
+        - Yardım edilirse evet
+    validations:
+      required: true

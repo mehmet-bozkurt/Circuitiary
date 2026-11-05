@@ -1,0 +1,57 @@
+name: Bilimsel düzeltme · Scientific correction
+description: Uygulamadaki ya da belgelerdeki bir biyolojik ifadenin yanlış, eksik ya da fazla iddialı olduğunu düşünüyorsanız.
+title: "[Bilimsel düzeltme] "
+labels: ["scientific-correction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bilimsel itirazlar projeye katkıdır, hoş karşılanır. Yardımcı olması için lütfen **kaynağın tam olarak ne dediğini** ayırın ve ifadenin "ölçülmüş bir bulgu" mu yoksa "bir model tercihi" mi olduğunu belirtin. Düzeltmeyi kendiniz pull request olarak göndermek isterseniz CONTRIBUTING.md bölümüne bakın.
+  - type: textarea
+    id: statement
+    attributes:
+      label: İfade
+      description: Yanlış ya da sorunlu bulduğunuz cümle ya da değer, olduğu gibi.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Nerede görünüyor?
+      description: Sayfa, ders, bölüm başlığı ya da dosya yolu (örneğin docs/scientific-scope.md, Sözlük > Sinaps).
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Kaynak bağlantısı
+      description: Makale/DOI, WormAtlas, OpenWorm belgesi, ders kitabı ya da veri sağlayıcının sayfası.
+      placeholder: https://doi.org/...
+    validations:
+      required: true
+  - type: textarea
+    id: says
+    attributes:
+      label: Kaynak ne diyor?
+      description: Kaynağın ilgili bulgusunu kendi cümlelerinizle özetleyin; sayfa/şekil/tablo numarasını ekleyin. Telifli metni uzun uzun yapıştırmayın.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Önerilen düzeltme
+      description: İfade nasıl olmalı? Emin değilseniz "bilinmiyor" ya da "model varsayımı" diye işaretlenmesini önerebilirsiniz.
+    validations:
+      required: false
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Sorunun türü
+      options:
+        - Olgusal yanlış
+        - Ölçülmüş bulgu gibi sunulan model varsayımı
+        - Güncel olmayan kaynak
+        - Eksik bağlam ya da fazla genelleme
+        - Başka
+    validations:
+      required: true

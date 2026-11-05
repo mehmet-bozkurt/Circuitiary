@@ -8,9 +8,16 @@
 const BUILD_ID = '__BUILD_ID__'
 const PRECACHE = ['__PRECACHE__']
 
+// The folder this worker is served from ('/' on a root deployment, '/Circuitiary/' on GitHub
+// Pages). The precache list the build writes above already carries it; the worker's own
+// addresses (shell, assets, the data endpoint it must not touch) are derived from it here.
+const BASE = new URL('./', self.location.href).pathname
+
 const CACHE_PREFIX = 'circuitiary-'
 const CACHE = CACHE_PREFIX + BUILD_ID
-const SHELL = '/index.html'
+const SHELL = BASE + 'index.html'
+const ASSETS = BASE + 'assets/'
+const API = BASE + 'api'
 // Past this, a page that was cached before is shown instead of waiting on a bad network.
 const NAVIGATION_TIMEOUT_MS = 4000
 
@@ -92,8 +99,8 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return
   // Never touch the local data endpoint: it holds licence-unverified data, so it must
   // always reach the network and fail normally when there is none.
-  if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return
+  if (url.pathname === API || url.pathname.startsWith(API + '/')) return
   if (request.mode === 'navigate') event.respondWith(navigate(request))
-  else if (url.pathname.startsWith('/assets/')) event.respondWith(hashedAsset(event))
+  else if (url.pathname.startsWith(ASSETS)) event.respondWith(hashedAsset(event))
   else if (PRECACHE.includes(url.pathname)) event.respondWith(staticFile(request, url.pathname))
 })

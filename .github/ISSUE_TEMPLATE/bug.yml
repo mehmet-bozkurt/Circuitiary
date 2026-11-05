@@ -1,0 +1,71 @@
+name: Hata bildirimi · Bug report
+description: Uygulama beklenmedik davranıyor, yanlış görünüyor ya da bozuk.
+title: "[Hata] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bildirdiğiniz için teşekkürler. Bir **biyolojik ifadenin yanlış olduğunu** düşünüyorsanız bunun yerine "Bilimsel düzeltme" şablonunu kullanın. Güvenlik açıkları için herkese açık issue açmayın (SECURITY.md).
+  - type: textarea
+    id: steps
+    attributes:
+      label: Yeniden üretme adımları
+      description: Hangi sayfada, hangi sırayla ne yaptınız? Paylaşım bağlantısı varsa ekleyin.
+      placeholder: |
+        1. Devre kur sayfasını aç
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Beklenen ve görülen
+      description: Ne olmasını beklediniz, ne oldu? Ekran görüntüsü ekleyebilirsiniz.
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: Sayfa
+      description: Hata hangi sayfada oluyor? (örneğin Sözlük, Devre kur, Tür atlası, ana deney)
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Tarayıcı ve cihaz
+      description: Ad, sürüm ve işletim sistemi.
+      placeholder: Chrome 130, macOS 15; ya da Safari, iPhone 13
+    validations:
+      required: true
+  - type: dropdown
+    id: local-data
+    attributes:
+      label: Yerel gerçek veri var mıydı?
+      description: Gerçek C. elegans modu, depoda bulunmayan yerel veriyi gerektirir. Veri yoksa yalnız sekiz hücreli devre çalışır. Veri dosyasını bu forma eklemeyin.
+      options:
+        - Hayır, yalnız sekiz hücreli öğretici devre
+        - Evet, yerel veri içe aktarılmış
+        - Bilmiyorum
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Nasıl çalıştırıyorsunuz?
+      options:
+        - Yayınlanmış site (GitHub Pages)
+        - Yerel geliştirme sunucusu (npm run dev)
+        - Yerel üretim önizlemesi (npm run preview)
+    validations:
+      required: false
+  - type: textarea
+    id: console
+    attributes:
+      label: Konsol çıktısı (varsa)
+      description: Tarayıcı geliştirici araçlarından kopyalayın.
+      render: text
+    validations:
+      required: false

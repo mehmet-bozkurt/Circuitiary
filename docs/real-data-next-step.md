@@ -73,6 +73,6 @@ Bağımlılıklar `requirements-importer.txt` içinde `openpyxl==3.1.5` ve `et-x
 
 ## Lisans ve sonraki bilimsel çalışma
 
-Dosyaya özgü yeniden dağıtım lisansı doğrulanmadı. Açık indirme bağlantısı ve site telif bildirimi tek başına veri dağıtım izni değildir. Kullanıcının yetkilendirdiği yerel eğitim kullanımı için veriler bu Mac mini’de kalır; JSON lisans durumu `unverified-local-only` olarak görünür. Ham dosyalar ve türetilmiş biyolojik altküme halka açık depo, yayımlanacak dağıtım veya dış servise eklenmez. Kamuya açmak ayrı izin doğrulaması gerektirir.
+Dosyaya özgü yeniden dağıtım lisansı doğrulanmadı. Açık indirme bağlantısı ve site telif bildirimi tek başına veri dağıtım izni değildir. Bu nedenle bu depo veri dosyalarını içermez: yerel eğitim kullanımı için dosyaları kaynağından kendisi edinen kişinin bilgisayarında kalırlar ve JSON lisans durumu `unverified-local-only` olarak görünür. Ham dosyalar ve türetilmiş biyolojik altküme bu depoya, yayımlanan dağıtıma veya dış servise eklenmez. Bunları paylaşmak, dosyaya özgü yeniden dağıtım iznini ayrıca doğrulamayı gerektirir.
 
 Bir sonraki deneysel aşama işaret/reseptör kanıtı ve gözlem modeli gerektirir. AVER uyarımından sonra AVAR yanıtı, [Randi ve ark. 2023](https://doi.org/10.1038/s41586-023-06683-4) ile araştırılabilecek bir sorudur. Şimdiki boyutsuz çıktı, makaledeki kalsiyum ΔF/F ölçümünün doğrulanmış yeniden üretimi değildir. Anatomik grafın doğru okunması ve yazılım testlerinin geçmesi, bu ayrı biyolojik doğrulamayı tamamlamaz.

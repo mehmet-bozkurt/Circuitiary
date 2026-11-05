@@ -48,7 +48,7 @@ Sayısal sonuçların kaynağı mevcut yerel model/motordur. Aşağıdaki kurums
 
 ## Doğrulama
 
-2026-10-03, aynı Mac mini üzerinde:
+2026-10-03, aynı geliştirme bilgisayarında:
 
 - `npm test`: 134 birim testi geçti; 27 yeni test iki koşulun bütün hücre izlerini bağımsız mevcut motor çağrılarıyla karşılaştırır. Tek değişken, sıfır çıktı, raporlama düzeyine ulaşmayan pozitif çıktı, deterministik tekrar ve kayıt değişmezliği denetlendi.
 - `.venv/bin/python -m unittest discover -s scripts/tests -v`: mevcut 15 içe aktarma testi geçti.
@@ -62,7 +62,7 @@ Gerçek Chrome ekranları 1440 px masaüstü, 390 px mobil ve 320 px dar/reduced
 
 Önceki 40 kaynak, test, yapılandırma, ders, model ve veri dosyasının SHA-256 değerleri aynı kaldı. `README.md` önceki metni aynen koruyarak genişletildi; yalnız sayfa kabuğuna yeni rota/menü eklendi. Paket/lock dosyaları değişmedi. Ham gerçek veri `dist/` veya `public/` altına konmadı. Önceki 3D ve ilk ders kanıtları korundu.
 
-Kanıtlar `test-results/guided-browser/` ve `test-results/guided-visual/` altındadır. `report.json`, `production-report.json` ve `preservation.json` kapsamı kaydeder. Üretim önizlemesi testten sonra durduruldu; mevcut geliştirme sunucusu `http://127.0.0.1:5176/` olarak kaldı. Safari/Firefox ve fiziksel iPhone test edilmedi. Başka cihaz veya projeye aktarım ve yayımlama yapılmadı.
+Kanıtlar o tarihte yerel `test-results/guided-browser/` ve `test-results/guided-visual/` altına yazılmıştı (`report.json`, `production-report.json`, `preservation.json`, ekran görüntüleri). `test-results/` klasörü `.gitignore` kapsamındadır ve depoda yer almaz; ekran görüntüleri gerçek veriden türetilmiş görünümler içerdiği için paylaşılmaz. Safari/Firefox ve fiziksel iPhone test edilmedi.
 
 ## Tekrarlanabilirlik notu (Kasım 2026)
 

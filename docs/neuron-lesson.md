@@ -42,7 +42,7 @@ Menü gerçek bağlantılardan oluşur; doğrudan URL, yenileme, tarayıcı geç
 
 ## Doğrulama kaydı
 
-3 Ekim 2026'da Mac mini üzerinde tamamlandı:
+3 Ekim 2026'da geliştirme bilgisayarında tamamlandı:
 
 - **107 Vitest testi geçti:** önceki 92 model/yerleşim testi ve yeni 15 öğretim matematiği testi. Eşik sınırı/sıfır girdi, sabit tek olay biçimi, negatif net girdinin kırpılması, gap toplamı/yakınlaşması ve devrenin nedensellik/bağlantı kaldırma/taban koruma koşulları sınanır.
 - **15 Python ithalat testi geçti.** Gerçek veri kaynağı, yönler, ağırlıklar, tekrar üretim ve dış bağlantı kayıtları korunur.
@@ -51,14 +51,14 @@ Menü gerçek bağlantılardan oluşur; doğrudan URL, yenileme, tarayıcı geç
 - Doğrudan ders URL'si, yenileme, bölüm fragment'i, geri/ileri, yerel eski fragment'ler, klavye odağı ve skip link, mobil dokunma, gerçek Cmd/orta tıklama ve sekiz sorunun doğru/yanlış açıklamaları/sıfırlaması doğrulandı.
 - Önceki öğretici deneyin ayarları, seçimi, zaman imleci, koşulu, grafikleri ve JSON sonuçları; gerçek veri deneyinin 30 hücresi, anatomisi, katsayıları, 3D görünümü ve JSON sonuçları ders ziyaretinden sonra aynı kaldı.
 - Gerçek Chrome'da **1440, 390 ve 320 piksel** genişliklerde yatay taşma veya yinelenen ID görülmedi. 320 piksel kontrolde azaltılmış hareket tercihi açık kullanıldı. Etkileşim ve geri bildirim ekran görüntüleri incelendi.
-- Üretim önizlemesinde (`127.0.0.1:4177`) doğrudan bölüm URL'si/yenileme, ders hesabı, iki deney modu ve ders↔gerçek 3D geçişi geçti. Önizleme kontrol sonunda kapatıldı; mevcut geliştirme adresi `127.0.0.1:5176` açık kaldı. Gerçek altgraf JSON'u üretim paketine gömülmedi.
+- Üretim önizlemesinde (`127.0.0.1:4177`) doğrudan bölüm URL'si/yenileme, ders hesabı, iki deney modu ve ders↔gerçek 3D geçişi geçti. Önizleme kontrol sonunda kapatıldı. Gerçek altgraf JSON'u üretim paketine gömülmedi.
 - **31 korunan mevcut dosyanın SHA-256 değeri aynı.** Bunlar `App.vue`, ortak stil, tüm eski model/2D/3D kaynakları, eski testler, ithalat, eski kapsam belgeleri, veri JSON'ları ve bağımlılık/yapılandırma dosyalarını içerir. README'nin önceki 12.235 baytı aynen korunarak yeni bölüm sona eklendi.
 
 Yeni menü `src/Shell.vue` içinde, giriş değişikliği `src/main.ts` içinde; yeni ders kaynakları `src/components/NeuronLearningPage.vue` ve `src/learning/` altında. Yalnız yeni birim testleri için `vitest.config.ts` kapsamına `src/learning/**/*.test.ts` eklendi. Eski kaynak/test dosyalarına bu ders için değişiklik yapılmadı.
 
 İlk masaüstü yeni sekme testi, açılan sekme için yanlışlıkla `Page.popup` olayı bekliyordu. Kayıtlı trace, gerçek Cmd tıklamasının ders URL'sinde yeni `BrowserContext.page` oluşturduğunu gösterdi. Bekleme doğru olaya geçirildi; gerçek tıklamalar, hedef URL/başlık/main denetimleri ve kaynak sayfanın aynı kalması korundu, 1→2→1 sekme sayısı kontrolü eklendi. Son tam test çalışmasında bu senaryo geçti. Reddedilen ayrı tarayıcı tanılaması yeniden denenmedi; düzeltme mevcut kaydın salt okunur incelemesine dayandı.
 
-Kanıtlar: `test-results/neuron-lesson-browser/`, `test-results/neuron-lesson-visual/report.json`, `production.json`, `preservation.json` ve bölüm/geri bildirim/3D ekran görüntüleri. Önceki `test-results/3d-visual/` kanıtları ayrı çıktı klasörü kullanılarak korundu. Gerçek 3D tuvali Apple M4/Metal WebGL2 ile çizildi; bağlam kaybı görülmedi. Safari/Firefox, fiziksel iPhone ve ekran okuyucu testi yapılmadı; erişilebilirlik burada klavye, semantik etiketler, odak ve görünür landmark kontrolleriyle sınanmıştır.
+Kanıtlar o tarihte yerel `test-results/neuron-lesson-browser/` ve `test-results/neuron-lesson-visual/` altına yazılmıştı (`report.json`, `production-report.json`, `preservation.json`, ekran görüntüleri). `test-results/` klasörü `.gitignore` kapsamındadır ve depoda yer almaz; ekran görüntüleri gerçek veriden türetilmiş görünümler içerdiği için paylaşılmaz. Gerçek 3D tuvali Apple M4/Metal WebGL2 ile çizildi; bağlam kaybı görülmedi. Safari/Firefox, fiziksel iPhone ve ekran okuyucu testi yapılmadı; erişilebilirlik burada klavye, semantik etiketler, odak ve görünür landmark kontrolleriyle sınanmıştır.
 
 ## Tekrarlanabilirlik notu (Kasım 2026)
 

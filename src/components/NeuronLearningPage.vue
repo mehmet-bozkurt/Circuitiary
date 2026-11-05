@@ -5,6 +5,7 @@ import LessonTracePlot from '../learning/LessonTracePlot.vue'
 import { glossary, lessonSections, lessonSources, neuronParts, selfChecks } from '../learning/lessonContent'
 import { chemicalLesson, gapLesson, smallCircuitLesson, thresholdLesson } from '../learning/lessonMath'
 import { decimal } from '../format'
+import { BASE } from '../siteBase'
 
 const emit = defineEmits<{ ready: [] }>()
 onMounted(() => emit('ready'))
@@ -196,7 +197,7 @@ function resetLesson() {
           <ul><li v-for="source in lessonSources" :key="source.url"><a :href="source.url">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul>
         </section>
 
-        <div class="lesson-next"><div><p class="lesson-eyebrow">BİR SONRAKİ ADIM</p><h2>Şimdi bağlantıyı sorgula.</h2><p>Devre deneyinde bir bağlantıyı seç. Anatomik kanıtı, atanan etkiyi ve seçilen dinamiği ayrı ayrı anlatmayı dene.</p></div><a href="/">Devre deneyine geç <span aria-hidden="true">→</span></a></div>
+        <div class="lesson-next"><div><p class="lesson-eyebrow">BİR SONRAKİ ADIM</p><h2>Şimdi bağlantıyı sorgula.</h2><p>Devre deneyinde bir bağlantıyı seç. Anatomik kanıtı, atanan etkiyi ve seçilen dinamiği ayrı ayrı anlatmayı dene.</p></div><a :href="BASE">Devre deneyine geç <span aria-hidden="true">→</span></a></div>
       </div>
     </div>
   </main>
