@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   buildRealCircuit, defaultRealModelParameters, parseRealConnectome, realDefaultConfig,
@@ -222,7 +222,7 @@ describe('defensive immutable experiment snapshots and invalid requests', () => 
   })
 })
 
-const localDatasetPath = process.env.CIRCUITIARY_ASSUMPTIONS_DATA ?? resolve(process.cwd(), 'data/local/cook-subset.json')
+const localDatasetPath = process.env.CIRCUITIARY_ASSUMPTIONS_DATA ?? fileURLToPath(new URL('../../data/local/cook-subset.json', import.meta.url))
 describe('locally available pinned Cook2019 anatomy (not redistributed)', () => {
   it.skipIf(!existsSync(localDatasetPath))('matches all 30 traces against the existing builder/engine for all variables and boundary values', () => {
     const data = parseRealConnectome(JSON.parse(readFileSync(localDatasetPath, 'utf8')))

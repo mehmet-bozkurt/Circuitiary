@@ -105,8 +105,8 @@ export const selfChecks = [
     { id: 'zero', text: 'Dinlenimde zarın iki tarafı mutlaka aynı gerilimdedir' }, { id: 'gradients', text: 'İyon dağılımı ve zarın seçici geçirgenliği gerilim farkına katkı verir' }, { id: 'instantPump', text: 'Her aksiyon potansiyelini tek başına pompa oluşturur' },
   ], correct: 'gradients', explanation: 'Dinlenim, sıfır gerilim demek değildir. Seçici geçirgenlik ve iyon farkları birlikte etkilidir; pompalar farkların sürdürülmesine katkı verir.' },
   { id: 'q3', question: 'Bu tek olay gösteriminde eşik aşıldıktan sonra uyaranı artırınca ne değişir?', options: [
-    { id: 'taller', text: 'Tek olayın tepesi uyaranla orantılı büyür' }, { id: 'universal', text: 'Bütün türler için aynı ateşleme sıklığı hesaplanır' }, { id: 'frequent', text: 'Çizilen tek olayın tepesi aynı kalır' },
-  ], correct: 'frequent', explanation: 'Bu gösterim bir olay seçer; ateşleme dizisi veya frekans hesaplamaz. Eşik altında görülen daha küçük eğri, yerel yanıtın şematik gösterimidir.' },
+    { id: 'taller', text: 'Tek olayın tepesi uyaranla orantılı büyür' }, { id: 'universal', text: 'Bütün türler için aynı ateşleme sıklığı hesaplanır' }, { id: 'samePeak', text: 'Çizilen tek olayın tepesi aynı kalır' },
+  ], correct: 'samePeak', explanation: 'Bu gösterim bir olay seçer; ateşleme dizisi veya frekans hesaplamaz. Eşik altında görülen daha küçük eğri, yerel yanıtın şematik gösterimidir.' },
   { id: 'q4', question: 'Bir kimyasal bağlantının uyarıcı mı baskılayıcı mı olduğunu ne belirler?', options: [
     { id: 'transmitterOnly', text: 'Yalnız nörotransmitterin adı' }, { id: 'receptorContext', text: 'Reseptör, etkilenen kanallar ve hücrenin iyon koşulları da' }, { id: 'arrow', text: 'Çizimdeki okun uzunluğu' },
   ], correct: 'receptorContext', explanation: 'Aynı iletici farklı reseptörlerde farklı etkiler oluşturabilir. Bu nedenle iletici adı, her bağlantı için tek başına yeterli değildir.' },

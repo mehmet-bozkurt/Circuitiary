@@ -62,7 +62,7 @@ Tam tarayıcı koşusu **51 geçti, 1 kasıtlı atlama, 0 başarısız** sonucun
 
 Yaşam döngüsü ölçümünün ilk denemesinde, ilk `Locator.evaluate` çağrısının başlattığı Playwright `InjectedScript` 13 global dinleyici ekliyordu: bir global kontrol dinleyicisi ve 12 hit-target yakalama dinleyicisi. Native CDP kaynak yığınları bunu [ayrı inceleme kaydında](../test-results/3d-visual/lifecycle-forensic.json) gösterir. Son test başlangıcı, 3D importundan önce mevcut 2D tuvalinin `tagName` değerini okuyan çağrıdan sonra alındı. Bütün global dinleyiciler sayılır; her çevrim sonunda sayının başlangıç ölçümünü aşmadığı denetlenir. Dinleyici filtresi veya ek sayı toleransı eklenmedi. Dört çevrimin tamamında test sayacı 3D'de **20**, 2D'ye dönüşte başlangıçtaki **28** değerinde kaldı; 3D'ye ait dinleyiciler kaldırıldı.
 
-Gerçek donanım kontrolü Google Chrome'da **Apple M4 / ANGLE Metal / WebGL2** üzerinde yapıldı. Shader programı link kontrolü başarılı, bağlam kaybı yoktu. Masaüstü 1440×1050, mobil 390×844 görünümü ve üretim önizlemesinde hem sekiz hücreli hem 30 hücreli mod kontrol edildi. İki modun dışa aktarılan sayısal sonuçları aynı kaldı; öğretici tepe yaklaşık 0,663, gerçek altgrafın varsayımsal tepe değeri yaklaşık 0,049 olarak görüldü. Bunlar boyutsuz model değerleridir.
+Gerçek donanım kontrolü Google Chrome'da **Apple M4 / ANGLE Metal / WebGL2** üzerinde yapıldı. Shader programı link kontrolü başarılı, bağlam kaybı yoktu. Masaüstü 1440×1050, mobil 390×664 görünümü (iPhone 13 ekranı 390×844) ve üretim önizlemesinde hem sekiz hücreli hem 30 hücreli mod kontrol edildi. İki modun dışa aktarılan sayısal sonuçları aynı kaldı; öğretici tepe yaklaşık 0,663, gerçek altgrafın varsayımsal tepe değeri yaklaşık 0,049 olarak görüldü. Bunlar boyutsuz model değerleridir.
 
 ## Proje içindeki kanıtlar
 
@@ -75,3 +75,7 @@ Gerçek donanım kontrolü Google Chrome'da **Apple M4 / ANGLE Metal / WebGL2** 
 - [Masaüstü çıktı grafiği](../test-results/3d-visual/desktop-real-chart.png), [mobil çıktı grafiği](../test-results/3d-visual/mobile-real-chart.png)
 
 Playwright çıktısı artık `test-results/latest/` altına yazılır; her koşu yalnız o klasörü temizler, bu kanıt klasörü korunur. Safari, Firefox ve fiziksel iPhone test edilmedi. Chrome mobil görünüm ve dokunma emülasyonu fiziksel cihaz doğrulaması değildir. WebGL desteğinin bu makinede çalışması bütün tarayıcı ve GPU'larda çalışmayı garanti etmez. Etkinliğin görünürde doğru çizilmesi biyolojik davranışın doğrulanması anlamına gelmez.
+
+## Tekrarlanabilirlik notu (Kasım 2026)
+
+Bu belgedeki 320 px/azaltılmış hareket ve üretim önizlemesi denetimleri o tarihte projede bulunmayan bir kerelik betiklerle yapılmış ve `test-results/` altındaki kanıt klasörlerine yazılmıştı. Bugün aynı türden denetimler `tests/evidence.spec.ts` ile masaüstü, mobil, 320×800 azaltılmış hareket ve derlenmiş paketin önizlemesi (4177) profillerinde tekrarlanır: yatay taşma, yinelenen ID, konsol hatası, bölüm bağlantısıyla doğrudan açma ve yenileme, kaynak motorla aynı sayılar. Ayrıntılar [doğrulama kaydındadır](verification.md#tekrarlanabilir-kanıt). “Korunan dosyalar aynı kaldı” türü SHA-256 karşılaştırmaları o aşamaya aittir ve tekrarlanamaz; değişiklik geçmişi artık git'te tutulur.

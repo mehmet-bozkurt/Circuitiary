@@ -59,3 +59,35 @@ Yerel çalışma için erişim/kurulum engeli yok. **Dosyaya özgü yeniden dağ
 Gerçek hayvan davranışı, voltaj, spike veya kalsiyum gözlem modeli kalibre edilmedi; deneysel biyolojik doğrulama yapılmadı. Safari/Firefox ve fiziksel mobil cihaz test edilmedi. Sürekli bir hizmet veya makine yeniden başladıktan sonra otomatik başlatma kurulmadı; gerektiğinde README komutuyla yerel sunucu tekrar açılır.
 
 Ortam: Node22.22.0, Vue3.5.43, Vite8.3.2, TypeScript5.9.3, Cytoscape3.34.3, Vitest5.0.3, Playwright1.63.0; Python3.9.6/openpyxl3.1.5/et-xmlfile2.0.0. Bağımlılıklar proje dosyalarıyla sabittir.
+
+## Tekrarlanabilir kanıt
+
+Kasım 2026'dan itibaren görsel ve üretim denetimleri projedeki `tests/evidence.spec.ts` ile tekrarlanır. Senaryo `playwright.config.ts` içindeki beş profilde koşar:
+
+| Profil | Sunucu | Görünüm |
+| --- | --- | --- |
+| `desktop` | dev, 4176 | 1440×1050 |
+| `mobile` | dev, 4176 | iPhone 13, 390×664, dokunmatik |
+| `narrow-reduced-motion` | dev, 4176 | 320×800, `prefers-reduced-motion: reduce` |
+| `production-desktop` | `npm run build` + `vite preview`, 4177 | 1440×1050 |
+| `production-mobile` | `npm run build` + `vite preview`, 4177 | iPhone 13 |
+
+Altı sayfanın her durumunda şunlar denetlenir:
+
+- yatay sayfa taşması olmaması ve ID'lerin benzersizliği,
+- azaltılmış hareket tercihinin sayfaya ulaşması,
+- konsol veya sayfa hatası olmaması,
+- bölüm bağlantısıyla doğrudan açılan adresin yenilemede aynı hedefte kalması.
+
+Sayısal denetimler şunlardır:
+
+- Ana deneyde iki modun indirilen kaydı Node'da yeniden simüle edilir ve birebir aynı çıkmalıdır; gösterilen tepe değerleri de bu izlerle aynı olmalıdır.
+- Nörondan devreye dersinin örnekleri `lessonMath` ile, üç rehberli deney `runGuidedExperiment` ile, varsayım karşılaştırması `runAssumptionExperiment` ile karşılaştırılır. Okuma sayfasının sayıları ve RICL→AVBR yolu `circuitReading` ile karşılaştırılır.
+- Türler atlası hiçbir veri veya uzak kaynak isteği yapmamalıdır.
+
+Ana deneyde ayrıca 2D/3D, iki mod, açık sözlük kartı, koyu tema ve "İçeriğe geç" bağlantısının odaktayken görünmesi sınanır. Üretim profillerinde yalnız hash'li `/assets/` paketlerinin yüklendiği, `/src/` veya Vite istemcisi isteği olmadığı, `dist/` içinde JSON/XLSX bulunmadığı ve veri yollarının veri döndürmediği denetlenir.
+
+Her test durum ekran görüntülerini ve koşunun profilini, tarayıcı sürümünü, git commit'ini ve çalışma ağacının temizliğini içeren bir `evidence.json` yazar. Normal koşu (`npm run test:browser`) bunları `test-results/latest/` altına yazar. Saklanacak koşu için `npm run test:evidence` kullanılır: çıktıyı ve `report.json` sayılarını yeni, zaman damgalı `test-results/evidence-YYYYMMDD-HHMMSS/` klasörüne yazar ve önceki klasörlere dokunmaz.
+
+Tekrarlanmayanlar: eski aşamalardaki SHA-256 koruma manifestleri (yerlerini git aldı), `3d-visual/lifecycle-forensic.json` dinleyici adli kaydı (üst sınır `tests/three-d.spec.ts` içinde sınanır) ve bir kerelik ekran görüntüsü karşılaştırmaları. Safari, Firefox ve fiziksel cihazlar hâlâ test edilmez.
+

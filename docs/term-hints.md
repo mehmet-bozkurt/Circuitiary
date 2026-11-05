@@ -15,7 +15,9 @@ Metin bölme Türkçe büyük/küçük harfleri ve belirli ekleri tanır, görü
 ## Kontroller
 
 - `npm test -- src/terms/glossary.test.ts`: metnin aynen korunması, Türkçe ekler, yanlış kısmi eşleşmeler, yinelenen terimler ve kaynak sözleşmesi.
-- `npx playwright test tests/term-hints.spec.ts`: fareyle açma/kaynaklara geçme, klavye ve Escape, dokunma, 320 px görünüm, koyu tema, kayıt değişimi ve sayfa geçişleri.
+- `npx playwright test tests/term-hints.spec.ts`: fareyle açma/kaynaklara geçme, klavye ve Escape, dokunma, 320 px görünümde kartın ekran sınırı, koyu tema, kayıt değişimi ve sayfa geçişleri.
 - `npm run build`: tam tür kontrolü ve üretim paketi.
 
 Sonuç: 189 birim testi ve 154 masaüstü/mobil tarayıcı senaryosu geçti; yalnız mobilde fareyle üzerine gelme ve masaüstünde mobil dokunma senaryoları kapsamlarına göre atlandı. Tam tür kontrolü ve üretim derlemesi geçti. Açık/karanlık tema ve 320 px kart görselleri `test-results/term-hints-visual/`, tüm tarayıcı sonuçları `test-results/term-hints-regression/` altında.
+
+`term-hints-visual/` altındaki ekran görüntüleri bir kerelik alınmıştı. Açık sözlük kartının görüntüsü ve kontrast/taşma denetimi artık `tests/evidence.spec.ts` (`term-card` durumu) ve `tests/contrast.spec.ts` ile her koşuda yeniden üretilir.

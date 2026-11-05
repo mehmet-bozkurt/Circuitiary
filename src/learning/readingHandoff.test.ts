@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parseRealConnectome, buildRealCircuit } from '../model/realConnectome'
 import { defaultConfig, illustrativeCircuit } from '../model/circuit'
@@ -6,7 +7,9 @@ import { simulate } from '../model/simulation'
 import { prepareRealInspection } from './readingHandoff'
 import type { ExperimentDraft } from './readingHandoff'
 
-const data = parseRealConnectome(JSON.parse(readFileSync(new URL('../../data/local/cook-subset.json', import.meta.url), 'utf8')))
+// The local subset is git-ignored; without it these tests are reported as skipped instead of failing collection.
+const localDatasetPath = fileURLToPath(new URL('../../data/local/cook-subset.json', import.meta.url))
+const localData = existsSync(localDatasetPath) ? parseRealConnectome(JSON.parse(readFileSync(localDatasetPath, 'utf8'))) : undefined
 const toy: Readonly<ExperimentDraft> = Object.freeze({ mode: 'illustrative', graphView: '3d', chemicalGain: .5, gapGain: .4,
   focusConnections: false, scaleToResponse: true, activeCondition: 'tau', stimulusTarget: 'S2', amplitude: .55,
   pulseDuration: 150, baseTau: 50, changedTau: 180, changedNeuron: 'O2', selectedEdge: 'I4-O1',
@@ -14,7 +17,8 @@ const toy: Readonly<ExperimentDraft> = Object.freeze({ mode: 'illustrative', gra
 const scalarKeys = ['graphView', 'chemicalGain', 'gapGain', 'focusConnections', 'scaleToResponse', 'activeCondition',
   'amplitude', 'pulseDuration', 'baseTau', 'changedTau', 'dt', 'cursorMs', 'playing'] as const
 
-describe('anatomical inspection preserves existing experiment drafts', () => {
+describe.skipIf(!localData)('anatomical inspection preserves existing experiment drafts', () => {
+  const data = localData!
   it('maps only invalid toy source identities and preserves every scalar control', () => {
     const next = prepareRealInspection(toy, data, 'RICL')
     for (const key of scalarKeys) expect(next[key]).toBe(toy[key])

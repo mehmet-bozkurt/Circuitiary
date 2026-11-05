@@ -196,6 +196,26 @@ test('canvas raycasting selects the actual projected node and external keyboard 
   await expect(page.locator('.node-description')).toContainText('I3 / Ara hücre')
 })
 
+test('keyboard selection of a 3D label keeps focus and the label Tab order ignores camera depth', async ({ page }) => {
+  await page.goto('/')
+  await enterThreeD(page, 8)
+  const order = () => page.locator('.node-label-3d').evaluateAll(elements => elements.map(element => element.getAttribute('data-node-id')))
+  const initial = await order()
+  expect(initial).toEqual([...initial].sort((a, b) => a!.localeCompare(b!)))
+  for (const id of ['O1', 'I4', 'S1']) {
+    await node(page, id).focus()
+    await page.keyboard.press('Enter')
+    await expect(node(page, id)).toHaveAttribute('aria-pressed', 'true')
+    await settleFrames(page)
+    await expect(node(page, id)).toBeFocused()
+  }
+  const layers: Record<string, number> = await page.locator('.node-label-3d').evaluateAll(elements => Object.fromEntries(elements.map(element => [element.getAttribute('data-node-id'), Number((element as HTMLElement).style.zIndex)])))
+  expect(layers.S1).toBe(Math.max(...Object.values(layers)))
+  await page.getByRole('button', { name: '3D görünümü sağa döndür', exact: true }).click()
+  await settleFrames(page)
+  expect(await order()).toEqual(initial)
+})
+
 test('3D node activity follows the sampled timeline and all three condition results', async ({ page }) => {
   await page.goto('/')
   await enterThreeD(page, 8)

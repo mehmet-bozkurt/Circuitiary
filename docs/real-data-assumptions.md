@@ -67,3 +67,6 @@ Kaynak sürümü, seçim kuralı, URL’ler, gerçek edinim zamanları ve SHA-25
 
 Kanıtlar `test-results/assumptions-browser-final/` ve `test-results/assumptions-visual/` altındadır. `report.json`, `production-report.json`, `preservation.json` ve ekran görüntüleri kapsamı kaydeder. İlk tanılama izleri ayrı klasörde tutuldu. Kısa üretim önizlemesi durduruldu; geliştirme sunucusu `http://127.0.0.1:5176/` olarak açık kaldı. Safari/Firefox ve fiziksel iPhone test edilmedi. Türler atlası ve deney defteri bu aşamada eklenmedi; başka proje/cihaza aktarım veya yayımlama yapılmadı.
 
+## Tekrarlanabilirlik notu (Kasım 2026)
+
+Bu belgedeki 320 px/azaltılmış hareket ve üretim önizlemesi denetimleri o tarihte projede bulunmayan bir kerelik betiklerle yapılmış ve `test-results/` altındaki kanıt klasörlerine yazılmıştı. Bugün aynı türden denetimler `tests/evidence.spec.ts` ile masaüstü, mobil, 320×800 azaltılmış hareket ve derlenmiş paketin önizlemesi (4177) profillerinde tekrarlanır: yatay taşma, yinelenen ID, konsol hatası, bölüm bağlantısıyla doğrudan açma ve yenileme, kaynak motorla aynı sayılar. Ayrıntılar [doğrulama kaydındadır](verification.md#tekrarlanabilir-kanıt). “Korunan dosyalar aynı kaldı” türü SHA-256 karşılaştırmaları o aşamaya aittir ve tekrarlanamaz; değişiklik geçmişi artık git'te tutulur.

@@ -21,7 +21,7 @@ function record(value: unknown, path: string): Record<string, unknown> {
 }
 
 function text(value: unknown, path: string): string {
-  if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) fail(path, 'expected a non-empty untrimmed string')
+  if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) fail(path, 'expected a non-empty trimmed string (no leading or trailing whitespace)')
   return value
 }
 

@@ -392,7 +392,7 @@ test('all eight questions explain wrong and correct answers, retain lesson state
   const questions = [
     { id: 'q1', correct: 'receive', concept: /dendrit|girdi/i },
     { id: 'q2', correct: 'gradients', concept: /iyon|geçirgenlik/i },
-    { id: 'q3', correct: 'frequent', concept: /olay|tepe|frekans/i },
+    { id: 'q3', correct: 'samePeak', concept: /olay|tepe|frekans/i },
     { id: 'q4', correct: 'receptorContext', concept: /reseptör/i },
     { id: 'q5', correct: 'shunt', concept: /şönt|shunt/i },
     { id: 'q6', correct: 'rectification', concept: /doğrult|iyon/i },

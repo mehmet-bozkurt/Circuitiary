@@ -14,7 +14,7 @@ npm run dev -- --port 5176
 
 Adres: `http://127.0.0.1:5176/`. Gerçek veri düğmesine basarak ikinci deneye geçin. Vite yalnız loopback adresinde dinler; hesap, ücretli API veya GPU gerekmez. Simülasyon tarayıcıda çalışır. Etkinlik oynatıcısı önceden hesaplanan sonuçları gösterir.
 
-Temiz Node kurulumu için Node 22.12+ ve `npm ci --ignore-scripts` kullanılır. Bağımlılıklar `package-lock.json` ile sabittir.
+Temiz Node kurulumu için Node 22.12+, 24 veya 26+ (Vitest 23 ve 25'i desteklemez; aralık `package.json` içindeki `engines` alanındadır) ve `npm ci --ignore-scripts` kullanılır. Bağımlılıklar `package-lock.json` ile sabittir.
 
 ## Görünüm teması
 
@@ -86,19 +86,20 @@ npm test
 npm run typecheck
 npm run build
 npm run test:browser
+npm run test:evidence
 ```
 
-Tarayıcı testleri Mac mini'de zaten kurulu Google Chrome ile masaüstü ve mobil görünümde çalışır; yeni tarayıcı kurulumu gerekmez. Alternatif konum için `CIRCUITIARY_CHROME_PATH` kullanılabilir. [İlk aşamanın doğrulama kaydı](docs/verification.md) (3 Ekim 2026) o günkü kontrolleri ve sınırları belirtir; bugünkü sayılar aşağıdaki bölümdedir.
+Tarayıcı testleri Mac mini'de zaten kurulu Google Chrome ile çalışır. Bütün senaryolar masaüstü (1440×1050) ve mobil (iPhone 13, 390×664) profillerinde koşar. `tests/evidence.spec.ts` ayrıca 320×800 azaltılmış hareket profilinde ve `npm run build` ile derlenen paketin `vite preview` sunucusunda (4177) masaüstü/mobil olarak çalışır. Bu sayfalar arası kanıt senaryosu her sayfada yatay taşmayı, yinelenen ID'yi, azaltılmış hareket tercihini, konsol hatasını ve bölüm bağlantısıyla doğrudan açıp yenilemeyi denetler. Gösterilen sayıları Node'daki kaynak motorla karşılaştırır, ekran görüntüsü ve `evidence.json` kaydı yazar. Üretim profillerinde yalnız hash'li `/assets/` paketlerinin yüklendiği ve `dist/` içinde veri dosyası bulunmadığı da sınanır; yeni tarayıcı kurulumu gerekmez. Alternatif konum için `CIRCUITIARY_CHROME_PATH` kullanılabilir. [İlk aşamanın doğrulama kaydı](docs/verification.md) (3 Ekim 2026) o günkü kontrolleri ve sınırları belirtir; bugünkü sayılar aşağıdaki bölümdedir.
 
-Playwright çıktısı `test-results/latest/` altına yazılır ve her koşuda yalnız bu klasör temizlenir; `test-results/` altındaki tarihli kanıt klasörleri korunur. `--output` ile bir klasör verilirse o klasör koşu başında silinip yeniden yazılır.
+Playwright çıktısı `test-results/latest/` altına yazılır ve her koşuda yalnız bu klasör temizlenir; `test-results/` altındaki tarihli kanıt klasörleri korunur. `--output` ile bir klasör verilirse o klasör koşu başında silinip yeniden yazılır. Son koşunun geçen/atlanan sayıları `test-results/latest/report.json` dosyasına da yazılır; `--output` verilse de bu rapor aynı yerde güncellenir. Saklanacak bir kanıt koşusu için `npm run test:evidence` kullanılır: bütün senaryoları yeni, zaman damgalı `test-results/evidence-YYYYMMDD-HHMMSS/` klasörüne yazar (rapor dahil) ve önceki klasörlere dokunmaz. Her `evidence.json` koşunun git commit'ini ve çalışma ağacının temiz olup olmadığını da kaydeder.
 
 ### Güncel doğrulama durumu
 
-5 Kasım 2026: **190 birim testi, 15 Python testi geçti; 160 tarayıcı senaryosundan 158'i geçti, 2'si kapsamı gereği atlandı** (masaüstünde mobil dokunma, mobilde fareyle üzerine gelme). Tam tür kontrolü ve üretim derlemesi geçti. Tarayıcı: sistemdeki Google Chrome 156.0.8078.81, Playwright 1.63.0. Aşağıdaki bölümlerdeki “Bu aşamanın doğrulaması” cümleleri o aşamaya ait geçmiş kayıtlardır.
+5 Kasım 2026: **190 birim testi, 15 Python testi geçti; 198 tarayıcı senaryosundan 196'sı geçti, 2'si kapsamı gereği atlandı** (masaüstünde mobil dokunma, mobilde fareyle üzerine gelme). Senaryolara iki temada bütün sayfaların WCAG AA metin kontrastı denetimi (`tests/contrast.spec.ts`) ve beş profilde sayfalar arası kanıt senaryosu (`tests/evidence.spec.ts`, 320 px azaltılmış hareket ve üretim önizlemesi dahil) dahildir. Tam tür kontrolü ve üretim derlemesi geçti. Tarayıcı: sistemdeki Google Chrome 156.0.8078.81, Playwright 1.63.0. Aşağıdaki bölümlerdeki “Bu aşamanın doğrulaması” cümleleri o aşamaya ait geçmiş kayıtlardır. O cümlelerdeki 320 px, azaltılmış hareket ve üretim önizlemesi denetimleri o tarihte projede bulunmayan bir kerelik betiklerle yapılmıştı; bugün `tests/evidence.spec.ts` ile tekrarlanır. “N korunan dosya aynı kaldı” türü SHA-256 karşılaştırmaları ise o aşamaya aittir ve tekrarlanamaz; değişiklik geçmişi artık git'tedir.
 
 ## Yerel veri / paylaşım sınırı
 
-Dosyaya özgü yeniden dağıtım lisansı **doğrulanmadı**. XLSX ve türetilmiş gerçek altküme `.gitignore` kapsamındadır; `public/` veya `dist/` içine eklenmez. `/api/local-connectome`, yalnız loopback ve aynı yerel origin üzerinden, kesin tek yerel dosyayı okur. Dev sunucusu `data/raw/` ve `data/local/` dosyalarını doğrudan adresle sunmaz (`server.fs.deny`, 403); veri yalnız bu uç noktadan okunur. Dev ve `npm run preview` bu uç noktayı sağlar; statik bir dağıtımda veri olmadığında uygulama açıklayıcı hata gösterir ve öğretici mod çalışır.
+Dosyaya özgü yeniden dağıtım lisansı **doğrulanmadı**. XLSX ve türetilmiş gerçek altküme `.gitignore` kapsamındadır; `public/` veya `dist/` içine eklenmez. `/api/local-connectome`, yalnız loopback ve aynı yerel origin üzerinden, kesin tek yerel dosyayı okur. Dev sunucusu `data/raw/` ve `data/local/` dosyalarını doğrudan adresle sunmaz (`server.fs.deny`, 403); veri yalnız bu uç noktadan okunur. Dev ve `npm run preview` bu uç noktayı sağlar (ikisi de tarayıcı testlerinde sınanır); statik bir dağıtımda veri olmadığında uygulama açıklayıcı hata gösterir ve öğretici mod çalışır.
 
 Veriyi veya gerçek veri içeren deney JSON'unu halka açık paylaşmadan önce açık lisans/yazar izni doğrulanmalıdır. Bu çalışmada yayımlama yapılmadı. Kod için paylaşım lisansı henüz seçilmedi; bağımlılıkların kendi lisansları paketlerinde korunur.
 
@@ -106,7 +107,13 @@ Veriyi veya gerçek veri içeren deney JSON'unu halka açık paylaşmadan önce 
 
 - `src/model/`: doğrulanan anatomik veri sözleşmesi, ayrı varsayımsal devre üretimi, sayısal motor ve testler.
 - `scripts/`: tekrar üretilebilir Cook ithalatı ve kaynak-matris testleri.
-- `src/App.vue`, `src/components/`: deneyler, varsayım açıklamaları, grafik ve etkinlik çizgileri.
+- `src/App.vue`, `src/components/`: deneyler, varsayım açıklamaları, grafik ve etkinlik çizgileri, beş öğrenme sayfası ve sözlük kartı.
+- `src/Shell.vue`, `src/main.ts`: üst menü, sayfa yönlendirmesi ve tema seçici; `src/theme.ts`, `src/theme.css`, `src/style.css` tema ve ortak biçimler.
+- `src/learning/`: öğrenme sayfalarının hesapları, metinleri, ders grafikleri ve birim testleri.
+- `src/terms/`: sözcük anlamı/kökeni sözlüğü ve testleri.
+- `src/view/`: 3D şematik yerleşim (anatomik konum değildir) ve testi.
+- `tests/`: Playwright tarayıcı senaryoları (masaüstü ve mobil), kontrast denetimi ve 320 px/üretim önizlemesi profillerinde de koşan sayfalar arası kanıt senaryosu (`evidence.spec.ts`) dahil.
+- `docs/`: her aşamanın kapsamı, kaynakları ve doğrulama kayıtları.
 - `vite.local-data.ts`: yerel veri erişimi; veri tarayıcı paketine gömülmez.
 - [Bilimsel kapsam](docs/scientific-scope.md): anatomi, dinamik, davranış ve emülasyon ayrımı.
 

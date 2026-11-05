@@ -26,7 +26,7 @@ Bu örnek devrede gap junction yoktur. Ağırlıklar, işaretler ve zaman sabitl
 - Son değer: 700 model ms'de kaydedilen O1 değeri. Sonlu bir kayıt, hücrenin tabana tamamen döndüğünü garanti etmez.
 - Farklar: Değişiklik eksi temel. Bir zaman yoksa farkı da sayı olarak uydurulmaz. Daha erken sabit düzey geçişi, biyolojik iletim hızının arttığı sonucunu vermez.
 
-Tahmin geri bildirimi O1'in gerçek hesaplanmış tepe farkının işaretini kullanır; mutlak fark `1e-8` altında ise “aynı veya sayısal olarak çok yakın” sınıfındadır. Bu sınıflandırma biyolojik istatistiksel anlamlılık testi değildir.
+Tahmin geri bildirimi O1'in gerçek hesaplanmış tepe farkının işaretini kullanır; mutlak fark `1e-8` altında ise “aynı veya sayısal olarak çok yakın” sınıfındadır. “Yakın veya aynı kalabilir” tahmini, tepe farkı temel tepenin %5’ine eşit veya ondan küçükse de örtüşüyor sayılır (O1 τ=40 model ms: −%2,6); artış/azalış tahminleri yine farkın işaretiyle değerlendirilir. Bu sınıflandırma biyolojik istatistiksel anlamlılık testi değildir.
 
 ## Kayıt ve taslak güvenliği
 
@@ -63,3 +63,7 @@ Gerçek Chrome ekranları 1440 px masaüstü, 390 px mobil ve 320 px dar/reduced
 Önceki 40 kaynak, test, yapılandırma, ders, model ve veri dosyasının SHA-256 değerleri aynı kaldı. `README.md` önceki metni aynen koruyarak genişletildi; yalnız sayfa kabuğuna yeni rota/menü eklendi. Paket/lock dosyaları değişmedi. Ham gerçek veri `dist/` veya `public/` altına konmadı. Önceki 3D ve ilk ders kanıtları korundu.
 
 Kanıtlar `test-results/guided-browser/` ve `test-results/guided-visual/` altındadır. `report.json`, `production-report.json` ve `preservation.json` kapsamı kaydeder. Üretim önizlemesi testten sonra durduruldu; mevcut geliştirme sunucusu `http://127.0.0.1:5176/` olarak kaldı. Safari/Firefox ve fiziksel iPhone test edilmedi. Başka cihaz veya projeye aktarım ve yayımlama yapılmadı.
+
+## Tekrarlanabilirlik notu (Kasım 2026)
+
+Bu belgedeki 320 px/azaltılmış hareket ve üretim önizlemesi denetimleri o tarihte projede bulunmayan bir kerelik betiklerle yapılmış ve `test-results/` altındaki kanıt klasörlerine yazılmıştı. Bugün aynı türden denetimler `tests/evidence.spec.ts` ile masaüstü, mobil, 320×800 azaltılmış hareket ve derlenmiş paketin önizlemesi (4177) profillerinde tekrarlanır: yatay taşma, yinelenen ID, konsol hatası, bölüm bağlantısıyla doğrudan açma ve yenileme, kaynak motorla aynı sayılar. Ayrıntılar [doğrulama kaydındadır](verification.md#tekrarlanabilir-kanıt). “Korunan dosyalar aynı kaldı” türü SHA-256 karşılaştırmaları o aşamaya aittir ve tekrarlanamaz; değişiklik geçmişi artık git'te tutulur.

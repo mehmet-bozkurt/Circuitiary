@@ -110,7 +110,7 @@ onBeforeUnmount(() => { close(); clearClose(); removeListeners() })
 
 <style scoped>
 .term-hint { display: inline; }
-.term-trigger { all: unset; display: inline; font: inherit; color: inherit; cursor: help; text-decoration: underline dotted; text-decoration-color: var(--theme-muted, #68766e); text-underline-offset: .2em; border-radius: 2px; }
+.term-trigger { all: unset; display: inline; font: inherit; color: inherit; cursor: help; text-decoration: underline dotted; text-decoration-color: var(--theme-muted, #5d6962); text-underline-offset: .2em; border-radius: 2px; }
 .term-trigger:hover, .term-trigger[aria-expanded="true"] { text-decoration-style: solid; }
 .term-trigger:focus-visible { outline: 2px solid var(--theme-focus, #b78231); outline-offset: 3px; }
 .term-popover { position: fixed; z-index: 1000; display: block; width: min(370px, calc(100vw - 24px)); max-height: min(510px, calc(100dvh - 24px)); overflow-y: auto; overscroll-behavior: contain; padding: 22px; border: 1px solid var(--theme-border, #bdc9b6); border-radius: 10px; background: var(--theme-surface, #fafbf5); color: var(--theme-text, #263b35); box-shadow: 0 12px 44px #0003; font: 13px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: normal; text-transform: none; white-space: normal; text-align: left; cursor: auto; }

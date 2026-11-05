@@ -16,7 +16,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ select: [id: string]; request2d: [] }>()
 
 type RendererStatus = 'loading' | 'ready' | 'unavailable' | 'context-lost' | 'error'
-interface NodeLabel { id: string; x: number; y: number; projectedX: number; projectedY: number; visible: boolean; depth: number }
+interface NodeLabel { id: string; x: number; y: number; projectedX: number; projectedY: number; visible: boolean; depth: number; layer: number }
 interface EdgeVisual { connection: Connection; group: ThreeTypes.Group; materials: ThreeTypes.Material[]; head?: ThreeTypes.Mesh }
 type NodeMesh = ThreeTypes.Mesh<ThreeTypes.SphereGeometry, ThreeTypes.MeshStandardMaterial>
 
@@ -206,6 +206,7 @@ function projectLabels() {
       projectedY: (1 - position.y) / 2 * height,
       visible: position.z >= -1 && position.z <= 1 && Math.abs(position.x) <= 1.1 && Math.abs(position.y) <= 1.1,
       depth: camera!.position.distanceTo(mesh.position),
+      layer: 0,
     })
   })
   // Label placement is screen-space bookkeeping, never a biological location.
@@ -230,7 +231,10 @@ function projectLabels() {
     label.y = best.y
     occupied.push({ ...best, w, h })
   })
-  labels.value = projected
+  // Placement priority becomes paint order only. DOM and Tab order stay sorted by
+  // ID, so camera moves or a new selection never reorder (and unfocus) a label button.
+  projected.forEach((label, index) => { label.layer = projected.length - index })
+  labels.value = projected.sort((a, b) => a.id.localeCompare(b.id))
 }
 
 function renderScene() {
@@ -516,7 +520,7 @@ onBeforeUnmount(() => { disposed = true; releaseGraphics(); THREE = undefined })
         <line v-for="label in labels.filter(item => item.visible)" :key="label.id" :x1="label.projectedX" :y1="label.projectedY" :x2="label.x" :y2="label.y" />
       </svg>
       <div class="node-labels-3d">
-        <button v-for="label in labels" v-show="label.visible" :key="label.id" type="button" class="node-label-3d" :class="{ selected: label.id === selectedNode }" :style="{ left: `${label.x}px`, top: `${label.y}px` }" :data-node-id="label.id" :data-activity="activityFor(label.id)" :data-projected-x="label.projectedX" :data-projected-y="label.projectedY" :data-visible="label.visible" :aria-pressed="label.id === selectedNode" :aria-label="`${label.id} hücresini seç; etkinlik ${activityFor(label.id).toFixed(3)}`" @click="emit('select', label.id)">{{ label.id }}</button>
+        <button v-for="label in labels" v-show="label.visible" :key="label.id" type="button" class="node-label-3d" :class="{ selected: label.id === selectedNode }" :style="{ left: `${label.x}px`, top: `${label.y}px`, zIndex: label.layer }" :data-node-id="label.id" :data-activity="activityFor(label.id)" :data-projected-x="label.projectedX" :data-projected-y="label.projectedY" :data-visible="label.visible" :aria-pressed="label.id === selectedNode" :aria-label="`${label.id} hücresini seç; etkinlik ${activityFor(label.id).toFixed(3)}`" @click="emit('select', label.id)">{{ label.id }}</button>
       </div>
       <p v-if="rendererStatus === 'loading'" class="loading-3d" role="status">3D devre hazırlanıyor…</p>
     </div>

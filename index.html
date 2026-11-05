@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#182b2a" />
+    <meta name="theme-color" content="#f5f4ed" />
     <style>html { background: #f5f4ed; } html[data-theme="dark"] { background: #121d19; }</style>
     <script>
       // Set the theme before the first paint, including direct lesson visits.
@@ -16,6 +16,7 @@
         const dark = preference === 'dark' || (preference === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.dataset.themePreference = preference
         document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#121d19' : '#f5f4ed')
       })()
     </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

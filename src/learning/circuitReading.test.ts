@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parseRealConnectome } from '../model/realConnectome'
 import type { RealConnectome, SourceReference } from '../model/types'
@@ -255,7 +255,7 @@ describe('shortest non-self directed chemical cycles', () => {
   })
 })
 
-const localDatasetPath = process.env.CIRCUITIARY_READING_DATA ?? resolve(process.cwd(), 'data/local/cook-subset.json')
+const localDatasetPath = process.env.CIRCUITIARY_READING_DATA ?? fileURLToPath(new URL('../../data/local/cook-subset.json', import.meta.url))
 describe('locally available pinned Cook2019 subset (never redistributed by these tests)', () => {
   it.skipIf(!existsSync(localDatasetPath))('preserves pinned source references and verifies real examples, all route lengths and shortest cycles independently', () => {
     const data = parseRealConnectome(JSON.parse(readFileSync(localDatasetPath, 'utf8')))

@@ -209,7 +209,7 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
 .theme-picker { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
 .theme-picker select { min-height: 44px; padding: 8px 10px; font-size: 12px; width: 100px; }
 .section-navigation { max-width: 1320px; margin: auto; padding: 16px 44px 10px; display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--theme-border, #daddd2); }
-.navigation-kicker { font-family: var(--mono); font-size: 9px; letter-spacing: 1.2px; color: var(--theme-muted, #68766e); }
+.navigation-kicker { font-family: var(--mono); font-size: 9px; letter-spacing: 1.2px; color: var(--theme-muted, #5d6962); }
 .section-navigation-links { display: flex; gap: 8px; flex-wrap: wrap; }
 .section-navigation a { display: inline-flex; align-items: center; min-height: 44px; padding: 9px 14px; border: 1px solid var(--theme-border, #d1d9ca); border-radius: 5px; font-size: 12px; line-height: 1.5; color: var(--theme-text, #395341); }
 .section-navigation a[aria-current="page"] { background: #2c483b; color: #f7f7eb; border-color: #2c483b; }
