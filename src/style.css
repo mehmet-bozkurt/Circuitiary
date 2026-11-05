@@ -17,3 +17,67 @@
 
 .spatial-selection{border:1px solid #69826c55;border-radius:7px;background:#2c423833;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;padding:17px;margin:12px 0 18px}.spatial-selection .eyebrow{color:#c3d6b8;font-size:9px}.spatial-selection p{font-size:11px;line-height:1.9;color:#b9cbbd;margin-top:8px}.spatial-activity{display:flex;flex-direction:column;gap:9px;text-align:right;align-self:center}.spatial-activity span,.spatial-activity small{font-size:9px;color:#aec3b0}.spatial-activity output{font-family:var(--mono);font-size:21px;color:#e1eabf}.spatial-activity small{font-family:var(--mono);font-size:8px}
 @media(max-width:760px){.spatial-selection{grid-template-columns:1fr;gap:14px;padding:15px}.spatial-activity{display:grid;grid-template-columns:1fr auto;text-align:left;align-items:center}.spatial-activity small{grid-column:1/-1}}
+
+/* Print: a clean handout. Light palette tokens are reset in theme.css; print.ts opens collapsed <details>. */
+@page { margin: 16mm 14mm 18mm; }
+/* One honest footer line in the page margin, so it never collides with content (browsers without margin boxes skip it). */
+@page {
+  @bottom-left { content: "Circuitiary · eğitim amaçlı model; ölçüm değildir"; font: 8pt/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #4b5a53; }
+  @bottom-right { content: counter(page) " / " counter(pages); font: 8pt/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #4b5a53; }
+}
+
+.print-snapshot { display: none; }
+
+@media print {
+  html, html[data-theme], body { background: #fff !important; color: #1f2d27 !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; box-shadow: none !important; text-shadow: none !important; }
+  /* A page opened by link focuses its heading; that ring would frame the title on paper. */
+  :focus, :focus-visible { outline: none !important; }
+
+  /* Interactive chrome that means nothing on paper: navigation, theme picker, 3D view and camera, play/run/reset/export. */
+  .shell-skip-link, .section-navigation, main nav, .lesson-navigation, .site-header .header-link, .route-notice,
+  .term-popover, .graph-view-tabs, .graph-tools, .circuit-3d, .timeline, .shortcut-help, [data-print-hide],
+  /* Action buttons go; toggles that show a state (pressed, selected, current) and inline term words stay. */
+  button:not(.term-trigger):not([aria-pressed]):not([aria-current]):not([aria-selected]) { display: none !important; }
+  /* The 3D view is canvas only. If it is the shown one, say so instead of leaving an empty frame. */
+  #graph-panel-3d > * { display: none !important; }
+  #graph-panel-3d:not([style*="display: none"])::before { content: "Üç boyutlu şematik görünüm yazdırılmaz. Bağlantı haritasını yazdırmak için 2D görünümünü seç."; display: block; padding: 18px 0; font-size: 11px; line-height: 1.8; }
+  /* Dark figure panel: keep its fill even when the browser skips background graphics, or its light text would vanish. */
+  .circuit-panel { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .circuit-canvas { display: none !important; }
+  .print-snapshot { display: block; width: auto; height: auto; max-width: 100%; max-height: 400px; margin: 0 auto; position: relative; z-index: 1; }
+  .experiment-layout { grid-template-columns: minmax(0, 1fr) !important; }
+
+  /* Page margins come from @page, so the screen gutters and widths go. */
+  main { max-width: none !important; margin: 0 !important; padding-left: 0 !important; padding-right: 0 !important; }
+  .site-header, footer { max-width: none !important; margin-left: 0 !important; margin-right: 0 !important; padding-left: 0 !important; padding-right: 0 !important; }
+  .site-header { height: auto; padding-top: 0 !important; padding-bottom: 12px !important; }
+  footer { margin-top: 18px !important; padding-top: 14px !important; padding-bottom: 0 !important; }
+  .lesson-layout { display: block !important; }
+  h1 { font-size: 34px !important; line-height: 1.15 !important; letter-spacing: -1px !important; margin: 10px 0 12px !important; }
+  .intro, [class$="-intro"] { padding-top: 14px !important; padding-bottom: 14px !important; }
+  a { min-height: 0 !important; }
+  .term-trigger { text-decoration: none !important; }
+  /* Filled dark buttons and links would print light-on-white; draw them as outlined text instead. */
+  main button[aria-pressed="true"], main button[aria-selected="true"], main button[aria-current], main button.selected, main button.active,
+  [class*="-next"] a, .next-step a, .atlas-primary, .experiment-link { background: transparent !important; color: #1f2d27 !important; border: 1px solid #1f2d27 !important; font-weight: 600; }
+  .circuit-panel button[aria-pressed="true"], .circuit-panel button.active { color: #e5eadc !important; border-color: #7e9a72 !important; }
+  /* The builder keeps its own pastel curve colours for the dark theme (a :root[data-theme="dark"] rule the token reset cannot reach); paper gets the light-theme ones. */
+  .builder-page { --b-c0: #2f7960 !important; --b-c1: #b4513f !important; --b-c2: #3f6ea6 !important; --b-c3: #8f6a14 !important; --b-c4: #7b4f94 !important; --b-c5: #5f6655 !important; }
+  /* A reader cannot click a link, so external ones carry their address. */
+  main a[href^="http"]::after { content: " (" attr(href) ")"; font-size: .85em; font-weight: 400; color: #4b5a53; word-break: break-all; }
+
+  /* Tables and scroll boxes show everything and fit the page instead of scrolling. */
+  [class*="-scroll"] { max-height: none !important; overflow: visible !important; }
+  table { width: 100% !important; }
+  th, td { white-space: normal !important; overflow-wrap: anywhere; }
+  thead { display: table-header-group; }
+  tfoot { display: table-row-group; }
+
+  /* Keep cards, figures and rows whole; headings stay with what follows. */
+  article, figure, blockquote, pre, fieldset, tr, svg, canvas,
+  .circuit-panel, .chart-panel, .interpretation, .node-inspector, .data-summary, .next-step, .control-section,
+  [class*="card"], [class*="boundary"], [class*="record"], [class*="observation"], [class*="feedback"], [class*="result"] { break-inside: avoid; }
+  h1, h2, h3, h4, summary { break-after: avoid; }
+  p { orphans: 3; widows: 3; }
+}

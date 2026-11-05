@@ -6,12 +6,14 @@ import { activeHint } from './terms/activeHint'
 
 const { preference: themePreference, changeTheme } = useTheme()
 
-type Page = 'experiment' | 'lesson' | 'guided' | 'reading' | 'assumptions' | 'atlas'
+type Page = 'experiment' | 'lesson' | 'guided' | 'reading' | 'assumptions' | 'atlas' | 'builder' | 'glossary'
 const lessonPath = '/ogren/norondan-devreye'
 const guidedPath = '/ogren/rehberli-deneyler'
 const readingPath = '/ogren/devreyi-okumak'
 const assumptionsPath = '/ogren/gercek-veri-ve-varsayimlar'
 const atlasPath = '/ogren/turler-atlasi'
+const builderPath = '/ogren/devre-kur'
+const glossaryPath = '/ogren/sozluk'
 const originalTitle = document.title
 const pageTitles: Record<Page, string> = {
   experiment: 'Circuitiary · Devre deneyleri',
@@ -20,9 +22,11 @@ const pageTitles: Record<Page, string> = {
   reading: 'Devreyi okumak · Circuitiary',
   assumptions: 'Gerçek veri ve varsayımlar · Circuitiary',
   atlas: 'Türler atlası · Circuitiary',
+  builder: 'Devre kur · Circuitiary',
+  glossary: 'Sözlük · Circuitiary',
 }
-const mainIds: Record<Page, string> = { experiment: 'top', lesson: 'neuron-lesson', guided: 'guided-experiments', reading: 'circuit-reading', assumptions: 'real-assumptions', atlas: 'species-atlas' }
-const knownPaths = ['', lessonPath, guidedPath, readingPath, assumptionsPath, atlasPath]
+const mainIds: Record<Page, string> = { experiment: 'top', lesson: 'neuron-lesson', guided: 'guided-experiments', reading: 'circuit-reading', assumptions: 'real-assumptions', atlas: 'species-atlas', builder: 'circuit-builder', glossary: 'glossary-page' }
+const knownPaths = ['', lessonPath, guidedPath, readingPath, assumptionsPath, atlasPath, builderPath, glossaryPath]
 // An address outside the app still opens the experiment page, but says so.
 const unknownPath = (pathname: string) => knownPaths.includes(pathname.replace(/\/$/, '')) ? '' : pathname
 function pageFor(pathname: string): Page {
@@ -32,6 +36,8 @@ function pageFor(pathname: string): Page {
   if (path === readingPath) return 'reading'
   if (path === assumptionsPath) return 'assumptions'
   if (path === atlasPath) return 'atlas'
+  if (path === builderPath) return 'builder'
+  if (path === glossaryPath) return 'glossary'
   return 'experiment'
 }
 const page = ref<Page>(pageFor(location.pathname))
@@ -42,6 +48,8 @@ const guidedMounted = ref(page.value === 'guided')
 const readingMounted = ref(page.value === 'reading')
 const assumptionsMounted = ref(page.value === 'assumptions')
 const atlasMounted = ref(page.value === 'atlas')
+const builderMounted = ref(page.value === 'builder')
+const glossaryMounted = ref(page.value === 'glossary')
 const experimentPage = ref<InstanceType<typeof ExperimentPage>>()
 const experimentRegion = ref<HTMLDivElement>()
 const lessonRegion = ref<HTMLDivElement>()
@@ -49,6 +57,8 @@ const guidedRegion = ref<HTMLDivElement>()
 const readingRegion = ref<HTMLDivElement>()
 const assumptionsRegion = ref<HTMLDivElement>()
 const atlasRegion = ref<HTMLDivElement>()
+const builderRegion = ref<HTMLDivElement>()
+const glossaryRegion = ref<HTMLDivElement>()
 // A page chunk can fail to load (offline, or a tab left open across a new build).
 // Retry once on its own, then say so instead of leaving a blank page.
 const PageLoadError = () => h('div', { class: 'page-load-error', role: 'alert' }, [
@@ -65,6 +75,8 @@ const GuidedExperimentsPage = lazyPage(() => import('./components/GuidedExperime
 const CircuitReadingPage = lazyPage(() => import('./components/CircuitReadingPage.vue'))
 const AssumptionsLearningPage = lazyPage(() => import('./components/AssumptionsLearningPage.vue'))
 const SpeciesAtlasPage = lazyPage(() => import('./components/SpeciesAtlasPage.vue'))
+const CircuitBuilderPage = lazyPage(() => import('./components/CircuitBuilderPage.vue'))
+const GlossaryPage = lazyPage(() => import('./components/GlossaryPage.vue'))
 let pendingFocus: { page: Page; hash: string; scroll: boolean } | undefined
 let inspectionToken = 0
 const handoffLoading = ref(false)
@@ -76,10 +88,10 @@ function updateTitle() {
 
 function completeFocus() {
   if (!pendingFocus || pendingFocus.page !== page.value) return
-  const region = page.value === 'experiment' ? experimentRegion.value : page.value === 'lesson' ? lessonRegion.value : page.value === 'guided' ? guidedRegion.value : page.value === 'reading' ? readingRegion.value : page.value === 'assumptions' ? assumptionsRegion.value : atlasRegion.value
+  const region = { experiment: experimentRegion, lesson: lessonRegion, guided: guidedRegion, reading: readingRegion, assumptions: assumptionsRegion, atlas: atlasRegion, builder: builderRegion, glossary: glossaryRegion }[page.value].value
   if (!region) return
   region.querySelector('main')?.setAttribute('tabindex', '-1')
-  if ((page.value === 'reading' || page.value === 'assumptions') && pendingFocus.hash !== location.hash) {
+  if ((page.value === 'reading' || page.value === 'assumptions' || page.value === 'glossary') && pendingFocus.hash !== location.hash) {
     pendingFocus.hash = location.hash
     pendingFocus.scroll = Boolean(location.hash)
   }
@@ -88,7 +100,7 @@ function completeFocus() {
   const fragment = id ? document.getElementById(id) : null
   // Local anatomy data changes the height above deep lesson fragments.
   // Complete their requested scroll after the first load has settled.
-  if (id && (page.value === 'reading' || page.value === 'assumptions') && region.querySelector(`#${mainIds[page.value]}`)?.getAttribute('data-data-state') === 'loading') return
+  if (id && (page.value === 'reading' || page.value === 'assumptions' || page.value === 'glossary') && region.querySelector(`#${mainIds[page.value]}`)?.getAttribute('data-data-state') === 'loading') return
   const target = fragment && region.contains(fragment) ? fragment : region.querySelector('h1')
   if (!(target instanceof HTMLElement)) return
   if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1')
@@ -111,7 +123,9 @@ function showPage(url: URL, scroll: boolean) {
   else if (page.value === 'guided') guidedMounted.value = true
   else if (page.value === 'reading') readingMounted.value = true
   else if (page.value === 'assumptions') assumptionsMounted.value = true
-  else atlasMounted.value = true
+  else if (page.value === 'atlas') atlasMounted.value = true
+  else if (page.value === 'builder') builderMounted.value = true
+  else glossaryMounted.value = true
   pendingFocus = { page: page.value, hash: url.hash, scroll }
   updateTitle()
   void nextTick(completeFocus)
@@ -122,7 +136,7 @@ function navigateClick(event: MouseEvent) {
   const link = event.target instanceof Element ? event.target.closest('a[href]') : null
   if (!(link instanceof HTMLAnchorElement) || link.hasAttribute('download') || (link.target && link.target !== '_self')) return
   const url = new URL(link.href, location.href)
-  if (url.origin !== location.origin || !['/', lessonPath, `${lessonPath}/`, guidedPath, `${guidedPath}/`, readingPath, `${readingPath}/`, assumptionsPath, `${assumptionsPath}/`, atlasPath, `${atlasPath}/`].includes(url.pathname)) return
+  if (url.origin !== location.origin || !['/', lessonPath, `${lessonPath}/`, guidedPath, `${guidedPath}/`, readingPath, `${readingPath}/`, assumptionsPath, `${assumptionsPath}/`, atlasPath, `${atlasPath}/`, builderPath, `${builderPath}/`, glossaryPath, `${glossaryPath}/`].includes(url.pathname)) return
   // Existing same-page anchors retain native fragment and history behavior.
   if (url.pathname === location.pathname && url.search === location.search && url.hash) return
   event.preventDefault()
@@ -194,6 +208,8 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
         <a :href="readingPath" :aria-current="page === 'reading' ? 'page' : undefined">Devreyi okumak</a>
         <a :href="assumptionsPath" :aria-current="page === 'assumptions' ? 'page' : undefined">Gerçek veri ve varsayımlar</a>
         <a :href="atlasPath" :aria-current="page === 'atlas' ? 'page' : undefined">Türler atlası</a>
+        <a :href="builderPath" :aria-current="page === 'builder' ? 'page' : undefined">Devre kur</a>
+        <a :href="glossaryPath" :aria-current="page === 'glossary' ? 'page' : undefined">Sözlük</a>
       </div>
       <p class="term-help">Noktalı altı çizili sözcüklerin anlamı ve kökeni için üzerine gel veya dokun. Klavyeyle odaklanarak da okuyabilirsin.</p>
     </nav>
@@ -219,6 +235,12 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
     </div>
     <div v-show="page === 'atlas'" ref="atlasRegion" class="view-page">
       <SpeciesAtlasPage v-if="atlasMounted" @ready="completeFocus" />
+    </div>
+    <div v-show="page === 'builder'" ref="builderRegion" class="view-page">
+      <CircuitBuilderPage v-if="builderMounted" @ready="completeFocus" />
+    </div>
+    <div v-show="page === 'glossary'" ref="glossaryRegion" class="view-page">
+      <GlossaryPage v-if="glossaryMounted" @ready="completeFocus" />
     </div>
   </div>
 </template>

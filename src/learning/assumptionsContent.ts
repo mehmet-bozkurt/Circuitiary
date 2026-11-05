@@ -25,5 +25,18 @@ export const assumptionCopy = {
   validation: 'Bir hesaplanan eğri, seçilen denklemlerin sonucudur. Farklı zaman adımlarıyla tutarlı çözüm elde etmek sayısal yakınsamayı sınar; hayvanın biyolojisini doğrulamaz. Bu sayfa hesap adımını değiştirmiyor ve yeni bir yakınsama testi yürütmüyor.',
   physiology: 'Biyolojik karşılaştırma için bağımsız fizyolojik ve davranışsal ölçümler gerekir. Randi ve arkadaşlarının işlevsel atlası, uyarım sonrası kalsiyum yanıtlarını araştırır; anatomik bağlantıyla işlevsel yanıtı aynı şey saymaz. Circuitiary bu sayfada o deneysel yanıtları içe aktarmış veya onlara uyum sağlamış değildir.',
   questions: 'Bir modeli değerlendirirken şunu sor: Hangi bilgi kaynaktan geldi? Hangi değer seçildi? Sonuç başka makul parametrelerle değişiyor mu? Ölçülen hayvan yanıtıyla hangi nicelik, hangi koşulda karşılaştırıldı?',
+  sweep: 'Yukarıdaki karşılaştırma kimyasal çarpan için tek bir değeri sınar. Burada aynı koşulu 15 çarpan için art arda hesaplıyoruz: 0,2’den 1,6’ya 0,1’lik adımlarla. Her hesapta elektriksel çarpan 0,2, τ 30 model ms ve AVER darbesi aynıdır; yalnız kimyasal çarpan değişir. Çizgiler AVAR’ın kayıt içindeki tepe aktivitesini ve 700 model ms’deki son değerini gösterir. Bu normalizasyonda gelen kimyasal bağlantısı olan her hücrenin model ağırlıkları toplamı çarpana eşittir; 1 bu yüzden işaretli bir eşiktir. Eşik, bu modelin bir özelliğidir: ağırlıklar hedefe gelen ham toplamla normalize edilir ve bütün hücreler açık, eşzamanlı Euler adımıyla güncellenir. Ölçülmüş biyolojik bir eşik veya bulgu değildir.',
+  sweepWindow: 'Eşiğin hemen üstünde yükselme 700 model ms’den uzun sürebilir; bu yüzden son değer bu kayıt penceresine bağlıdır. Daha uzun bir kayıtta eşiğe yakın çarpanların son değeri de değişir. Aralarındaki çizgiler hesaplanmamış değerler hakkında bilgi vermez.',
   local: 'Veri aynı uygulamanın yerel /api/local-connectome adresinden okunur; ham dosyalar ve türetilmiş alt küme yerelde tutulur. Dosyaya özgü yeniden dağıtım izni doğrulanmış değildir. Açık erişim, açık lisans anlamına gelmez. Bu sayfa veriyi dışarı yüklemez.',
+} as const
+
+export const sweepPrediction = {
+  prompt: 'Kimyasal çarpan 0,9’dan 1,1’e çıkınca AVAR’ın 700 model ms’deki son değeri nasıl değişir?',
+  hint: 'Çarpan bu aralıkta yaklaşık 1,2 kat büyür. Tahmin isteğe bağlıdır; “emin değilim” de bir başlangıçtır.',
+  options: [
+    { id: 'proportional', label: 'Çarpanla aynı mertebede, yaklaşık orantılı artar' },
+    { id: 'steep', label: 'Çarpandan çok daha hızlı, birkaç kat artar' },
+    { id: 'flat', label: 'Hemen hiç değişmez' },
+    { id: 'unsure', label: 'Emin değilim; önce taramaya bakacağım' },
+  ],
 } as const

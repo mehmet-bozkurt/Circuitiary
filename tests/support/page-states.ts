@@ -21,6 +21,37 @@ const assumptionVariable = (variable: 'gap-gain' | 'time-constant') => async (pa
 
 /** Each route lists the UI states to measure, in order; every state is measured with all <details> open. */
 const states: Record<string, Array<{ name: string; enter: (page: Page) => Promise<void> }>> = {
+  '/ogren/devre-kur': [
+    { name: 'builder', enter: async () => {} },
+    { name: 'loop preset run', enter: async page => {
+      await main(page).getByRole('button', { name: /^Kendini sürdüren döngü/ }).click()
+      await main(page).getByTestId('builder-run').click()
+      await expect(main(page).getByTestId('builder-result')).toHaveAttribute('data-stale', 'false')
+    } },
+    { name: 'edited after run, with a problem listed', enter: async page => {
+      await main(page).getByRole('button', { name: 'Bağlantı ekle', exact: true }).click()
+      await main(page).getByRole('combobox', { name: 'Bağlantı 4 Tür', exact: true }).selectOption('gap')
+      await main(page).getByRole('combobox', { name: 'Bağlantı 4 Hücre 1', exact: true }).selectOption('A')
+      await main(page).getByRole('combobox', { name: 'Bağlantı 4 Hücre 2', exact: true }).selectOption('A')
+      await expect(main(page).getByTestId('builder-validity')).toHaveAttribute('data-valid', 'false')
+      await expect(main(page).getByTestId('builder-stale')).toBeVisible()
+    } },
+  ],
+  '/ogren/sozluk': [
+    { name: 'glossary, all terms', enter: async () => {} },
+    { name: 'glossary, term linked', enter: async page => {
+      await main(page).locator('#term-soma').getByRole('link', { name: 'Soma sözcüğünün kalıcı bağlantısı', exact: true }).click()
+      await expect(main(page).locator('#term-soma')).toBeFocused()
+    } },
+    { name: 'glossary, search results', enter: async page => {
+      await main(page).getByRole('searchbox', { name: 'Sözcük ara', exact: true }).fill('SİNAPS')
+      await expect(main(page).locator('article.glossary-term').first()).toBeVisible()
+    } },
+    { name: 'glossary, no match', enter: async page => {
+      await main(page).getByRole('searchbox', { name: 'Sözcük ara', exact: true }).fill('zzzz')
+      await expect(main(page).getByTestId('glossary-empty')).toBeVisible()
+    } },
+  ],
   '/bilinmeyen-adres': [{ name: 'unknown address notice', enter: async () => {} }],
   '/': [
     { name: 'illustrative 2D', enter: async () => {} },
@@ -39,6 +70,13 @@ const states: Record<string, Array<{ name: string; enter: (page: Page) => Promis
       await expect(page.locator('.circuit-3d')).toHaveAttribute('data-node-count', '30')
     } },
     { name: 'real 2D', enter: async page => { await page.getByRole('tab', { name: viewLabels['2D'], exact: true }).click() } },
+    // Opened from a link with ignored parts, then copied: both live status lines are visible.
+    { name: 'share link notice and copy status', enter: async page => {
+      await page.goto('/?du=250&am=9&o=ZZ&sc=1')
+      await expect(page.getByTestId('share-notice')).toContainText('yok sayılan')
+      await page.getByRole('button', { name: 'Bağlantıyı kopyala', exact: true }).click()
+      await expect(page.getByTestId('share-status')).not.toBeEmpty()
+    } },
   ],
   '/ogren/norondan-devreye': [
     { name: 'initial', enter: async () => {} },
@@ -50,6 +88,11 @@ const states: Record<string, Array<{ name: string; enter: (page: Page) => Promis
     { name: 'chemical multiplier run', enter: runAll },
     { name: 'electrical multiplier run', enter: assumptionVariable('gap-gain') },
     { name: 'time constant run', enter: assumptionVariable('time-constant') },
+    { name: 'threshold sweep run with a prediction', enter: async page => {
+      await main(page).locator('#sweep-prediction').selectOption('steep')
+      await main(page).getByTestId('sweep-run').click()
+      await expect(main(page).getByTestId('sweep-result')).toBeVisible()
+    } },
   ],
   '/ogren/turler-atlasi': [{ name: 'initial', enter: async () => {} }],
 }

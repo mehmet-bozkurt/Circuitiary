@@ -93,7 +93,8 @@ function validateOptions(runNumber: number, options: AssumptionRunOptions): void
   }
 }
 
-function outputMetrics(result: SimulationResult): AssumptionOutputMetrics {
+/** AVAR peak, first peak time and final-sample value of one recorded run; throws when the AVAR trace is missing or misaligned. */
+export function outputMetrics(result: SimulationResult): AssumptionOutputMetrics {
   const trace = result.activity[realDefaultReadout]
   if (!trace || !trace.length || trace.length !== result.timesMs.length) throw new Error('The AVAR trace must align with recorded model times.')
   let peak = 0

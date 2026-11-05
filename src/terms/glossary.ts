@@ -142,3 +142,9 @@ export function splitTerms(value: unknown): TermSegment[] {
   if (cursor < text.length) segments.push({ text: text.slice(cursor) })
   return segments
 }
+
+/** The glossary page lists terms in Turkish alphabetical order (Ç, Ğ, İ, Ö, Ş, Ü sort after their base letters). */
+const titleCollator = new Intl.Collator('tr')
+export const glossaryAlphabetical: readonly GlossaryTerm[] = [...glossaryTerms].sort((a, b) => titleCollator.compare(a.title, b.title))
+/** Fragment id of a term on the glossary page: /ogren/sozluk#term-<id>. */
+export const termAnchorId = (id: string): string => `term-${id}`

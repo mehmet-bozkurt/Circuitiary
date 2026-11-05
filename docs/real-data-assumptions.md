@@ -40,6 +40,8 @@ AVAR eğrilerinin tamamı 701 kaydedilmiş örnekten çizilir. İki koşul aynı
 
 Tam kaynak veri, devre, parametreler, iki hesaplanmış sonuç ve ölçütler değişmez bir kayda alınır. Taslak parametre değişikliği önceki sonucu ve kayıtlı ayarları değiştirmez; eski kayıt işaretlenir ve yeniden çalıştırma istenir. Sıfırlama yalnız bu derse aittir. İlk üç ders ve ana deneyin ayarları, sayısal JSON’u, zaman/oynatma ve 2D/3D görünümü sayfa geçişlerinde korunur. Yenileme varsayılanları açar; kalıcı depolama eklenmedi.
 
+Kimyasal çarpandaki 1 eşiğini tek bir karşılaştırma yerine 0,2–1,6 aralığında 15 çarpanla taramak için dersin “03b · Eşik taraması” bölümü vardır; tepe ve kayıt sonu değeri çarpana göre çizer ve tablolar. Ayrıntılar [eşik taraması belgesindedir](threshold-sweep.md).
+
 ## Doğrulamanın sınırı ve kaynaklar
 
 Varsayımlar değişince model izlerinin değişmesi, gerçek hayvan davranışını doğrulamaz. Aktivite 0–1 boyutsuz sürekli model değeridir; voltaj, Hz, kalsiyum veya spike sayısı değildir. Zaman ölçeği ölçüme kalibre edilmemiştir. Beden, kas ve çevre yoktur. Biyolojik doğrulama, bağımsız deneysel ölçümlerle karşılaştırma gerektirir. Sayısal adım küçüldükçe sonuçların yakınlaşması seçilmiş denklemin çözümüne ilişkindir; biyolojik doğrulama veya parametre kalibrasyonu değildir. Sınır içinde kalan sonuç tek başına yakınsama kanıtı değildir.

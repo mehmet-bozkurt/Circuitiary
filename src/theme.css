@@ -23,3 +23,29 @@
 }
 
 :root[data-theme="dark"] ::selection { background: #45694e; color: #fff; }
+
+/* Print is always light on white, whatever theme the screen uses. A reset custom property falls back to each
+   component's own light colour. index.html's inline dark page background is overridden in style.css. */
+@media print {
+  :root, :root[data-theme="dark"] {
+    color-scheme: light;
+    --paper: #fff;
+    --theme-page: initial;
+    --theme-surface: initial;
+    --theme-surface-soft: initial;
+    --theme-surface-strong: initial;
+    --theme-text: initial;
+    --theme-muted: initial;
+    --theme-border: initial;
+    --theme-warning-bg: initial;
+    --theme-warning: initial;
+    --theme-danger: initial;
+    --theme-info: initial;
+    --theme-focus: initial;
+    --theme-trace-green: initial;
+    --theme-trace-red: initial;
+    --theme-trace-blue: initial;
+    --theme-trace-gold: initial;
+    --theme-trace-neutral: initial;
+  }
+}

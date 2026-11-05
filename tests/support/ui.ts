@@ -11,6 +11,8 @@ export const navLabels = {
   reading: 'Devreyi okumak',
   assumptions: 'Gerçek veri ve varsayımlar',
   atlas: 'Türler atlası',
+  builder: 'Devre kur',
+  glossary: 'Sözlük',
 } as const
 export const viewLabels = { '2D': '2D · bağlantı haritası', '3D': '3D · şematik uzay' } as const
 

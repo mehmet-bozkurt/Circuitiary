@@ -4,6 +4,9 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue
 import CircuitGraph from './components/CircuitGraph.vue'
 import CircuitGraph3D from './components/CircuitGraph3D.vue'
 import ActivationChart from './components/ActivationChart.vue'
+import ChartDataTable from './components/ChartDataTable.vue'
+import { SHORTCUT_STEP_MS, stepTime, useExperimentShortcuts } from './useExperimentShortcuts'
+import type { ShortcutAction } from './useExperimentShortcuts'
 import { illustrativeCircuit, defaultConfig } from './model/circuit'
 import { simulate } from './model/simulation'
 import { parseRealConnectome, buildRealCircuit, defaultRealModelParameters } from './model/realConnectome'
@@ -11,6 +14,11 @@ import type { SimulationConfig } from './model/types'
 import { prepareRealInspection } from './learning/readingHandoff'
 import type { ExperimentDraft } from './learning/readingHandoff'
 import { decimal } from './format'
+import ExperimentTools from './components/ExperimentTools.vue'
+import { csvFile, jsonFile } from './exportData'
+import { version as appVersion } from '../package.json'
+import { buildShareUrl, parseShareQuery, restrictToCircuit, shareNotice, withoutRealSelections } from './shareState'
+import type { ShareParse, ShareState } from './shareState'
 
 // The shell keeps this page mounted but hidden behind the lesson pages; the
 // playback loop stays idle there and continues from the same time on return.
@@ -137,6 +145,20 @@ function togglePlayback() {
 // Hidden: keep `playing` (the draft and button state) but stop advancing time.
 watch(() => props.suspended, suspended => { if (suspended) stopLoop(); else if (playing.value) startLoop() })
 function seek(time: number) { pause(); cursorMs.value = time }
+// Page-level keys (Space, arrows, Home); the pure decision lives in useExperimentShortcuts.ts.
+const shortcutMessage = ref('')
+function runShortcut(action: ShortcutAction) {
+  if (action === 'toggle-playback') {
+    togglePlayback()
+    shortcutMessage.value = playing.value ? 'Oynatılıyor.' : 'Duraklatıldı.'
+    return
+  }
+  const time = action === 'to-start' ? 0 : stepTime(cursorMs.value, action === 'step-forward' ? 1 : -1, defaultConfig.durationMs)
+  seek(time)
+  const recorded = currentResult.value.timesMs
+  shortcutMessage.value = `Zaman ${format(recorded[Math.min(recorded.length - 1, Math.round(time / dt.value))] ?? time, timeDigits.value)} ms.`
+}
+useExperimentShortcuts({ suspended: () => Boolean(props.suspended), onAction: runShortcut })
 function reset() {
   pause(); amplitude.value = defaultConfig.stimulus.amplitude; pulseDuration.value = defaultConfig.stimulus.durationMs
   baseTau.value = defaultConfig.tauMs; changedTau.value = 90
@@ -251,6 +273,67 @@ function exportExperiment() {
   link.href = url; link.download = isReal.value ? 'circuitiary-cook2019-local-experiment.json' : 'circuitiary-experiment.json'; link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+// Share link and exports (cluster share-export). The state that defines the experiment goes into
+// query keys (see shareState.ts); the cursor and the playing flag stay out. Nothing here writes the address bar.
+const shareNoticeText = ref('')
+const shareState = computed<ShareState>(() => ({
+  mode: mode.value, graphView: graphView.value, activeCondition: activeCondition.value,
+  chemicalGain: chemicalGain.value, gapGain: gapGain.value, focusConnections: focusConnections.value, scaleToResponse: scaleToResponse.value,
+  stimulusTarget: stimulusTarget.value, amplitude: amplitude.value, pulseDuration: pulseDuration.value,
+  baseTau: baseTau.value, changedTau: changedTau.value, changedNeuron: changedNeuron.value,
+  selectedEdge: selectedEdge.value, outputNeuron: outputNeuron.value, selectedNeuron: selectedNeuron.value, dt: dt.value,
+}))
+const shareUrl = computed(() => buildShareUrl(shareState.value, new URL('/', location.href).href))
+const activeConditionLabel = computed(() => conditions.find(condition => condition.id === activeCondition.value)?.label ?? '')
+const csvExport = () => csvFile({ mode: mode.value, condition: activeCondition.value, circuit: circuit.value, result: currentResult.value })
+const jsonExport = () => jsonFile({ mode: mode.value, circuit: circuit.value, results: results.value, outputCell: outputNeuron.value, appVersion, dataset: realData.value?.dataset })
+async function loadRealForLink(): Promise<boolean> {
+  if (realData.value) return true
+  dataLoading.value = true
+  dataRequest = new AbortController()
+  const timeout = setTimeout(() => dataRequest?.abort(), 10000)
+  try {
+    const response = await fetch('/api/local-connectome', { cache: 'no-store', signal: dataRequest.signal })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    realData.value = parseRealConnectome(await response.json())
+    return true
+  } catch { return false }
+  finally { clearTimeout(timeout); dataRequest = undefined; dataLoading.value = false }
+}
+async function applyShareLink(parsed: ShareParse) {
+  if (!parsed.found) return
+  let link = parsed
+  let realUnavailable = false
+  if (link.values.mode === 'real' && !(await loadRealForLink())) { realUnavailable = true; link = withoutRealSelections(link) }
+  // Start from the mode's own defaults, then lay the valid parts of the link over them.
+  pause(); mode.value = link.values.mode ?? 'illustrative'; reset()
+  link = restrictToCircuit(link, {
+    stimulusTargets: inputNeurons.value.map(neuron => neuron.id), outputs: readoutNeurons.value.map(neuron => neuron.id),
+    neurons: circuit.value.neurons.map(neuron => neuron.id), edges: circuit.value.connections.map(edge => edge.id),
+  }, mode.value)
+  const v = link.values
+  if (v.graphView !== undefined) graphView.value = v.graphView
+  if (v.activeCondition !== undefined) activeCondition.value = v.activeCondition
+  if (v.stimulusTarget !== undefined) stimulusTarget.value = v.stimulusTarget
+  if (v.amplitude !== undefined) amplitude.value = v.amplitude
+  if (v.pulseDuration !== undefined) pulseDuration.value = v.pulseDuration
+  if (v.baseTau !== undefined) baseTau.value = v.baseTau
+  if (v.changedNeuron !== undefined) changedNeuron.value = v.changedNeuron
+  if (v.changedTau !== undefined) changedTau.value = v.changedTau
+  if (v.selectedEdge !== undefined) selectedEdge.value = v.selectedEdge
+  if (v.outputNeuron !== undefined) outputNeuron.value = v.outputNeuron
+  if (v.selectedNeuron !== undefined) selectedNeuron.value = v.selectedNeuron
+  if (v.dt !== undefined) dt.value = v.dt
+  if (v.chemicalGain !== undefined) chemicalGain.value = v.chemicalGain
+  if (v.gapGain !== undefined) gapGain.value = v.gapGain
+  if (v.focusConnections !== undefined) focusConnections.value = v.focusConnections
+  if (v.scaleToResponse !== undefined) scaleToResponse.value = v.scaleToResponse
+  // The status line must already be on the page, empty, when its text arrives, or screen readers do not announce it.
+  await nextTick()
+  shareNoticeText.value = shareNotice({ applied: Object.keys(v).length, ignored: link.ignored, realUnavailable })
+}
+// Only the experiment page reads a link; another page's own query is none of its business.
+if (!location.pathname.replace(/\/$/, '').startsWith('/ogren/')) void applyShareLink(parseShareQuery(location.search))
 onBeforeUnmount(() => { pause(); dataRequest?.abort() })
 </script>
 
@@ -325,6 +408,16 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
             <input type="range" min="0" :max="defaultConfig.durationMs" :step="dt" :value="displayedTimeMs" :aria-valuetext="`${format(displayedTimeMs, timeDigits)} ms`" aria-label="Simülasyon zamanı" @input="seek(Number(($event.target as HTMLInputElement).value))">
             <output>{{ format(displayedTimeMs, timeDigits) }} <span>ms</span></output>
           </div>
+          <details class="shortcut-help">
+            <summary>Klavye kısayolları</summary>
+            <dl>
+              <div><dt><kbd>Boşluk</kbd></dt><dd>Oynat / duraklat</dd></div>
+              <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Zaman imlecini {{ SHORTCUT_STEP_MS }} ms geri / ileri al; oynatmayı duraklatır</dd></div>
+              <div><dt><kbd>Home</kbd></dt><dd>Başa dön (0 ms)</dd></div>
+            </dl>
+            <p>Tuşlar odak bir kontrolde, kaydırıcıda, bağlantıda, açıklama kartında ya da başka bir kaydırılabilir alanda değilken ve bu sayfa görünürken çalışır. Çalışmıyorsa sayfanın boş bir yerine tıkla. Ctrl, Cmd, Alt ve Shift ile birlikte çalışmaz.</p>
+          </details>
+          <p class="sr-only" role="status" data-testid="shortcut-status">{{ shortcutMessage }}</p>
           <p class="graph-caption">Düğüme tıkla veya aşağıdan bir hücre seç. Parlaklık hesaplanan etkinliği gösterir.<template v-if="isReal"> {{ visibleEdgeCount }}/{{ circuit.connections.length }} bağlantı çiziliyor; görünüm filtresi hesaplamayı değiştirmez. Yerleşim şematiktir, anatomik konum değildir.<template v-if="graphView === '2d'"> Çizgi kalınlığı model ağırlığına bağlıdır. Grafiği sürükle, yakınlaştır veya sığdır.</template><template v-else> Çizgiler bağlantı türünü ve yönünü gösterir; ağırlıkları tabloda inceleyebilirsin.</template></template></p>
         </div>
 
@@ -337,6 +430,7 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
           <ActivationChart :y-max="chartYMax" :times="results.baseline.timesMs" :traces="traces" :cursor-ms="displayedTimeMs" :stimulus="baselineSettings.stimulus" @seek="seek" />
           <div class="peak-row"><div v-for="condition in conditions" :key="condition.id"><span>{{ condition.short }} / tepe etkinlik</span><strong :data-testid="`peak-${condition.id}`">{{ format(peaks[condition.id]) }}</strong></div></div>
           <div class="chart-scale"><label><input v-model="scaleToResponse" type="checkbox" aria-label="Yanıta göre dikey ölçek"> Yanıta göre dikey ölçek</label><span>Dikey eksen: 0–<output data-testid="chart-y-max">{{ format(chartYMax, chartYMax < 1 ? 3 : 0) }}</output></span></div>
+          <ChartDataTable :times="results.baseline.timesMs" :traces="traces" :peaks="peaks" :output="outputNeuron" />
           <p class="chart-note"><TermText text="Üç koşul aynı ekseni kullanır; dikey ölçek etkinlik değerlerini değiştirmez. Etkinlik 0–1 arasında ve boyutsuzdur. Sarı alan uyaran süresini gösterir. Çizgiler hareket, karar veya ölçülmüş nöron ateşleme hızı değildir." /></p>
         </section>
       </div>
@@ -380,6 +474,10 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
       </aside>
     </section>
 
+    <section aria-label="Paylaş ve dışa aktar">
+      <ExperimentTools :url="shareUrl" :notice="shareNoticeText" :condition-label="activeConditionLabel" :output-cell="outputNeuron" :csv-file="csvExport" :json-file="jsonExport" />
+    </section>
+
     <section class="node-inspector" :class="{ 'real-inspector': isReal }" aria-label="Hücre etkinlikleri ve seçilen hücre">
       <div class="node-buttons" role="group" aria-label="İncelenecek hücre"><button v-for="neuron in circuit.neurons" :key="neuron.id" :aria-pressed="selectedNeuron === neuron.id" :class="{ selected: selectedNeuron === neuron.id }" @click="selectedNeuron = neuron.id"><span>{{ neuron.id }}</span><small>{{ format(nodeActivity[neuron.id] ?? 0, 2) }}</small></button></div>
       <div class="node-description"><span class="eyebrow">{{ selected.id }} / {{ roleName(selected.role) }}</span><p><TermText :text="selected.description" /></p><p v-if="isReal && selectedAnatomy">SI4 hücre sınıfı: <strong><TermText :text="selectedAnatomy.cellType" /></strong>. Deney rolü: <TermText :text="selected.id === stimulusTarget ? 'uyaran hedefi' : selected.id === outputNeuron ? 'okunan hücre' : 'diğer nöron'" />.</p></div>
@@ -404,3 +502,18 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
   </main>
   <footer><span>Circuitiary</span><p>Kur. Gözlemle. Varsayımını sorgula.</p><span class="footer-note">{{ isReal ? '002 · YEREL ANATOMİ DENEYİ' : '001 · BAŞLANGIÇ DEVRESİ' }}</span></footer>
 </template>
+
+<style scoped>
+/* Keyboard shortcut list under the playback controls (the circuit panel is dark in both themes). */
+.shortcut-help { position: relative; z-index: 1; margin-top: 6px; color: #c9d8cc; font-size: 11px; }
+.shortcut-help summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; color: #d3e0d4; }
+.shortcut-help summary::before { content: '▸'; width: 16px; }
+.shortcut-help[open] > summary::before { content: '▾'; }
+.shortcut-help summary:focus-visible { outline: 3px solid #e8c47a; outline-offset: 2px; }
+.shortcut-help dl { margin: 0 0 8px; display: grid; gap: 8px; }
+.shortcut-help dl > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; align-items: baseline; }
+.shortcut-help dt { display: flex; gap: 4px; }
+.shortcut-help dd { margin: 0; line-height: 1.7; }
+.shortcut-help kbd { min-width: 26px; padding: 2px 7px; text-align: center; font-family: var(--mono); font-size: 11px; color: #eef3e6; background: #2b4339; border: 1px solid #5d7568; border-radius: 4px; }
+.shortcut-help p { font-size: 10px; line-height: 1.8; color: #a9bbac; margin: 0 0 10px; }
+</style>

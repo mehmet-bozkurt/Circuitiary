@@ -21,6 +21,9 @@ const desktop = { ...devices['Desktop Chrome'], viewport: { width: 1440, height:
 const mobile = { ...devices['iPhone 13'], defaultBrowserType: 'chromium' as const }
 // The extra profiles run only the cross-page evidence scenarios.
 const evidenceOnly = /evidence\.spec\.ts$/
+// The offline scenarios need a production build (the dev server registers no service
+// worker), so only production-desktop runs them; the dev profiles skip them.
+const offlineOnly = /offline\.spec\.ts$/
 
 export default defineConfig({
   testDir: './tests',
@@ -31,14 +34,16 @@ export default defineConfig({
   reporter: [['list'], ['json', { outputFile: `${outputDir}/report.json` }]],
   use: {
     baseURL: devURL,
+    // No service worker may touch any test. tests/offline.spec.ts opts back in for itself.
+    serviceWorkers: 'block' as const,
     trace: 'retain-on-failure',
     launchOptions: { executablePath: process.env.CIRCUITIARY_CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
   },
   projects: [
-    { name: 'desktop', use: desktop },
-    { name: 'mobile', use: mobile },
+    { name: 'desktop', testIgnore: offlineOnly, use: desktop },
+    { name: 'mobile', testIgnore: offlineOnly, use: mobile },
     { name: 'narrow-reduced-motion', testMatch: evidenceOnly, use: { ...devices['Desktop Chrome'], viewport: { width: 320, height: 800 }, reducedMotion: 'reduce' } },
-    { name: 'production-desktop', testMatch: evidenceOnly, use: { ...desktop, baseURL: previewURL } },
+    { name: 'production-desktop', testMatch: [evidenceOnly, offlineOnly], use: { ...desktop, baseURL: previewURL } },
     { name: 'production-mobile', testMatch: evidenceOnly, use: { ...mobile, baseURL: previewURL } },
   ],
   webServer: [
