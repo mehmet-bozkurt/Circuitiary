@@ -1,0 +1,25 @@
+/* Light colors stay with their components as fallbacks. Dark paint is shared
+   by every page, including lazily mounted lessons and SVG charts. */
+:root { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --theme-page: #121d19;
+  --theme-surface: #1b2923;
+  --theme-surface-soft: #22332a;
+  --theme-surface-strong: #2d4235;
+  --theme-text: #e4ebdf;
+  --theme-muted: #b0c0af;
+  --theme-border: #435647;
+  --theme-warning-bg: #3a3020;
+  --theme-warning: #e5c17f;
+  --theme-danger: #efaaa0;
+  --theme-info: #a7c5f1;
+  --theme-focus: #e8c47a;
+  --theme-trace-green: #87c7a2;
+  --theme-trace-red: #efaaa0;
+  --theme-trace-blue: #a7c5f1;
+  --theme-trace-gold: #e5c17f;
+  --theme-trace-neutral: #bac5a4;
+}
+
+:root[data-theme="dark"] ::selection { background: #45694e; color: #fff; }

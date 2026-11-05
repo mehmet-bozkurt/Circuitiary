@@ -1,0 +1,88 @@
+import { expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
+
+test('learning surface, graph, chart and assumptions render without browser errors', async ({ page }, testInfo) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: /Bir uyaranın/ })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'İncelenecek hücre' }).getByRole('button')).toHaveCount(8)
+  await expect(page.getByRole('img', { name: /Üç koşulun/ }).locator('path')).toHaveCount(3)
+  await expect(page.locator('.circuit-canvas canvas').first()).toBeVisible()
+  await expect(page.getByTestId('peak-baseline')).toHaveText('0,663')
+  await expect(page.getByTestId('peak-silenced')).toHaveText('0,000')
+  await expect(page.getByText('ÖLÇÜLMÜŞ BİYOLOJİK VERİ: YOK')).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'tr')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('learning-surface.png'), fullPage: true })
+  expect(errors).toEqual([])
+})
+
+test('zero stimulus produces zero outputs and reset restores the same deterministic experiment', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('#amplitude').fill('0')
+  for (const id of ['baseline', 'silenced', 'tau']) await expect(page.getByTestId(`peak-${id}`)).toHaveText('0,000')
+  await page.getByRole('button', { name: /Sıfırla/ }).click()
+  await expect(page.getByTestId('peak-baseline')).toHaveText('0,663')
+  await expect(page.locator('#amplitude')).toHaveValue('0.8')
+})
+
+test('susturma and tau controls affect only the intended comparison', async ({ page }) => {
+  await page.goto('/')
+  const baseline = await page.getByTestId('peak-baseline').textContent()
+  await page.locator('#silenced-edge').selectOption('I4-O1')
+  await expect(page.getByTestId('peak-baseline')).toHaveText(baseline!)
+  expect(Number((await page.getByTestId('peak-silenced').textContent())!.replace(',', '.'))).toBeGreaterThan(Number(baseline!.replace(',', '.')))
+  await page.getByRole('button', { name: 'B Bağlantı susturuldu', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'B Bağlantı susturuldu', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.interpretation')).toContainText('I4 → O1')
+  await page.locator('#changed-tau').fill('30')
+  await expect(page.getByTestId('peak-tau')).toHaveText(baseline!)
+  await page.locator('#changed-tau').fill('180')
+  await expect(page.getByTestId('peak-tau')).not.toHaveText(baseline!)
+  await expect(page.getByTestId('peak-baseline')).toHaveText(baseline!)
+})
+
+test('time seeking, cell selection and inspectable connection table work', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true }).fill('400')
+  await expect(page.locator('.timeline output')).toContainText('400')
+  await page.getByRole('group', { name: 'İncelenecek hücre' }).getByRole('button', { name: /O1/ }).click()
+  await expect(page.locator('.node-description')).toContainText('O1 / Çıktı hücresi')
+  await page.locator('.connection-table summary').click()
+  await expect(page.locator('.connection-table tbody tr')).toHaveCount(12)
+  await page.locator('#dt').selectOption('0.5')
+  expect(Number((await page.getByTestId('convergence-error').textContent())!.replace(',', '.'))).toBeLessThan(0.01)
+})
+
+test('export contains circuit, assumptions, settings and computed traces', async ({ page }) => {
+  await page.goto('/')
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Deney kaydını indir/ }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('circuitiary-experiment.json')
+  const filePath = await download.path()
+  expect(filePath).not.toBeNull()
+  const data = JSON.parse(await readFile(filePath!, 'utf8'))
+  expect(data.circuit.neurons).toHaveLength(8)
+  expect(data.model.biologicalDataset).toBeNull()
+  expect(data.model.activityUnit).toBe('dimensionless')
+  expect(data.results.baseline.timesMs).toHaveLength(701)
+  expect(data.results.silenced.settings.silencedConnectionId).toBe('I3-O1')
+  expect(data.results.tau.settings.tauOverrides.O1).toBe(90)
+})
+
+test('playback and keyboard seeking display the actual sampled time', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('#dt').selectOption('2')
+  const timeSlider = page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true })
+  await timeSlider.fill('100')
+  await timeSlider.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(timeSlider).toHaveValue('102')
+  await expect(page.locator('.timeline output')).toContainText('102')
+  await page.getByRole('button', { name: 'Etkinliği oynat', exact: true }).click()
+  await expect(page.locator('.timeline output')).toContainText('700', { timeout: 7000 })
+  await expect(page.getByRole('button', { name: 'Etkinliği oynat', exact: true })).toBeVisible()
+})

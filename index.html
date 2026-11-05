@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#182b2a" />
+    <style>html { background: #f5f4ed; } html[data-theme="dark"] { background: #121d19; }</style>
+    <script>
+      // Set the theme before the first paint, including direct lesson visits.
+      (() => {
+        let preference = 'system'
+        try {
+          const saved = localStorage.getItem('circuitiary-theme')
+          if (saved === 'light' || saved === 'dark') preference = saved
+        } catch { /* Storage is optional. */ }
+        const dark = preference === 'dark' || (preference === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.themePreference = preference
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      })()
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="description" content="Circuitiary: Hayvanların sinir devrelerini kurarak öğrenmek için etkileşimli bir deney defteri." />
+    <title>Circuitiary · Devre deneyleri</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

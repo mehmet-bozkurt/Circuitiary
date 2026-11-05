@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+.DS_Store
+*.local
+
+.venv/
+data/raw/
+data/local/
+__pycache__/
+.playwright-cli/
+.vite/
