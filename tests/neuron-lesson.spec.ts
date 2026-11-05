@@ -1,14 +1,9 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
+import { exportRecord } from './support/export'
+import { cell, cells, experimentLink, expectNoHorizontalOverflow, main, navLabels, navLink, view } from './support/ui'
 
 const lessonPath = '/ogren/norondan-devreye'
-const navigation = (page: Page) => page.getByRole('navigation', { name: 'Öğrenme ve deneyler', exact: true })
-const lessonLink = (page: Page) => navigation(page).getByRole('link', { name: 'Nörondan devreye', exact: true })
-const experimentLink = (page: Page) => navigation(page).getByRole('link', { name: 'Devre deneyleri', exact: true })
-const main = (page: Page) => page.getByRole('main')
-const cells = (page: Page) => page.getByRole('group', { name: 'İncelenecek hücre', exact: true })
-const cell = (page: Page, id: string) => cells(page).getByRole('button').filter({ has: page.locator('span', { hasText: new RegExp(`^${id}$`) }) })
-const view = (page: Page, id: '2D' | '3D') => page.getByRole('tab', { name: id === '2D' ? '2D · bağlantı haritası' : '3D · şematik uzay', exact: true })
+const lessonLink = (page: Page) => navLink(page, navLabels.neuron)
 const browserErrors = new WeakMap<Page, string[]>()
 
 test.beforeEach(async ({ page }) => {
@@ -28,19 +23,6 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(async ({ page }) => {
   expect(browserErrors.get(page) ?? [], 'No browser exceptions or error-level console messages in any lesson scenario').toEqual([])
 })
-
-async function exported(page: Page) {
-  const pending = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Deney kaydını indir/ }).click()
-  const download = await pending
-  const path = await download.path()
-  expect(path).not.toBeNull()
-  return JSON.parse(await readFile(path!, 'utf8'))
-}
-
-async function expectNoHorizontalOverflow(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-}
 
 async function readoutNumber(locator: Locator) {
   const text = (await locator.textContent())?.trim() ?? ''
@@ -127,7 +109,7 @@ test('visiting the lesson preserves the original toy experiment and graph state'
   await page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true }).fill('400')
   await cell(page, 'O2').click()
   await page.getByRole('button', { name: 'C Zaman sabiti değişti', exact: true }).click()
-  const before = await exported(page)
+  const before = await exportRecord(page)
   const plotBefore = await page.getByRole('img', { name: /Üç koşulun/ }).locator('path').evaluateAll(paths => paths.map(path => path.getAttribute('d')))
   await lessonLink(page).click()
   await expectLesson(page)
@@ -144,7 +126,7 @@ test('visiting the lesson preserves the original toy experiment and graph state'
   await expect(cell(page, 'O2')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('button', { name: 'C Zaman sabiti değişti', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(view(page, '2D')).toHaveAttribute('aria-selected', 'true')
-  const after = await exported(page)
+  const after = await exportRecord(page)
   expect(after.circuit).toEqual(before.circuit)
   expect(after.model).toEqual(before.model)
   expect(after.results).toEqual(before.results)
@@ -221,7 +203,7 @@ test('real anatomy, 3D view and parameters survive a lesson visit without changi
   await cell(page, 'AVAR').click()
   await view(page, '3D').click()
   await expect(page.locator('.circuit-3d')).toHaveAttribute('data-renderer-status', 'ready', { timeout: 15_000 })
-  const before = await exported(page)
+  const before = await exportRecord(page)
   await lessonLink(page).click()
   await expectLesson(page)
   await experimentLink(page).click()
@@ -235,7 +217,7 @@ test('real anatomy, 3D view and parameters survive a lesson visit without changi
   await expect(page.locator('#gap-gain')).toHaveValue('0.4')
   await expect(page.locator('#amplitude')).toHaveValue('0.6')
   await expect(page.getByRole('region', { name: 'Gerçek veri kaynağı ve sınırları', exact: true })).toBeVisible()
-  const after = await exported(page)
+  const after = await exportRecord(page)
   expect(after.anatomy).toEqual(before.anatomy)
   expect(after.circuit).toEqual(before.circuit)
   expect(after.model).toEqual(before.model)

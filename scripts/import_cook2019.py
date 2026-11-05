@@ -12,8 +12,10 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any
 
 from openpyxl import load_workbook
@@ -335,9 +337,30 @@ def import_snapshot(si5: Path, si4: Path, si5_downloaded_at: str,
     return dataset, acquisition
 
 
-def write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
+def write_json_files(items: list[tuple[Path, Any]]) -> None:
+    """Write every JSON file beside its target first, then swap them in with os.replace.
+
+    A serialisation, disk or permission failure while staging leaves all existing targets
+    untouched, and a concurrent reader (the dev server) never sees a half-written file.
+    Temp files are private (0600), which suits licence-unverified local data.
+    """
+    texts = [(path, json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+             for path, value in items]
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for path, text in texts:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, name = tempfile.mkstemp(dir=path.parent, prefix=f'.{path.name}.', suffix='.tmp')
+            staged.append((Path(name), path))
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+        for temp, path in staged:
+            os.replace(temp, path)
+    finally:
+        for temp, _ in staged:
+            temp.unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -359,8 +382,7 @@ def main(argv: list[str] | None = None) -> int:
         dataset, acquisition = import_snapshot(args.si5, args.si4, args.si5_downloaded_at,
                                                args.si4_downloaded_at, args.limit)
         # Validation completes before either generated target is written.
-        write_json(args.output, dataset)
-        write_json(args.acquisition_output, acquisition)
+        write_json_files([(args.output, dataset), (args.acquisition_output, acquisition)])
     except (ImportValidationError, OSError) as exc:
         print(f'Import failed: {exc}', file=sys.stderr)
         return 1

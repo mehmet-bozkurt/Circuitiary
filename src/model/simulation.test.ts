@@ -13,6 +13,10 @@ function config(overrides: Partial<SimulationConfig> = {}): SimulationConfig {
   return { ...defaultConfig, stimulus: { ...defaultConfig.stimulus }, ...overrides }
 }
 
+function cells(...ids: string[]): Circuit['neurons'] {
+  return ids.map((id) => ({ id, label: id, role: 'unspecified', description: 'Synthetic cell', position: { x: 0, y: 0 } }))
+}
+
 function passive(dtMs: number) {
   return simulate(isolated, {
     durationMs: 150, dtMs, tauMs: 30,
@@ -112,6 +116,35 @@ describe('deterministic continuous activity simulation', () => {
   })
 })
 
+describe('per-neuron settings are read from own keys only', () => {
+  const circuitOf = (first: string): Circuit => ({ ...isolated, neurons: cells(first, 'B') })
+  const settings = (target: string, overrides: Partial<SimulationConfig> = {}): SimulationConfig => ({
+    durationMs: 20, dtMs: 1, tauMs: 30,
+    stimulus: { target, onsetMs: 0, durationMs: 10, amplitude: 0.6 }, ...overrides,
+  })
+
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__'])(
+    'a neuron named %s ignores Object.prototype members in tauOverrides and initialState',
+    (id) => {
+      const extra = { tauOverrides: { B: 40 }, initialState: { B: 0.5 } }
+      const result = simulate(circuitOf(id), settings(id, extra))
+      const reference = simulate(circuitOf('A'), settings('A', extra))
+      expect(result.activity[id]).toEqual(reference.activity.A)
+      expect(result.activity.B).toEqual(reference.activity.B)
+      expect(result.activity[id]!.every(Number.isFinite)).toBe(true)
+      expect(result.activity[id]![5]).toBeGreaterThan(0)
+    },
+  )
+
+  it('ignores inherited keys, which validation never sees, instead of using them unchecked', () => {
+    const baseline = simulate(circuitOf('A'), settings('A'))
+    const inheritedTau = Object.create({ A: -5, B: 0.5 }) as Record<string, number>
+    const inheritedState = Object.create({ A: 7, B: 0.9 }) as Record<string, number>
+    const result = simulate(circuitOf('A'), settings('A', { tauOverrides: inheritedTau, initialState: inheritedState }))
+    expect(result.activity).toEqual(baseline.activity)
+  })
+})
+
 const invalidConfigs: Partial<SimulationConfig>[] = [
     { durationMs: 0 }, { durationMs: Infinity }, { dtMs: 0 }, { dtMs: -1 },
     { tauMs: NaN }, { tauMs: 0 }, { dtMs: 31 },
@@ -144,6 +177,57 @@ describe('invalid configuration and circuit rejection', () => {
     for (const circuit of [duplicateNeuron, duplicateEdge, unknownEndpoint, invalidWeight, { ...illustrativeCircuit, neurons: [] }]) {
       expect(() => simulate(circuit, config())).toThrow()
     }
+  })
+})
+
+describe('engine guards and stimulus timing contract', () => {
+  const sums = (weight: number, count = 2): Circuit => ({
+    ...isolated,
+    neurons: cells(...Array.from({ length: count }, (_, i) => `S${i}`), 'T'),
+    connections: Array.from({ length: count }, (_, i) => ({
+      id: `S${i}-T`, source: `S${i}`, target: 'T', weight, evidence: 'illustrative', note: 'Synthetic drive',
+    })),
+  })
+  const driven = (count: number, overrides: Partial<SimulationConfig> = {}): SimulationConfig => ({
+    durationMs: 3, dtMs: 1, tauMs: 30,
+    stimulus: { target: 'T', onsetMs: 0, durationMs: 0, amplitude: 0 },
+    initialState: Object.fromEntries(Array.from({ length: count }, (_, i) => [`S${i}`, 1])), ...overrides,
+  })
+
+  it('rejects chemical drive that overflows to infinity instead of silently clipping it', () => {
+    expect(() => simulate(sums(1.7e308), driven(2))).toThrow(/Connection drive overflowed/)
+    expect(() => simulate(sums(-1.7e308), driven(2))).toThrow(/Connection drive overflowed/)
+  })
+
+  it('accepts a huge but finite chemical drive and saturates it at 1', () => {
+    const result = simulate(sums(1.7e308, 1), driven(1))
+    expect(result.activity.T![1]).toBeCloseTo(1 / 30, 12)
+    expect(result.activity.T!.every(Number.isFinite)).toBe(true)
+  })
+
+  it.each([0, -1, NaN, Infinity])('rejects Connection.rawWeight %s', (rawWeight) => {
+    const circuit = structuredClone(illustrativeCircuit)
+    circuit.connections[0]!.rawWeight = rawWeight
+    expect(() => simulate(circuit, config())).toThrow(/Raw weight for S1-I1/)
+  })
+
+  it('accepts a positive rawWeight but never uses it as dynamics', () => {
+    const circuit = structuredClone(illustrativeCircuit)
+    for (const connection of circuit.connections) connection.rawWeight = 1e6
+    expect(simulate(circuit, config()).activity).toEqual(simulate(illustrativeCircuit, config()).activity)
+  })
+
+  it('evaluates an off-grid pulse at each step\'s left endpoint, for the whole step', () => {
+    // Window [0.5, 2.5) on a dt = 1 grid: left endpoints 1 and 2 are inside, 0 and 3 are not.
+    const result = simulate(isolated, {
+      durationMs: 5, dtMs: 1, tauMs: 10,
+      stimulus: { target: 'A', onsetMs: 0.5, durationMs: 2, amplitude: 0.6 },
+    })
+    const drive = 0.6 / 10
+    const second = drive
+    const third = (1 - 1 / 10) * second + drive
+    const fourth = (1 - 1 / 10) * third
+    expect(result.activity.A!.slice(0, 5)).toEqual([0, 0, expect.closeTo(second, 12), expect.closeTo(third, 12), expect.closeTo(fourth, 12)])
   })
 })
 
@@ -231,6 +315,23 @@ describe('symmetric physical gap dynamics', () => {
       expect(value).toBeGreaterThanOrEqual(0)
       expect(value).toBeLessThanOrEqual(1)
       expect(value).toBeCloseTo(1, 12)
+    }
+  })
+
+  it('stays within a few ulp of [0, 1] at the exact dt bound with non-dyadic tau and conductance', () => {
+    // Real arithmetic keeps the convex blend inside [0, 1]; floating point may exceed it by ~1 ulp.
+    const tolerance = 8 * Number.EPSILON
+    for (const tauMs of [0.3, 0.7, 3.3, 7.1, 13, 29.9]) for (const g of [0.1, 0.37, 1.3, 2]) {
+      const dtMs = tauMs / (1 + g)
+      for (const saturated of [false, true]) for (const initialState of [{ A: 1, B: 0 }, { A: 1, B: 1 }, { A: 0.3, B: 0.9 }]) {
+        const circuit = gapCircuit(g)
+        if (saturated) for (const id of ['A', 'B']) circuit.connections.push({ id: `self:${id}`, source: id, target: id, weight: 100, kind: 'chemical', evidence: 'illustrative', note: 'Saturating synthetic drive' })
+        const result = simulate(circuit, gapConfig(dtMs, { tauMs, initialState }))
+        for (const trace of Object.values(result.activity)) for (const value of trace) {
+          expect(value).toBeGreaterThanOrEqual(-tolerance)
+          expect(value).toBeLessThanOrEqual(1 + tolerance)
+        }
+      }
     }
   })
 

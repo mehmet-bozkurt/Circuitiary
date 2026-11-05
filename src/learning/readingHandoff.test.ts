@@ -14,7 +14,7 @@ const toy: Readonly<ExperimentDraft> = Object.freeze({ mode: 'illustrative', gra
   focusConnections: false, scaleToResponse: true, activeCondition: 'tau', stimulusTarget: 'S2', amplitude: .55,
   pulseDuration: 150, baseTau: 50, changedTau: 180, changedNeuron: 'O2', selectedEdge: 'I4-O1',
   outputNeuron: 'O2', selectedNeuron: 'I2', dt: 2, cursorMs: 400, playing: true })
-const scalarKeys = ['graphView', 'chemicalGain', 'gapGain', 'focusConnections', 'scaleToResponse', 'activeCondition',
+const scalarKeys = ['graphView', 'chemicalGain', 'gapGain', 'focusConnections', 'activeCondition',
   'amplitude', 'pulseDuration', 'baseTau', 'changedTau', 'dt', 'cursorMs', 'playing'] as const
 
 describe.skipIf(!localData)('anatomical inspection preserves existing experiment drafts', () => {
@@ -27,6 +27,17 @@ describe.skipIf(!localData)('anatomical inspection preserves existing experiment
     expect(toy.mode).toBe('illustrative')
     expect(toy.selectedNeuron).toBe('I2')
     expect(Object.isFrozen(next)).toBe(true)
+  })
+  it('takes real mode\'s vertical scale on the first switch, so the default AVAR response is not drawn flat', () => {
+    const next = prepareRealInspection({ ...toy, scaleToResponse: false }, data, 'AVAR')
+    expect(next.scaleToResponse).toBe(true)
+    // Only the scale differs from the draft: numerical settings are untouched.
+    expect(next).toEqual({ ...toy, mode: 'real', selectedNeuron: 'AVAR', stimulusTarget: 'AVER', outputNeuron: 'AVAR',
+      changedNeuron: 'AVAR', selectedEdge: 'chemical:AVER->AVAR', scaleToResponse: true })
+    // A real draft keeps its own choice.
+    const real: ExperimentDraft = { ...toy, mode: 'real', stimulusTarget: 'AVER', outputNeuron: 'AVAR', changedNeuron: 'AVAR',
+      selectedEdge: 'chemical:AVER->AVAR', scaleToResponse: false }
+    expect(prepareRealInspection(real, data, 'RICL').scaleToResponse).toBe(false)
   })
   it('changes only the display selection for a valid real draft, including a physical gap ablation', () => {
     const before: ExperimentDraft = { ...toy, mode: 'real', stimulusTarget: 'OLLL', outputNeuron: 'DA08',

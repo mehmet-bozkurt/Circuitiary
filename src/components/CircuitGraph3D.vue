@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type * as ThreeTypes from 'three'
 import type { OrbitControls as OrbitControlsType } from 'three/addons/controls/OrbitControls.js'
 import type { Circuit, Connection } from '../model/types'
@@ -32,7 +32,9 @@ const cameraPosition = ref('')
 const cameraTarget = ref('')
 const cameraQuaternion = ref('')
 const labels = ref<NodeLabel[]>([])
-const instanceId = globalThis.crypto?.randomUUID?.() ?? `circuit-3d-${Date.now()}-${Math.random().toString(36).slice(2)}`
+const newInstanceId = () => globalThis.crypto?.randomUUID?.() ?? `circuit-3d-${Date.now()}-${Math.random().toString(36).slice(2)}`
+// Every renderer (including one made by a retry) gets its own id for the created/disposed events.
+const instanceId = ref(newInstanceId())
 const topologySignature = computed(() => JSON.stringify({
   real: Boolean(props.circuit.realData),
   neurons: props.circuit.neurons.map(node => [node.id, node.role]),
@@ -54,6 +56,10 @@ let disposed = false
 let createdEventSent = false
 let runtimeListenersActive = false
 let fitRadius = 4
+// Camera pose written by the last fit. A resize refits only while the user has not moved it.
+let fitPose: { position: ThreeTypes.Vector3; target: ThreeTypes.Vector3 } | undefined
+// A fit requested while the container was hidden (0x0) waits until it is shown.
+let pendingFit = false
 let pointerStart: { x: number; y: number; id: number; moved: boolean } | undefined
 const activePointers = new Set<number>()
 const nodeMeshes = new Map<string, NodeMesh>()
@@ -107,6 +113,8 @@ function releaseGraphics() {
   }
   if (runtimeListenersActive) document.removeEventListener('visibilitychange', visibilityChanged)
   runtimeListenersActive = false
+  fitPose = undefined
+  pendingFit = false
   pointerStart = undefined
   activePointers.clear()
   releaseSceneResources()
@@ -120,7 +128,7 @@ function releaseGraphics() {
     rawContext.getExtension('WEBGL_lose_context')?.loseContext()
   }
   if (createdEventSent) {
-    window.dispatchEvent(new CustomEvent('circuitiary:3d-disposed', { detail: { instanceId } }))
+    window.dispatchEvent(new CustomEvent('circuitiary:3d-disposed', { detail: { instanceId: instanceId.value } }))
     createdEventSent = false
   }
   rawContext = undefined
@@ -142,8 +150,16 @@ function contextLost(event: Event) {
   fail('context-lost', '3D görünüm kesildi. 2D görünümden deneyine devam edebilirsin.')
 }
 
+/** Client size of the 3D viewport, or undefined while it is not displayed (hidden page region reports 0x0). */
+function viewportSize() {
+  const width = viewport.value?.clientWidth ?? 0
+  const height = viewport.value?.clientHeight ?? 0
+  return width > 0 && height > 0 ? { width, height } : undefined
+}
+
 function requestRender() {
-  if (disposed || pendingFrame || !renderer || !scene || !camera || document.hidden) return
+  // No frames for a hidden container; resize() resumes drawing when it is shown again.
+  if (disposed || pendingFrame || !renderer || !scene || !camera || document.hidden || !viewportSize()) return
   if (rendererStatus.value !== 'ready' && rendererStatus.value !== 'loading') return
   pendingFrame = requestAnimationFrame(renderScene)
 }
@@ -240,7 +256,7 @@ function projectLabels() {
 
 function renderScene() {
   pendingFrame = 0
-  if (disposed || !renderer || !scene || !camera || rawContext?.isContextLost()) return
+  if (disposed || !renderer || !scene || !camera || rawContext?.isContextLost() || !viewportSize()) return
   try {
     updateAppearance()
     renderer.render(scene, camera)
@@ -353,6 +369,9 @@ function buildCircuit(resetCamera = true) {
 
 function fitCamera(initialDirection = false) {
   if (!THREE || !camera || !controls) return
+  // The aspect ratio is unknown while hidden: fit once the container has a size.
+  if (!viewportSize()) { pendingFit = true; return }
+  pendingFit = false
   const halfVertical = camera.fov * Math.PI / 360
   const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect)
   const distance = fitRadius / Math.sin(Math.min(halfVertical, halfHorizontal)) * 1.05
@@ -366,7 +385,12 @@ function fitCamera(initialDirection = false) {
   controls.maxDistance = distance * 3
   camera.lookAt(controls.target)
   controls.update()
+  fitPose = { position: camera.position.clone(), target: controls.target.clone() }
   requestRender()
+}
+
+function cameraAtFitPose() {
+  return Boolean(fitPose && camera && controls && camera.position.distanceToSquared(fitPose.position) < 1e-10 && controls.target.distanceToSquared(fitPose.target) < 1e-10)
 }
 
 function zoomCamera(factor: number) {
@@ -435,20 +459,23 @@ function pointerUp(event: PointerEvent) {
 }
 
 function resize() {
-  if (!renderer || !camera || !viewport.value) return
-  const width = Math.max(1, viewport.value.clientWidth)
-  const height = Math.max(1, viewport.value.clientHeight)
+  const size = viewportSize()
+  // Hidden (0x0): keep the last size and the user's view; drawing resumes when it is shown.
+  if (!renderer || !camera || !size) return
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
-  renderer.setSize(width, height, false)
-  camera.aspect = width / height
+  renderer.setSize(size.width, size.height, false)
+  camera.aspect = size.width / size.height
   camera.updateProjectionMatrix()
-  fitCamera()
+  // Refit only a deferred or still untouched view; a camera the user moved keeps its pose.
+  if (pendingFit) fitCamera(true)
+  else if (cameraAtFitPose()) fitCamera()
   requestRender()
 }
 
-onMounted(async () => {
+async function start() {
   if (!canvas.value || !viewport.value) return
-  graphicsCanvas = canvas.value
+  const startedOn = canvas.value
+  graphicsCanvas = startedOn
   try {
     rawContext = graphicsCanvas.getContext('webgl2', { antialias: true, alpha: true, powerPreference: 'low-power' }) ?? undefined
     if (!rawContext) {
@@ -457,7 +484,8 @@ onMounted(async () => {
     }
     graphicsCanvas.addEventListener('webglcontextlost', contextLost)
     const [three, orbit] = await Promise.all([import('three'), import('three/addons/controls/OrbitControls.js')])
-    if (disposed || rendererStatus.value !== 'loading') return
+    // A context loss plus a retry while the chunks loaded gave a newer start this state: leave it alone.
+    if (disposed || rendererStatus.value !== 'loading' || graphicsCanvas !== startedOn) return
     if (!rawContext || rawContext.isContextLost() || !graphicsCanvas) {
       fail('context-lost', '3D görünüm kesildi. 2D görünümden deneyine devam edebilirsin.')
       return
@@ -466,9 +494,10 @@ onMounted(async () => {
     renderer = new THREE.WebGLRenderer({ canvas: graphicsCanvas, context: rawContext, antialias: true, alpha: true, powerPreference: 'low-power' })
     renderer.setClearColor('#192d2b', 0)
     createdEventSent = true
-    window.dispatchEvent(new CustomEvent('circuitiary:3d-created', { detail: { instanceId } }))
+    window.dispatchEvent(new CustomEvent('circuitiary:3d-created', { detail: { instanceId: instanceId.value } }))
     scene = new THREE.Scene()
-    camera = new THREE.PerspectiveCamera(48, viewport.value.clientWidth / viewport.value.clientHeight, 0.05, 1000)
+    const size = viewportSize()
+    camera = new THREE.PerspectiveCamera(48, size ? size.width / size.height : 1, 0.05, 1000)
     camera.position.set(8, 5, 13)
     controls = new orbit.OrbitControls(camera, graphicsCanvas)
     controls.enableDamping = false
@@ -492,7 +521,21 @@ onMounted(async () => {
   } catch {
     fail('error', '3D görünüm hazırlanamadı. 2D görünümden deneyine devam edebilirsin.')
   }
-})
+}
+
+/** Builds a fresh canvas, context and renderer in place after a failure. */
+async function retry() {
+  if (disposed || rendererStatus.value === 'loading' || rendererStatus.value === 'ready') return
+  rendererStatus.value = 'loading'
+  failureMessage.value = ''
+  instanceId.value = newInstanceId()
+  await nextTick()
+  // The retry button is gone now; hand keyboard focus to the new canvas.
+  canvas.value?.focus({ preventScroll: true })
+  await start()
+}
+
+onMounted(start)
 
 watch(() => [props.activity, props.selectedNode, props.silencedConnectionId, props.focusConnections], requestRender, { deep: true })
 watch(topologySignature, () => buildCircuit())
@@ -502,7 +545,7 @@ onBeforeUnmount(() => { disposed = true; releaseGraphics(); THREE = undefined })
 <template>
   <section class="circuit-3d" :data-renderer-status="rendererStatus" :data-renderer-instance="instanceId" :data-node-count="nodeCount" :data-visible-edge-count="visibleEdgeCount" :data-render-count="renderCount" :data-camera-position="cameraPosition" :data-camera-target="cameraTarget" :data-camera-quaternion="cameraQuaternion">
     <p class="schematic-note">Şematik 3D; anatomik konum/morfoloji değildir.</p>
-    <div v-if="rendererStatus === 'loading' || rendererStatus === 'ready'" class="camera-tools" aria-label="3D kamera denetimleri">
+    <div v-if="rendererStatus === 'loading' || rendererStatus === 'ready'" class="camera-tools" role="group" aria-label="3D kamera denetimleri">
       <button type="button" :disabled="rendererStatus !== 'ready'" @click="fitCamera(true)">Devreyi sığdır</button>
       <div class="camera-tool-group">
         <button type="button" :disabled="rendererStatus !== 'ready'" aria-label="3D görünümü uzaklaştır" @click="zoomCamera(1.2)">−</button>
@@ -527,7 +570,10 @@ onBeforeUnmount(() => { disposed = true; releaseGraphics(); THREE = undefined })
     </div>
     <div v-else class="fallback-3d" role="status">
       <p>{{ failureMessage }}</p>
-      <button type="button" @click="emit('request2d')">2D görünümüne dön</button>
+      <div class="fallback-actions">
+        <button v-if="rendererStatus !== 'unavailable'" type="button" @click="retry">3D görünümü yeniden dene</button>
+        <button type="button" @click="emit('request2d')">2D görünümüne dön</button>
+      </div>
     </div>
     <p v-if="rendererStatus === 'ready'" class="instructions-3d">Sürükle: döndür · İki parmak / tekerlek: yakınlaştır · Hücreye veya etiketine tıkla: seç. Parlaklık hesaplanan boyutsuz etkinliği gösterir.</p>
   </section>
@@ -538,6 +584,7 @@ onBeforeUnmount(() => { disposed = true; releaseGraphics(); THREE = undefined })
 .schematic-note { color: #ced8c6; font-size: 10px; line-height: 1.7; margin-top: 17px; }
 .camera-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 13px; }
 .camera-tool-group { display: flex; gap: 5px; }
+.fallback-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .camera-tools button, .fallback-3d button { background: #3a5145; color: #f2f4e8; border: 1px solid #6d8876; border-radius: 4px; font-size: 11px; min-height: 38px; padding: 8px 12px; }
 .camera-tool-group button { width: 38px; font-size: 17px; padding: 5px; }
 .camera-tools button:disabled { opacity: .5; cursor: default; }

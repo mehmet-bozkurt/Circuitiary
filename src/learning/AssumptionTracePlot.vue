@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { decimal } from '../format'
+import { TICK_FRACTIONS, bandWidth, plotX, plotY, tracePath, useChartWidth } from './plotBox'
 
 const props = defineProps<{
   timesMs: readonly number[]
@@ -14,27 +15,16 @@ const props = defineProps<{
   stimulusDurationMs: number
 }>()
 const chart = ref<SVGSVGElement | null>(null)
-const width = ref(600)
+const width = useChartWidth(chart, { initial: 600 })
 const height = 250
 const pad = { top: 23, bottom: 44, left: 58, right: 18 }
-let observer: ResizeObserver | undefined
 const maxTime = computed(() => props.timesMs.at(-1) ?? 1)
 const axisMax = computed(() => props.yMax > 0 && Number.isFinite(props.yMax) ? props.yMax : 1)
-const x = (time: number) => pad.left + time / (maxTime.value || 1) * (width.value - pad.left - pad.right)
-const y = (value: number) => pad.top + (1 - value / axisMax.value) * (height - pad.top - pad.bottom)
-const path = (values: readonly number[]) => values.map((value, index) => `${index ? 'L' : 'M'}${x(props.timesMs[index] ?? 0).toFixed(2)},${y(value).toFixed(2)}`).join(' ')
-const baselinePath = computed(() => path(props.baseline))
-const comparisonPath = computed(() => path(props.comparison))
+const x = (time: number) => plotX(time, maxTime.value, width.value, pad)
+const y = (value: number) => plotY(value, axisMax.value, height, pad)
+const baselinePath = computed(() => tracePath(props.baseline, props.timesMs, x, y))
+const comparisonPath = computed(() => tracePath(props.comparison, props.timesMs, x, y))
 const decimals = computed(() => axisMax.value < .1 ? 4 : axisMax.value < 1 ? 3 : 2)
-onMounted(() => {
-  const measure = () => { if (chart.value) width.value = Math.max(280, Math.round(chart.value.clientWidth)) }
-  measure()
-  if (typeof ResizeObserver !== 'undefined' && chart.value) {
-    observer = new ResizeObserver(measure)
-    observer.observe(chart.value)
-  }
-})
-onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
@@ -42,10 +32,10 @@ onBeforeUnmount(() => observer?.disconnect())
     <figcaption>AVAR’ın iki hesaplanan yanıtı</figcaption>
     <div class="assumption-trace-legend"><span><i></i>{{ baselineLabel }}</span><span><i class="comparison-line"></i>{{ comparisonLabel }}</span><span><b></b>AVER darbesi açık</span></div>
     <svg ref="chart" data-testid="assumptions-result-plot" :data-y-max="axisMax" :data-scale-mode="responseScale ? 'response' : 'unit'" role="img" :aria-label="`AVAR’ın iki koşuldaki boyutsuz model aktivitesi. Ortak dikey eksen 0–${decimal(axisMax, decimals)}; yatay eksen model zamanı, milisaniye. Temel koşul düz, değişiklik kesikli çizgi.`" :viewBox="`0 0 ${width} ${height}`">
-      <rect data-testid="assumptions-pulse-band" :x="x(onsetMs)" :y="pad.top" :width="Math.max(0, x(Math.min(maxTime, onsetMs + stimulusDurationMs)) - x(onsetMs))" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity=".17" />
-      <g v-for="fraction in [0, .25, .5, .75, 1]" :key="fraction"><line :x1="pad.left" :x2="width - pad.right" :y1="y(axisMax * fraction)" :y2="y(axisMax * fraction)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="fraction ? '3 5' : undefined" /><text data-axis="y" :data-value="axisMax * fraction" :x="pad.left - 8" :y="y(axisMax * fraction) + 3" text-anchor="end">{{ decimal(axisMax * fraction, decimals) }}</text></g>
+      <rect data-testid="assumptions-pulse-band" :x="x(onsetMs)" :y="pad.top" :width="bandWidth(x, onsetMs, stimulusDurationMs, maxTime)" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity=".17" />
+      <g v-for="fraction in TICK_FRACTIONS" :key="fraction"><line :x1="pad.left" :x2="width - pad.right" :y1="y(axisMax * fraction)" :y2="y(axisMax * fraction)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="fraction ? '3 5' : undefined" /><text data-axis="y" :data-value="axisMax * fraction" :x="pad.left - 8" :y="y(axisMax * fraction) + 3" text-anchor="end">{{ decimal(axisMax * fraction, decimals) }}</text></g>
       <text :x="pad.left" y="12">Boyutsuz AVAR aktivitesi</text>
-      <g v-for="fraction in [0, .25, .5, .75, 1]" :key="fraction"><text data-axis="x" :data-value="maxTime * fraction" :x="x(maxTime * fraction)" :y="height - pad.bottom + 17" text-anchor="middle">{{ Math.round(maxTime * fraction) }}</text></g>
+      <g v-for="fraction in TICK_FRACTIONS" :key="fraction"><text data-axis="x" :data-value="maxTime * fraction" :x="x(maxTime * fraction)" :y="height - pad.bottom + 17" text-anchor="middle">{{ Math.round(maxTime * fraction) }}</text></g>
       <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 5" text-anchor="middle">Model zamanı · ms</text>
       <path data-assumption-trace="baseline" :d="baselinePath" fill="none" stroke="var(--theme-trace-neutral, #7b806d)" stroke-width="3" stroke-linejoin="round" />
       <path data-assumption-trace="comparison" :d="comparisonPath" fill="none" stroke="var(--theme-trace-green, #3a7652)" stroke-width="3" stroke-dasharray="8 5" stroke-linejoin="round" />

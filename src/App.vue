@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import TermText from './components/TermText.vue'
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import CircuitGraph from './components/CircuitGraph.vue'
 import CircuitGraph3D from './components/CircuitGraph3D.vue'
 import ActivationChart from './components/ActivationChart.vue'
@@ -12,6 +12,9 @@ import { prepareRealInspection } from './learning/readingHandoff'
 import type { ExperimentDraft } from './learning/readingHandoff'
 import { decimal } from './format'
 
+// The shell keeps this page mounted but hidden behind the lesson pages; the
+// playback loop stays idle there and continues from the same time on return.
+const props = defineProps<{ suspended?: boolean }>()
 type Condition = 'baseline' | 'silenced' | 'tau'
 type GraphView = '2d' | '3d'
 const graphView = ref<GraphView>('2d')
@@ -62,11 +65,12 @@ const baselineSettings = computed<SimulationConfig>(() => ({
   ...defaultConfig, dtMs: dt.value, tauMs: baseTau.value,
   stimulus: { ...defaultConfig.stimulus, target: stimulusTarget.value, amplitude: amplitude.value, durationMs: pulseDuration.value },
 }))
-const results = computed(() => ({
-  baseline: simulate(circuit.value, baselineSettings.value),
-  silenced: simulate(circuit.value, { ...baselineSettings.value, silencedConnectionId: selectedEdge.value }),
-  tau: simulate(circuit.value, { ...baselineSettings.value, tauOverrides: { [changedNeuron.value]: changedTau.value } }),
-}))
+// One computed per condition: a control only re-runs the simulations it feeds
+// (the tau slider costs one run, not the three conditions plus the check).
+const baselineResult = computed(() => simulate(circuit.value, baselineSettings.value))
+const silencedResult = computed(() => simulate(circuit.value, { ...baselineSettings.value, silencedConnectionId: selectedEdge.value }))
+const tauResult = computed(() => simulate(circuit.value, { ...baselineSettings.value, tauOverrides: { [changedNeuron.value]: changedTau.value } }))
+const results = computed(() => ({ baseline: baselineResult.value, silenced: silencedResult.value, tau: tauResult.value }))
 const currentResult = computed(() => results.value[activeCondition.value])
 const sampleIndex = computed(() => Math.min(currentResult.value.timesMs.length - 1, Math.round(cursorMs.value / dt.value)))
 const timeDigits = computed(() => (String(dt.value).split('.')[1] ?? '').length)
@@ -88,7 +92,7 @@ const convergenceError = computed(() => {
   const refined = simulate(circuit.value, { ...baselineSettings.value, dtMs: dt.value / 2 })
   let maxError = 0
   for (const neuron of circuit.value.neurons) {
-    results.value.baseline.activity[neuron.id]!.forEach((value, index) => {
+    baselineResult.value.activity[neuron.id]!.forEach((value, index) => {
       maxError = Math.max(maxError, Math.abs(value - (refined.activity[neuron.id]?.[index * 2] ?? 0)))
     })
   }
@@ -115,7 +119,9 @@ function graphTabKeydown(event: KeyboardEvent) {
   const next: GraphView = event.key === 'Home' ? '2d' : event.key === 'End' ? '3d' : graphView.value === '2d' ? '3d' : '2d'
   chooseGraphView(next, true)
 }
-function pause() { playing.value = false; cancelAnimationFrame(frame); previousTime = 0 }
+function stopLoop() { cancelAnimationFrame(frame); previousTime = 0 }
+function startLoop() { previousTime = 0; if (!props.suspended) frame = requestAnimationFrame(tick) }
+function pause() { playing.value = false; stopLoop() }
 function tick(time: number) {
   if (!playing.value) return
   if (previousTime) cursorMs.value = Math.min(defaultConfig.durationMs, cursorMs.value + (time - previousTime) * 0.22)
@@ -126,8 +132,10 @@ function tick(time: number) {
 function togglePlayback() {
   if (playing.value) { pause(); return }
   if (cursorMs.value >= defaultConfig.durationMs) cursorMs.value = 0
-  playing.value = true; previousTime = 0; frame = requestAnimationFrame(tick)
+  playing.value = true; startLoop()
 }
+// Hidden: keep `playing` (the draft and button state) but stop advancing time.
+watch(() => props.suspended, suspended => { if (suspended) stopLoop(); else if (playing.value) startLoop() })
 function seek(time: number) { pause(); cursorMs.value = time }
 function reset() {
   pause(); amplitude.value = defaultConfig.stimulus.amplitude; pulseDuration.value = defaultConfig.stimulus.durationMs
@@ -305,7 +313,7 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
           </div>
           <div id="graph-panel-3d" v-show="graphView === '3d'" role="tabpanel" aria-labelledby="graph-tab-3d">
             <CircuitGraph3D v-if="graphView === '3d'" :key="mode" :focus-connections="isReal && focusConnections" :circuit="circuit" :activity="nodeActivity" :selected-node="selectedNeuron" :silenced-connection-id="activeCondition === 'silenced' ? selectedEdge : undefined" @select="selectedNeuron = $event" @request2d="chooseGraphView('2d', true)" />
-            <div v-if="graphView === '3d'" class="spatial-selection" aria-label="3D görünümünde seçili nöron ayrıntıları">
+            <div v-if="graphView === '3d'" class="spatial-selection" role="group" aria-label="3D görünümünde seçili nöron ayrıntıları">
               <div><span class="eyebrow" aria-live="polite">{{ selected.id }} / {{ roleName(selected.role) }}</span><p>{{ selected.description }}</p></div>
               <div class="spatial-activity"><span>Model etkinliği</span><output data-testid="three-d-selected-activity">{{ format(nodeActivity[selected.id] ?? 0, 3) }}</output><small>boyutsuz · {{ format(displayedTimeMs, timeDigits) }} ms</small></div>
             </div>

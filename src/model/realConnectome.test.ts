@@ -214,6 +214,30 @@ describe('runtime anatomical schema rejection', () => {
     mutate(raw)
     expect(() => parseRealConnectome(raw)).toThrow()
   })
+  // Each case must fail for its own reason, so a different validator error cannot make it pass by accident.
+  const trimmed = 'expected a non-empty trimmed string'
+  const mirror = 'must be the mirror cell of sourceRef'
+  const rejectedWithReason: Array<[string, Mutation, string]> = [
+    ['leading-space neuron ID', (value) => { value.neurons[0]!.id = ' A' }, `data.neurons[0].id: ${trimmed}`],
+    ['trailing-space chemical endpoint', (value) => { value.chemicalEdges[0]!.target = 'B ' }, `data.chemicalEdges[0].target: ${trimmed}`],
+    ['trailing-space gap endpoint', (value) => { value.gapEdges[0]!.a = 'A ' }, `data.gapEdges[0].a: ${trimmed}`],
+    ['missing source sheet', (value) => { delete (value.neurons[0]!.sourceRef as unknown as Record<string, unknown>).sheet }, `data.neurons[0].sourceRef.sheet: ${trimmed}`],
+    ['empty source sheet', (value) => { value.chemicalEdges[0]!.sourceRef.sheet = '' }, `data.chemicalEdges[0].sourceRef.sheet: ${trimmed}`],
+    ['padded source sheet', (value) => { value.gapEdges[0]!.reciprocalSourceRef.sheet = 'Synthetic ' }, `data.gapEdges[0].reciprocalSourceRef.sheet: ${trimmed}`],
+    ['gap reciprocal that is a copy, not the transpose', (value) => { value.gapEdges[0]!.reciprocalSourceRef = { ...value.gapEdges[0]!.sourceRef } }, `data.gapEdges[0].reciprocalSourceRef: ${mirror}`],
+    ['gap reciprocal with the wrong row', (value) => { value.gapEdges[0]!.reciprocalSourceRef = ref(4, 2) }, `data.gapEdges[0].reciprocalSourceRef: ${mirror}`],
+    ['gap reciprocal with the wrong column', (value) => { value.gapEdges[0]!.reciprocalSourceRef = ref(3, 4) }, `data.gapEdges[0].reciprocalSourceRef: ${mirror}`],
+    ['gap reciprocal on another sheet', (value) => { value.gapEdges[0]!.reciprocalSourceRef = { ...ref(3, 2), sheet: 'Other' } }, `data.gapEdges[0].reciprocalSourceRef: ${mirror}`],
+    ['gap record on a single diagonal cell', (value) => { value.gapEdges[0]!.sourceRef = ref(3, 3); value.gapEdges[0]!.reciprocalSourceRef = ref(3, 3) }, `data.gapEdges[0].reciprocalSourceRef: ${mirror}`],
+    ['diagonal record off the diagonal', (value) => { value.selection.excludedGapSelfEntries[0]!.sourceRef = ref(4, 5) }, 'data.selection.excludedGapSelfEntries[0].sourceRef: diagonal record must sit on a diagonal cell'],
+    ['gap edge ID equal to a neuron ID', (value) => { value.gapEdges[0]!.id = 'A' }, 'data neuron and edge IDs: contains duplicate identities'],
+    ['chemical edge ID equal to a neuron ID', (value) => { value.chemicalEdges[1]!.id = 'C' }, 'data neuron and edge IDs: contains duplicate identities'],
+  ]
+  it.each(rejectedWithReason)('rejects %s with its own reason', (_label, mutate, reason) => {
+    const raw = fixture()
+    mutate(raw)
+    expect(() => parseRealConnectome(raw)).toThrow(reason)
+  })
   it('rejects absent fields, cyclic data, primitive roots, and nonplain objects', () => {
     const missing = fixture()
     delete (missing.selection as unknown as Record<string, unknown>).excludedGapSelfEntries

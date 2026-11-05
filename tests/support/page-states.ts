@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test'
+import { main, viewLabels } from './ui'
 
-export const main = (page: Page) => page.getByRole('main')
 const runAll = async (page: Page) => {
   const run = main(page).getByRole('button', { name: 'Deneyi çalıştır', exact: true })
   await expect(run.first()).toBeEnabled()
@@ -29,7 +29,7 @@ const states: Record<string, Array<{ name: string; enter: (page: Page) => Promis
     } },
     { name: 'illustrative 3D', enter: async page => {
       await page.keyboard.press('Escape')
-      await page.getByRole('tab', { name: '3D · şematik uzay', exact: true }).click()
+      await page.getByRole('tab', { name: viewLabels['3D'], exact: true }).click()
       await expect(page.locator('.circuit-3d')).toHaveAttribute('data-renderer-status', 'ready', { timeout: 15_000 })
     } },
     { name: 'real 3D', enter: async page => {
@@ -37,7 +37,7 @@ const states: Record<string, Array<{ name: string; enter: (page: Page) => Promis
       await expect(page.getByRole('region', { name: 'Gerçek veri kaynağı ve sınırları', exact: true })).toBeVisible()
       await expect(page.locator('.circuit-3d')).toHaveAttribute('data-node-count', '30')
     } },
-    { name: 'real 2D', enter: async page => { await page.getByRole('tab', { name: '2D · bağlantı haritası', exact: true }).click() } },
+    { name: 'real 2D', enter: async page => { await page.getByRole('tab', { name: viewLabels['2D'], exact: true }).click() } },
   ],
   '/ogren/norondan-devreye': [
     { name: 'initial', enter: async () => {} },

@@ -23,7 +23,7 @@ export interface ExperimentDraft {
   playing: boolean
 }
 
-/** A display selection preserves controls; only absent source IDs are mapped. */
+/** A display selection preserves controls; only absent source IDs are mapped, and the first switch from the example uses real mode's chart scale. */
 export function prepareRealInspection(
   draft: Readonly<ExperimentDraft>, data: ReadonlyRealConnectome, neuronId: string,
 ): Readonly<ExperimentDraft> {
@@ -37,6 +37,8 @@ export function prepareRealInspection(
   if (!fallbackEdge) throw new Error('The experiment needs at least one anatomical connection')
   return Object.freeze({
     ...draft, mode: 'real', selectedNeuron: neuronId,
+    // The example's fixed 0–1 axis flattens the real default response (AVAR peak ≈ 0,05), so the first switch takes real mode's scale like the mode button does.
+    scaleToResponse: draft.mode === 'real' ? draft.scaleToResponse : true,
     stimulusTarget: ids.has(draft.stimulusTarget) ? draft.stimulusTarget : input,
     outputNeuron: ids.has(draft.outputNeuron) ? draft.outputNeuron : output,
     changedNeuron: ids.has(draft.changedNeuron) ? draft.changedNeuron : output,

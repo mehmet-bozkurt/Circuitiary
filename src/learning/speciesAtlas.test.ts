@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  answerAtlasQuestion, atlasDefaults, atlasQuestions, atlasRecords, buildComparison,
+  answerAtlasQuestion, atlasDefaults, atlasQuestions, atlasRecords, buildComparison, compareRecords,
   countUnitLabels, recordFor, recordsForSpecies, speciesOptions,
-  type AtlasSpeciesId,
+  type AtlasRecord, type AtlasRecordId, type AtlasSpeciesId,
 } from './speciesAtlas'
 
 const count = (id: string, kind: 'neurons' | 'chemical' | 'gap') => recordFor(id).counts.find(metric => metric.kind === kind)
@@ -111,6 +111,35 @@ describe('pure deterministic filters and contextual comparisons', () => {
     expect(wormSexes.rows.find(row => row.key === 'scope')!.different).toBe(false)
     expect(wormSexes.rows.find(row => row.key === 'sex')!.different).toBe(true)
     expect(wormSexes.countRows.find(row => row.kind === 'neurons')!.classification).toBe('same-unit-context-differs')
+  })
+
+  it('names only the differences that exist in the same-unit note', () => {
+    const note = (left: string, right: string) => buildComparison(left, right).countRows.find(row => row.kind === 'neurons')!.note
+    expect(note('hemibrain2020', 'flywire2024')).toContain('Kapsam farkı nedeniyle')
+    expect(note('drosophila-larva2023', 'flywire2024')).toContain('Evre farkı nedeniyle')
+    expect(note('flywire2024', 'male-cns2026')).toContain('Cinsiyet ve kapsam farkları nedeniyle')
+    expect(note('circuitiary-subset30', 'drosophila-larva2023')).toContain('Tür, evre, cinsiyet, kapsam ve rekonstrüksiyon farkları nedeniyle')
+    // Both Cook records cover the whole nervous system; only the region wording and the sex differ.
+    expect(note('cook2019-hermaphrodite', 'cook2019-male')).toContain('Cinsiyet farkı nedeniyle')
+    expect(note('cook2019-hermaphrodite', 'cook2019-male')).not.toMatch(/[Kk]apsam/)
+  })
+
+  it('classifies distinct records with the same structural context as scope-aligned, whatever the region wording', () => {
+    // No catalogue pair shares species, stage, sex, coverage and reconstruction yet, so a synthetic later release exercises the branch.
+    const flywire = recordFor('flywire2024')
+    const laterRelease: AtlasRecord = { ...flywire, id: 'later-release' as AtlasRecordId,
+      counts: flywire.counts.map(metric => ({ ...metric, value: metric.value! + 1_000 })) }
+    const aligned = compareRecords(flywire, laterRelease)
+    expect(aligned.sameRecord).toBe(false)
+    expect(aligned.countRows.map(row => [row.kind, row.classification])).toEqual([
+      ['neurons', 'same-unit-scope-aligned'], ['chemical', 'same-unit-scope-aligned'], ['gap', 'missing']])
+    expect(aligned.countRows[0]!.note).toContain('kapsam örtüşür')
+    const reworded = compareRecords(flywire, { ...laterRelease, scope: { ...laterRelease.scope, region: 'Aynı kapsamın farklı ifadesi.' } })
+    expect(reworded.countRows[0]!.classification).toBe('same-unit-scope-aligned')
+    // One structural difference is enough to demote it, and the note names that field.
+    const other = compareRecords(flywire, { ...laterRelease, sex: { id: 'male', label: 'Erkek' } }).countRows[0]!
+    expect(other.classification).toBe('same-unit-context-differs')
+    expect(other.note).toContain('Cinsiyet farkı nedeniyle')
   })
 
   it('classifies incompatible chemical quantities without calculating a misleading ratio', () => {

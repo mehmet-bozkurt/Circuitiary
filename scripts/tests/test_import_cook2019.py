@@ -1,6 +1,8 @@
 """Source-sensitive importer tests; biological source files remain locally ignored."""
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -8,15 +10,17 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from openpyxl import Workbook, load_workbook
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / 'scripts'))
+import import_cook2019 as importer  # noqa: E402
 from import_cook2019 import (  # noqa: E402
     CHEMICAL_SHEET, GAP_SHEET, ImportValidationError, SI4_SHA256, SI5_SHA256,
-    build_subset, import_snapshot, numeric_weight, read_matrix, read_neurons,
-    source_ref,
+    build_subset, import_snapshot, main, numeric_weight, read_matrix, read_neurons,
+    source_ref, utc_timestamp, write_json_files,
 )
 
 
@@ -37,14 +41,23 @@ def set_weight(sheet, rows, columns, a, b, value):
     sheet.cell(rows[a], columns[b]).value = value
 
 
-def fixture(order=None):
-    names = order or ['AVAR', 'AVER', 'A', 'B', 'C', 'Z']
-    chemical, cr, cc = matrix_fixture(CHEMICAL_SHEET, names, ['MUSCLE'])
+def fixture(order=None, absent=()):
+    """`absent` names are neurons without a chemical source row that stay chemical targets."""
+    names = [*(order or ['AVAR', 'AVER', 'A', 'B', 'C', 'Z']), *absent]
+    chemical, cr, cc = matrix_fixture(CHEMICAL_SHEET, [n for n in names if n not in absent],
+                                      [*absent, 'MUSCLE'])
     for a, b, value in [('AVAR', 'A', 5), ('A', 'AVAR', 1), ('AVER', 'B', 6),
                         ('AVER', 'C', 6), ('AVAR', 'AVER', 7), ('AVER', 'AVAR', 2),
                         ('A', 'A', 9), ('A', 'MUSCLE', 4), ('Z', 'A', 8)]:
         set_weight(chemical, cr, cc, a, b, value)
+    for target in absent:
+        set_weight(chemical, cr, cc, 'AVAR', target, 5)
+        set_weight(chemical, cr, cc, 'AVER', target, 2)
     gap, gr, gc = matrix_fixture(GAP_SHEET, names)
+    for target in absent:
+        for seed, value in (('AVAR', 1), ('AVER', 4)):
+            set_weight(gap, gr, gc, seed, target, value)
+            set_weight(gap, gr, gc, target, seed, value)
     for a, b, value in [('AVAR', 'B', 3), ('AVER', 'C', 3), ('AVER', 'A', 1), ('A', 'Z', 4)]:
         set_weight(gap, gr, gc, a, b, value)
         set_weight(gap, gr, gc, b, a, value)
@@ -63,9 +76,9 @@ def fixture(order=None):
     return chemical, gap, cell_lists
 
 
-def payload(chemical, gap, lists, limit=5):
-    return build_subset(read_matrix(chemical), read_matrix(gap), read_neurons(lists, 6), [],
-                        limit=limit, absent_sources=frozenset())
+def payload(chemical, gap, lists, limit=5, count=6, absent=frozenset()):
+    return build_subset(read_matrix(chemical), read_matrix(gap), read_neurons(lists, count), [],
+                        limit=limit, absent_sources=absent)
 
 
 class ImporterFixtureTests(unittest.TestCase):
@@ -151,12 +164,171 @@ class ImporterFixtureTests(unittest.TestCase):
             with self.assertRaisesRegex(ImportValidationError, 'Pinned SHA-256 mismatch'):
                 import_snapshot(wrong, wrong, '2026-10-03T00:00:00Z', '2026-10-03T00:00:00Z')
 
+    def test_known_absent_chemical_source_is_never_invented(self):
+        # X is a chemical target and a gap partner of both seeds but has no chemical source row,
+        # like CANL/CANR in the real workbook.
+        absent = frozenset({'X'})
+        chemical, gap, lists = fixture(absent=absent)
+        data = payload(chemical, gap, lists, limit=5, count=7, absent=absent)
+        ranking = {r['neuronId']: r for r in data['selection']['ranking']}
+        self.assertEqual((ranking['X']['chemicalSeedWeight'], ranking['X']['gapSeedWeight']), (7, 5))
+        self.assertEqual(data['selection']['neuronIds'], ['AVAR', 'AVER', 'X', 'B', 'C'])
+        self.assertNotIn('X', {e['source'] for e in data['chemicalEdges']})
+        self.assertEqual({(e['source'], e['target']): e['rawWeight'] for e in data['chemicalEdges']
+                          if e['target'] == 'X'}, {('AVAR', 'X'): 5, ('AVER', 'X'): 2})
+        self.assertEqual(data['selection']['sourceValidation']['expectedMissingChemicalSources'], ['X'])
+        self.assertEqual(data['selection']['sourceValidation']['chemicalSourceCount'], 6)
+
+    def test_absent_source_exception_is_exact_not_a_blanket_allowance(self):
+        absent = frozenset({'X'})
+        chemical, gap, lists = fixture(absent=absent)
+        with self.assertRaisesRegex(ImportValidationError, r"mismatch.*missing=\['X'\]"):
+            payload(chemical, gap, lists, count=7)  # the exception was not declared
+        chemical, gap, lists = fixture()
+        with self.assertRaisesRegex(ImportValidationError, r"mismatch.*unexpected=\['Z'\]"):
+            payload(chemical, gap, lists, absent=frozenset({'Z'}))  # declared absent, but a row exists
+        chemical, _, _ = fixture()  # no X target column: an absent source must still be a target
+        _, gap, lists = fixture(absent=absent)
+        with self.assertRaisesRegex(ImportValidationError, 'Missing chemical target neurons'):
+            payload(chemical, gap, lists, count=7, absent=absent)
+
+    def test_utc_timestamp_accepts_only_explicit_utc(self):
+        self.assertEqual(utc_timestamp('2026-10-03T02:46:04.246507Z'), '2026-10-03T02:46:04.246507Z')
+        self.assertEqual(utc_timestamp('2026-10-03T02:46:04+00:00'), '2026-10-03T02:46:04Z')
+        for value in ['2026-10-03T02:46:04', '2026-10-03T05:46:04+03:00', '2026-10-03T02:46:04-05:00',
+                      'yesterday', '']:
+            with self.subTest(value=value), self.assertRaises(ImportValidationError):
+                utc_timestamp(value)
+
     def test_cli_help(self):
         script = PROJECT_ROOT / 'scripts/import_cook2019.py'
         result = subprocess.run([sys.executable, str(script), '--help'], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0)
         self.assertIn('--si5-downloaded-at', result.stdout)
         self.assertIn('--acquisition-output', result.stdout)
+
+
+class WriteAndCliTests(unittest.TestCase):
+    """Output guarantees, using synthetic data in temp directories only."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.si5, self.si4 = self.root / 'si5.xlsx', self.root / 'si4.xlsx'
+        self.si5.write_bytes(b'not the pinned SI5')
+        self.si4.write_bytes(b'not the pinned SI4')
+        self.output = self.root / 'out' / 'dataset.json'
+        self.acquisition = self.root / 'meta' / 'acquisition.json'
+        self.dataset = payload(*fixture())
+        self.acquisition_value = {'schemaVersion': 1, 'note': 'ağ \u2013 ölçüm',
+                                  'counts': {'neurons': 5, 'chemicalEdges': 8, 'gapEdges': 3}}
+
+    def run_cli(self, **overrides):
+        options = {'--si5': self.si5, '--si4': self.si4, '--output': self.output,
+                   '--acquisition-output': self.acquisition,
+                   '--si5-downloaded-at': '2026-10-03T00:00:00Z',
+                   '--si4-downloaded-at': '2026-10-03T00:00:00Z', **overrides}
+        argv = [str(part) for pair in options.items() for part in pair]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            try:
+                code = main(argv)
+            except SystemExit as exit_:
+                code = exit_.code
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def fake_import(self):
+        return mock.patch.object(importer, 'import_snapshot',
+                                 return_value=(self.dataset, self.acquisition_value))
+
+    def test_write_json_files_writes_complete_files_and_no_temp_leftovers(self):
+        first, second = self.root / 'a' / 'first.json', self.root / 'a' / 'second.json'
+        write_json_files([(first, {'a': 1}), (second, {'ad': 'ağ'})])
+        self.assertEqual(first.read_text(encoding='utf-8'), '{\n  "a": 1\n}\n')
+        self.assertEqual(json.loads(second.read_text(encoding='utf-8')), {'ad': 'ağ'})
+        self.assertIn('ağ', second.read_text(encoding='utf-8'))
+        self.assertEqual(sorted(path.name for path in first.parent.iterdir()), ['first.json', 'second.json'])
+
+    def test_replacement_is_atomic_for_a_reader_that_already_opened_the_target(self):
+        target = self.root / 'target.json'
+        target.write_text('{"old": true}\n', encoding='utf-8')
+        with target.open(encoding='utf-8') as reader:
+            write_json_files([(target, {'new': True})])
+            self.assertEqual(reader.read(), '{"old": true}\n')  # never truncated in place
+        self.assertEqual(json.loads(target.read_text(encoding='utf-8')), {'new': True})
+
+    def test_failed_staging_of_second_file_leaves_first_target_untouched(self):
+        first = self.root / 'first.json'
+        first.write_text('{"old": true}\n', encoding='utf-8')
+        (self.root / 'blocker').write_text('a file, not a directory', encoding='utf-8')
+        with self.assertRaises(OSError):
+            write_json_files([(first, {'new': True}), (self.root / 'blocker' / 'second.json', {})])
+        self.assertEqual(first.read_text(encoding='utf-8'), '{"old": true}\n')
+        self.assertEqual(sorted(path.name for path in self.root.iterdir()),
+                         ['blocker', 'first.json', 'si4.xlsx', 'si5.xlsx'])
+
+    def test_unserialisable_value_is_rejected_before_any_target_changes(self):
+        first = self.root / 'first.json'
+        first.write_text('{"old": true}\n', encoding='utf-8')
+        with self.assertRaises(ValueError):
+            write_json_files([(first, {'new': True}), (self.root / 'second.json', {'bad': float('nan')})])
+        self.assertEqual(first.read_text(encoding='utf-8'), '{"old": true}\n')
+        self.assertFalse((self.root / 'second.json').exists())
+
+    def test_cli_writes_both_outputs_creating_directories(self):
+        with self.fake_import():
+            code, out, err = self.run_cli()
+        self.assertEqual((code, err), (0, ''))
+        self.assertEqual(json.loads(self.output.read_text(encoding='utf-8')), self.dataset)
+        self.assertEqual(json.loads(self.acquisition.read_text(encoding='utf-8')), self.acquisition_value)
+        summary = json.loads(out)
+        self.assertEqual((summary['neurons'], summary['chemicalEdges'], summary['gapEdges']), (5, 8, 3))
+        self.assertEqual([path.name for path in self.output.parent.iterdir()], ['dataset.json'])
+        self.assertEqual([path.name for path in self.acquisition.parent.iterdir()], ['acquisition.json'])
+
+    def test_cli_validation_failure_writes_nothing_and_keeps_previous_outputs(self):
+        code, _, err = self.run_cli()  # the real validation rejects the unpinned source bytes
+        self.assertEqual(code, 1)
+        self.assertIn('Pinned SHA-256 mismatch', err)
+        self.assertFalse(self.output.parent.exists())
+        self.assertFalse(self.acquisition.parent.exists())
+        for path in (self.output, self.acquisition):
+            path.parent.mkdir(parents=True)
+            path.write_text('{"previous": true}\n', encoding='utf-8')
+        self.assertEqual(self.run_cli()[0], 1)
+        for path in (self.output, self.acquisition):
+            self.assertEqual(path.read_text(encoding='utf-8'), '{"previous": true}\n')
+
+    def test_cli_write_failure_keeps_previous_dataset_consistent_with_acquisition(self):
+        self.output.parent.mkdir(parents=True)
+        self.output.write_text('{"previous": true}\n', encoding='utf-8')
+        (self.root / 'meta').write_text('a file where the acquisition directory belongs', encoding='utf-8')
+        with self.fake_import():
+            code, out, err = self.run_cli()
+        self.assertEqual((code, out), (1, ''))
+        self.assertIn('Import failed', err)
+        self.assertEqual(self.output.read_text(encoding='utf-8'), '{"previous": true}\n')
+        self.assertEqual([path.name for path in self.output.parent.iterdir()], ['dataset.json'])
+
+    def test_cli_path_guards_fail_before_importing_or_touching_sources(self):
+        aliased_si5 = self.root / 'out' / '..' / 'si5.xlsx'
+        cases = {
+            'same output': {'--acquisition-output': self.output},
+            'dataset over SI5': {'--output': self.si5},
+            'dataset over SI5 through an alias': {'--output': aliased_si5},
+            'acquisition over SI4': {'--acquisition-output': self.si4},
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label), self.fake_import() as fake:
+                (self.root / 'out').mkdir(exist_ok=True)
+                code, out, err = self.run_cli(**overrides)
+                self.assertEqual((code, out), (2, ''))
+                self.assertRegex(err, 'must differ|must not overwrite')
+                fake.assert_not_called()
+                self.assertEqual(self.si5.read_bytes(), b'not the pinned SI5')
+                self.assertEqual(self.si4.read_bytes(), b'not the pinned SI4')
+                self.assertFalse(self.acquisition.parent.exists())
 
 
 DATA_ROOT = Path(os.environ.get('CIRCUITIARY_DATA_DIR', str(PROJECT_ROOT / 'data/raw')))

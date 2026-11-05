@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
+import { exportRecord } from './support/export'
+import { cell, cells, settleFrames, viewLabels } from './support/ui'
 import type { RealConnectome, SimulationResult } from '../src/model/types'
 
 interface Experiment {
@@ -21,34 +22,20 @@ interface LifetimeMetrics {
 }
 
 const tabs = (page: Page) => page.getByRole('tablist', { name: 'Devre görünümü', exact: true })
-const twoD = (page: Page) => tabs(page).getByRole('tab', { name: '2D · bağlantı haritası', exact: true })
-const threeD = (page: Page) => tabs(page).getByRole('tab', { name: '3D · şematik uzay', exact: true })
+const twoD = (page: Page) => tabs(page).getByRole('tab', { name: viewLabels['2D'], exact: true })
+const threeD = (page: Page) => tabs(page).getByRole('tab', { name: viewLabels['3D'], exact: true })
 const renderer = (page: Page) => page.locator('.circuit-3d')
 const canvas = (page: Page) => page.locator('canvas.circuit-3d-canvas')
 const node = (page: Page, id: string) => page.locator(`.node-label-3d[data-node-id="${id}"]`)
-const cells = (page: Page) => page.getByRole('group', { name: 'İncelenecek hücre', exact: true })
-const cell = (page: Page, id: string) => cells(page).getByRole('button').filter({ has: page.locator('span', { hasText: new RegExp(`^${id}$`) }) })
 const timeSlider = (page: Page) => page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true })
 const mode = (page: Page) => page.getByRole('group', { name: 'Devre modu', exact: true })
 
-async function exported(page: Page, fileName = 'circuitiary-experiment.json'): Promise<Experiment> {
-  const promise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Deney kaydını indir/ }).click()
-  const download = await promise
-  expect(download.suggestedFilename()).toBe(fileName)
-  const path = await download.path()
-  expect(path).not.toBeNull()
-  return JSON.parse(await readFile(path!, 'utf8')) as Experiment
-}
-
-async function settleFrames(page: Page): Promise<void> {
-  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))))
-}
+const exported = (page: Page, fileName = 'circuitiary-experiment.json') => exportRecord<Experiment>(page, fileName)
 
 async function enterThreeD(page: Page, count: number): Promise<void> {
   await threeD(page).click()
   await expect(threeD(page)).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('tabpanel', { name: '3D · şematik uzay', exact: true })).toBeVisible()
+  await expect(page.getByRole('tabpanel', { name: viewLabels['3D'], exact: true })).toBeVisible()
   await expect(renderer(page)).toHaveAttribute('data-renderer-status', 'ready', { timeout: 15_000 })
   await expect(renderer(page)).toHaveAttribute('data-node-count', String(count))
   await expect(canvas(page)).toHaveCount(1)

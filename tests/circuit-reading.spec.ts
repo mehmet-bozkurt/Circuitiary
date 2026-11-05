@@ -1,22 +1,19 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { exportRecord } from './support/export'
+import { cell, cells, experimentLink, experimentUi, expectNoHorizontalOverflow, main, navLabels, navLink, view } from './support/ui'
 import type { AnatomicalChemicalEdge, AnatomicalGapEdge, RealConnectome, SimulationResult, SourceReference } from '../src/model/types'
 
 const readingPath = '/ogren/devreyi-okumak'
 const lessonPath = '/ogren/norondan-devreye'
 const guidedPath = '/ogren/rehberli-deneyler'
-const navigation = (page: Page) => page.getByRole('navigation', { name: 'Öğrenme ve deneyler', exact: true })
-const readingLink = (page: Page) => navigation(page).getByRole('link', { name: 'Devreyi okumak', exact: true })
-const lessonLink = (page: Page) => navigation(page).getByRole('link', { name: 'Nörondan devreye', exact: true })
-const guidedLink = (page: Page) => navigation(page).getByRole('link', { name: 'Rehberli deneyler', exact: true })
-const experimentLink = (page: Page) => navigation(page).getByRole('link', { name: 'Devre deneyleri', exact: true })
-const main = (page: Page) => page.getByRole('main')
+const readingLink = (page: Page) => navLink(page, navLabels.reading)
+const lessonLink = (page: Page) => navLink(page, navLabels.neuron)
+const guidedLink = (page: Page) => navLink(page, navLabels.guided)
 const source = (page: Page) => main(page).locator('#reading-neuron')
 const target = (page: Page) => main(page).locator('#reading-target')
 const mode = (page: Page) => main(page).locator('#reading-mode')
-const cells = (page: Page) => page.getByRole('group', { name: 'İncelenecek hücre', exact: true })
-const cell = (page: Page, id: string) => cells(page).getByRole('button').filter({ has: page.locator('span', { hasText: new RegExp(`^${id}$`) }) })
-const view = (page: Page, id: '2D' | '3D') => page.getByRole('tab', { name: id === '2D' ? '2D · bağlantı haritası' : '3D · şematik uzay', exact: true })
+const exported = (page: Page) => exportRecord<ExperimentRecord>(page)
 
 type GraphMode = 'chemical' | 'gap' | 'mixed'
 interface ReferenceHop {
@@ -146,50 +143,6 @@ async function expectReading(page: Page, loaded = true) {
   }
 }
 
-async function noOverflow(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-}
-
-async function exported(page: Page) {
-  const pending = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Deney kaydını indir/ }).click()
-  const path = await (await pending).path()
-  expect(path).not.toBeNull()
-  return JSON.parse(await readFile(path!, 'utf8')) as ExperimentRecord
-}
-
-interface ExperimentUi {
-  values: Record<string, string>
-  output: string
-  cursor: string
-  selected: string | null
-  condition: string | null
-  graphView: string | null
-  playing: boolean
-  focusedConnections: boolean | null
-  scaledChart: boolean
-}
-
-async function experimentUi(page: Page): Promise<ExperimentUi> {
-  const values: Record<string, string> = {}
-  for (const id of ['stimulus-target', 'amplitude', 'duration', 'silenced-edge', 'changed-neuron', 'changed-tau', 'base-tau', 'dt', 'chemical-gain', 'gap-gain']) {
-    const control = page.locator(`#${id}`)
-    if (await control.count()) values[id] = await control.inputValue()
-  }
-  const focus = page.getByRole('checkbox', { name: 'Yalnız seçili hücrenin bağlantıları', exact: true })
-  return {
-    values,
-    output: await page.getByRole('combobox', { name: 'İzlenen çıktı hücresi', exact: true }).inputValue(),
-    cursor: await page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true }).inputValue(),
-    selected: await cells(page).getByRole('button', { pressed: true }).locator('span').textContent(),
-    condition: await page.getByRole('group', { name: 'Grafikte gösterilen deney koşulu', exact: true }).getByRole('button', { pressed: true }).textContent(),
-    graphView: await page.getByRole('tab', { selected: true }).textContent(),
-    playing: await page.getByRole('button', { name: 'Oynatmayı duraklat', exact: true }).count() === 1,
-    focusedConnections: await focus.count() ? await focus.isChecked() : null,
-    scaledChart: await page.getByRole('checkbox', { name: 'Yanıta göre dikey ölçek', exact: true }).isChecked(),
-  }
-}
-
 async function setNumericDraft(page: Page) {
   await page.locator('#amplitude').fill('0.55')
   await page.locator('#duration').fill('350')
@@ -314,7 +267,7 @@ test('direct reading and reload show the actual local anatomy, separate self loo
   }
   await expect(sources).toContainText('yeniden dağıtım')
   await expect(sources).toContainText('doğrulan')
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
   await page.screenshot({ path: testInfo.outputPath('reading-source-records.png'), fullPage: true })
   await page.reload()
   await expectReading(page)
@@ -356,7 +309,7 @@ test('minimum-hop paths use the exact directed or bidirectional raw records and 
   await previous.click()
   await expect(page.getByTestId('reading-step')).toHaveAttribute('data-step-index', '1')
   await expect(current).toContainText('AVBL')
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
   await page.screenshot({ path: testInfo.outputPath('reading-gap-route.png'), fullPage: true })
 })
 
@@ -390,7 +343,7 @@ test('unreachable and same-cell results remain distinct from chemical self loops
   expect(referenceCycle('RICL')).toBeNull()
   await expect(page.getByTestId('reading-cycle').locator('[data-edge-id]')).toHaveCount(0)
   await expect(page.getByTestId('reading-cycle')).toContainText('döngü')
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('an explicit real-mode inspection changes only the selected neuron and preserves playing time, every setting, 3D view and complete numerical record', async ({ page }) => {
@@ -442,7 +395,7 @@ test('an explicit real-mode inspection changes only the selected neuron and pres
   expect(Number(await page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true }).inputValue())).toBeGreaterThan(Number(beforeUi.cursor))
   await expect(page.getByRole('button', { name: 'Oynatmayı duraklat', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Oynatmayı duraklat', exact: true }).click()
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('first real inspection adapts only invalid toy identities and the original toy mode button restores the complete previous draft', async ({ page }) => {
@@ -490,7 +443,7 @@ test('first real inspection adapts only invalid toy identities and the original 
   await expect(page.locator('.circuit-3d')).toHaveAttribute('data-renderer-status', 'ready')
   expect(await experimentUi(page)).toEqual(beforeUi)
   expect(await exported(page)).toEqual(before)
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('failed and canceled first-real inspections stay explicit and cannot commit changes to a hidden toy experiment', async ({ page }) => {
@@ -546,7 +499,7 @@ test('failed and canceled first-real inspections stay explicit and cannot commit
   expect(await experimentUi(page)).toEqual(beforeUi)
   expect(await exported(page)).toEqual(before)
   expect(getCount).toBe(3)
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('loading, local GET failure and malformed source data never fabricate an empty connectome, and explicit retry recovers', async ({ page }) => {
@@ -598,7 +551,7 @@ test('loading, local GET failure and malformed source data never fabricate an em
   expect(methods).toEqual(['GET', 'GET', 'GET', 'GET'])
   await expectNeighbours(page, 'AVER')
   await search(page, 'RICL', 'AVBR', 'chemical')
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('reading retains its own route drafts and leaves the first two learning pages and their completed results unchanged', async ({ page }) => {
@@ -647,7 +600,7 @@ test('reading retains its own route drafts and leaves the first two learning pag
   await page.goForward()
   await expect(main(page)).toHaveAttribute('id', 'neuron-lesson')
   expect(await Promise.all(lessonValues.map(id => page.locator(id).inputValue()))).toEqual(lessonBefore)
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('native hashes, history and keyboard or touch navigation reach the reading content while desktop modified links open actual tabs', async ({ page, isMobile }) => {
@@ -708,5 +661,5 @@ test('native hashes, history and keyboard or touch navigation reach the reading 
       expect(context.pages()).toHaveLength(1)
     }
   }
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })

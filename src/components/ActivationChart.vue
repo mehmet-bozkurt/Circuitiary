@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { decimal } from '../format'
+import { TICK_FRACTIONS, bandWidth, plotX, plotY, tracePath, useChartWidth } from '../learning/plotBox'
 
 interface Trace { id: string; label: string; color: string; values: number[] }
 const props = withDefaults(defineProps<{
@@ -13,22 +14,18 @@ const props = withDefaults(defineProps<{
 }>(), { yMax: 1 })
 const emit = defineEmits<{ seek: [time: number] }>()
 const chart = ref<SVGSVGElement>()
-const width = ref(720)
+const width = useChartWidth(chart, { initial: 720, min: 300, read: element => element.getBoundingClientRect().width })
 const height = 240
 const pad = { top: 23, right: 18, bottom: 38, left: 46 }
-let observer: ResizeObserver | undefined
 
 const maxTime = computed(() => props.times[props.times.length - 1] || 1)
 const axisMax = computed(() => Number.isFinite(props.yMax) && props.yMax > 0 ? props.yMax : 1)
 const tickDecimals = computed(() => axisMax.value < 1 ? 3 : 2)
-const x = (time: number) => pad.left + time / maxTime.value * (width.value - pad.left - pad.right)
-const y = (value: number) => height - pad.bottom - value / axisMax.value * (height - pad.top - pad.bottom)
-const tickTimes = computed(() => [0, maxTime.value / 4, maxTime.value / 2, maxTime.value * 3 / 4, maxTime.value])
-const tickValues = computed(() => [0, 0.25, 0.5, 0.75, 1].map(fraction => fraction * axisMax.value))
-const paths = computed(() => props.traces.map(trace => ({
-  ...trace,
-  path: trace.values.map((value, index) => `${index === 0 ? 'M' : 'L'}${x(props.times[index] ?? 0).toFixed(2)},${y(value).toFixed(2)}`).join(' '),
-})))
+const x = (time: number) => plotX(time, maxTime.value, width.value, pad)
+const y = (value: number) => plotY(value, axisMax.value, height, pad)
+const tickTimes = computed(() => TICK_FRACTIONS.map(fraction => fraction * maxTime.value))
+const tickValues = computed(() => TICK_FRACTIONS.map(fraction => fraction * axisMax.value))
+const paths = computed(() => props.traces.map(trace => ({ ...trace, path: tracePath(trace.values, props.times, x, y) })))
 
 function seek(event: MouseEvent) {
   const rect = event.currentTarget instanceof SVGElement ? event.currentTarget.getBoundingClientRect() : null
@@ -36,23 +33,11 @@ function seek(event: MouseEvent) {
   const localX = (event.clientX - rect.left) / rect.width * width.value
   emit('seek', Math.max(0, Math.min(maxTime.value, (localX - pad.left) / (width.value - pad.left - pad.right) * maxTime.value)))
 }
-
-function measureWidth() {
-  if (!chart.value) return
-  width.value = Math.max(300, Math.round(chart.value.getBoundingClientRect().width))
-}
-
-onMounted(() => {
-  measureWidth()
-  observer = new ResizeObserver(measureWidth)
-  if (chart.value) observer.observe(chart.value)
-})
-onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
   <svg ref="chart" class="activation-chart" :viewBox="`0 0 ${width} ${height}`" role="img" :aria-label="`Üç koşulun boyutsuz etkinlik değerlerini zamana göre karşılaştıran grafik. Ortak dikey eksen 0–${decimal(axisMax, tickDecimals)}.`" @click="seek">
-    <rect :x="x(stimulus.onsetMs)" :y="pad.top" :width="x(Math.min(maxTime, stimulus.onsetMs + stimulus.durationMs)) - x(stimulus.onsetMs)" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity="0.13" />
+    <rect :x="x(stimulus.onsetMs)" :y="pad.top" :width="bandWidth(x, stimulus.onsetMs, stimulus.durationMs, maxTime)" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity="0.13" />
     <g v-for="tick in tickValues" :key="tick">
       <line :x1="pad.left" :x2="width - pad.right" :y1="y(tick)" :y2="y(tick)" stroke="var(--theme-border, #e1e4db)" />
       <text :x="pad.left - 10" :y="y(tick) + 4" text-anchor="end" class="chart-tick">{{ decimal(tick, tickDecimals) }}</text>

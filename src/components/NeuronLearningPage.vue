@@ -136,7 +136,7 @@ function resetLesson() {
             <p class="model-note"><strong>Varsayım:</strong> Sıfır olmayan uyaran eşiğe ulaştığında aynı, tepe değeri 1 olan tek eğri seçilir. Eşik altında daha küçük eğri yerel yanıtı temsil eder. Eğri biçimi çizim tercihidir; gerçek aksiyon potansiyeli biçimi, mV veya frekans hesabı değildir.</p>
           </div>
 
-          <div v-else-if="section.id === 'lesson-chemical'" class="chemical-steps" aria-label="Kimyasal sinapsın üç aşaması">
+          <div v-else-if="section.id === 'lesson-chemical'" class="chemical-steps" role="group" aria-label="Kimyasal sinapsın üç aşaması">
             <div><span>01</span><h3>Salım</h3><p><TermText text="Presinaptik uç, iletici molekülleri aralığa bırakır." /></p></div>
             <div><span>02</span><h3>Bağlanma</h3><p><TermText text="İletici, postsinaptik reseptörle etkileşir." /></p></div>
             <div><span>03</span><h3>Yanıt</h3><p><TermText text="Reseptör ve hücrenin koşulları sonucu belirler." /></p></div>

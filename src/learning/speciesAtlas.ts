@@ -259,14 +259,29 @@ const comparisonFields = [
   ['relation', 'Circuitiary ile ilişkisi', (record: AtlasRecord) => record.circuitiaryRelation.label],
 ] as const
 
+// One list decides both whether two records share a context and which differences the count note names.
+// Structural fields only: the free-text region wording is descriptive, so it neither blocks alignment nor counts as a scope difference.
+const contextChecks: readonly (readonly [string, (left: AtlasRecord, right: AtlasRecord) => boolean])[] = [
+  ['tür', (left, right) => left.speciesId === right.speciesId],
+  ['evre', (left, right) => left.stage.id === right.stage.id],
+  ['cinsiyet', (left, right) => left.sex.id === right.sex.id],
+  ['kapsam', (left, right) => left.scope.coverage === right.scope.coverage],
+  ['rekonstrüksiyon', (left, right) => left.reconstruction.kind === right.reconstruction.kind],
+]
+const differenceList = (names: readonly string[]): string => {
+  const phrase = names.length === 1 ? `${names[0]!} farkı` : `${names.slice(0, -1).join(', ')} ve ${names[names.length - 1]!} farkları`
+  return phrase.charAt(0).toLocaleUpperCase('tr-TR') + phrase.slice(1)
+}
+
 /** Descriptive comparison only: no ratios or inferred functional superiority. */
 export function buildComparison(leftId: string, rightId: string): AtlasComparison {
-  const left = recordFor(leftId)
-  const right = recordFor(rightId)
+  return compareRecords(recordFor(leftId), recordFor(rightId))
+}
+
+/** Compares two records directly; `buildComparison` resolves catalogue IDs first. */
+export function compareRecords(left: AtlasRecord, right: AtlasRecord): AtlasComparison {
   const sameRecord = left.id === right.id
-  const contextAligned = left.speciesId === right.speciesId && left.stage.id === right.stage.id
-    && left.sex.id === right.sex.id && left.scope.coverage === right.scope.coverage
-    && left.scope.region === right.scope.region && left.reconstruction.kind === right.reconstruction.kind
+  const contextDifferences = contextChecks.filter(([, same]) => !same(left, right)).map(([name]) => name)
   const countRows = (['neurons', 'chemical', 'gap'] as const).map(kind => {
     const leftMetric = left.counts.find(metric => metric.kind === kind) ?? null
     const rightMetric = right.counts.find(metric => metric.kind === kind) ?? null
@@ -280,8 +295,8 @@ export function buildComparison(leftId: string, rightId: string): AtlasCompariso
       classification = 'same-record'; note = 'Aynı sabitlenmiş kayıt iki kez seçildi; burada ayrı iki örnek veya deney yoktur.'
     } else if (leftMetric.value === null || rightMetric.value === null) {
       classification = 'missing'; note = 'Ortak birim olsa da sayısal toplam ileri sürülmemiştir; boş değer sıfır değildir.'
-    } else if (!contextAligned) {
-      classification = 'same-unit-context-differs'; note = 'Birim aynı, örnek ve anatomik bağlam farklıdır. Tür, evre, cinsiyet ve kapsam farkları nedeniyle bu sayılar işlev veya kapasite sıralaması oluşturmaz.'
+    } else if (contextDifferences.length) {
+      classification = 'same-unit-context-differs'; note = `Birim aynı, örnek ve anatomik bağlam farklıdır. ${differenceList(contextDifferences)} nedeniyle bu sayılar işlev veya kapasite sıralaması oluşturmaz.`
     } else {
       classification = 'same-unit-scope-aligned'; note = 'Birim ve belirtilen kapsam örtüşür; sayı yine kayıt tanımı ve sürümüyle okunur, işlevsel eşdeğerlik veya davranış sonucu çıkarılmaz.'
     }

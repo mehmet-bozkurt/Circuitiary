@@ -1,9 +1,11 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { readdirSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { exportRecord } from './support/export'
+import { main, viewLabels } from './support/ui'
 import { runAssumptionExperiment } from '../src/learning/assumptionExperiments'
 import { createReadingGraph, findShortestRoute, inspectNeuron } from '../src/learning/circuitReading'
 import { runGuidedExperiment, type GuidedExperimentId } from '../src/learning/guidedExperiments'
@@ -35,7 +37,6 @@ const git = (() => {
     return { head: run('rev-parse', 'HEAD'), dirty: run('status', '--porcelain').length > 0 }
   } catch { return null }
 })()
-const main = (page: Page) => page.getByRole('main')
 const isProduction = (testInfo: TestInfo) => testInfo.project.name.startsWith('production')
 const trNumber = (value: number, digits = 3) => value.toLocaleString('tr-TR', { minimumFractionDigits: digits, maximumFractionDigits: digits })
 
@@ -98,11 +99,7 @@ async function localSource(page: Page): Promise<RealConnectome> {
 
 /** The downloaded record re-simulates to identical traces in Node, and the shown peaks match them. */
 async function exportedResults(page: Page, fileName: string) {
-  const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Deney kaydını indir/ }).click()
-  const file = await download
-  expect(file.suggestedFilename()).toBe(fileName)
-  const record = JSON.parse(await readFile((await file.path())!, 'utf8')) as { circuit: Circuit; observedOutput: string; results: Record<'baseline' | 'silenced' | 'tau', SimulationResult> }
+  const record = await exportRecord<{ circuit: Circuit; observedOutput: string; results: Record<'baseline' | 'silenced' | 'tau', SimulationResult> }>(page, fileName)
   const peaks: Record<string, number> = {}
   for (const condition of ['baseline', 'silenced', 'tau'] as const) {
     const result = record.results[condition]
@@ -145,7 +142,7 @@ test('main experiment: illustrative and real modes, 2D and 3D, term card and dar
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  await page.getByRole('tab', { name: '3D · şematik uzay', exact: true }).click()
+  await page.getByRole('tab', { name: viewLabels['3D'], exact: true }).click()
   const renderer = page.locator('.circuit-3d')
   await expect(renderer).toHaveAttribute('data-renderer-status', 'ready', { timeout: 15_000 })
   await expect(renderer).toHaveAttribute('data-node-count', '8')
@@ -156,7 +153,7 @@ test('main experiment: illustrative and real modes, 2D and 3D, term card and dar
   await expect(renderer).toHaveAttribute('data-node-count', '30')
   await expect(renderer).toHaveAttribute('data-renderer-status', 'ready')
   await surface(page, testInfo, evidence, 'real-3d', renderer)
-  await page.getByRole('tab', { name: '2D · bağlantı haritası', exact: true }).click()
+  await page.getByRole('tab', { name: viewLabels['2D'], exact: true }).click()
   evidence.values.real = await exportedResults(page, 'circuitiary-cook2019-local-experiment.json')
   await surface(page, testInfo, evidence, 'real-2d', page.locator('.chart-panel'))
 

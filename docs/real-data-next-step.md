@@ -31,6 +31,8 @@ Cook’un bütün hayvan grafı farklı EM serileri/hayvanlar birleştirilerek v
 
 Başlangıç düğümleri tam adlarıyla `AVAR`, `AVER` olur. Adaylar yalnızca bu iki hücrenin bir adım uzaklığındaki SI4 nöronlarıdır: sıfırdan büyük kimyasal gelen/giden veya gap bağlantısı yeterlidir. Adaylar önce iki başlangıç düğümüyle toplam **ham kimyasal ağırlık azalan**, sonra ayrı **tekil fiziksel gap ağırlık azalan**, sonra **tam hücre adı artan** sırada dizilir. Kimyasal ve gap puanları birbirine eklenmez. En fazla 28 aday eklenir; seçilen hücreler arasındaki bütün pozitif bağlantılar korunur. Görsel sadeleştirme için bir ağırlık eşiği uygulanmaz.
 
+Seçim sınırında eşitlik olabilir: sıralamada 28. ve 29. aday her iki puanda eşitse hangisinin altgrafa gireceğini yalnız tam hücre adı sırası belirler; bu biyolojik bir üstünlük değil, belgelenmiş sabit bir eşitlik bozucudur.
+
 `selection.ranking` bütün adayları ve sıralarını içerir; başlangıç hücreleri bu listede tekrar edilmez. `selection.neuronIds`, iki başlangıç hücresi ve seçilen adayların sırası ile oluşur. Üretilen JSON şeması `schemaVersion: 1` kullanır.
 
 Kimyasal kaynak sözleşmesi `C[kaynak, hedef]` biçimindedir. Model hedef satırından girdi topluyorsa dönüşüm `W[hedef, kaynak] = C[kaynak, hedef]` olarak yapılır. Yön kontrol örneği: **AVER → AVAR = 33**, hücre `HE176`; ters yönde **AVAR → AVER = 3**, hücre `GX183`. Bu değerler seri EM kesiti ağırlığıdır, 33 ve 3 sinaps veya ölçülmüş işlevsel etki değildir.

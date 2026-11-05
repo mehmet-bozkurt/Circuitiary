@@ -153,14 +153,19 @@ export function parseRealConnectome(value: unknown): ReadonlyRealConnectome {
     const b = text(edge.b, `${path}.b`)
     if (!ids.has(a) || !ids.has(b)) fail(path, 'gap endpoint is not an exact selected cell ID')
     if (a >= b) fail(path, 'physical gaps must be non-self canonical a < b pairs')
+    const sourceRef = sourceReference(edge.sourceRef, `${path}.sourceRef`)
+    const reciprocalSourceRef = sourceReference(edge.reciprocalSourceRef, `${path}.reciprocalSourceRef`)
+    if (reciprocalSourceRef.sheet !== sourceRef.sheet || reciprocalSourceRef.row !== sourceRef.column
+      || reciprocalSourceRef.column !== sourceRef.row || sourceRef.row === sourceRef.column) {
+      fail(`${path}.reciprocalSourceRef`, 'must be the mirror cell of sourceRef (same sheet, row and column swapped, off the diagonal)')
+    }
     return {
       ...edge, id: text(edge.id, `${path}.id`), a, b,
-      rawWeight: number(edge.rawWeight, `${path}.rawWeight`, true),
-      sourceRef: sourceReference(edge.sourceRef, `${path}.sourceRef`),
-      reciprocalSourceRef: sourceReference(edge.reciprocalSourceRef, `${path}.reciprocalSourceRef`),
+      rawWeight: number(edge.rawWeight, `${path}.rawWeight`, true), sourceRef, reciprocalSourceRef,
     }
   })
-  unique([...chemicalEdges, ...gapEdges].map((edge) => edge.id), 'data edge IDs')
+  // The graph view puts neurons and edges into one element id namespace, so all three lists must be disjoint.
+  unique([...neurons, ...chemicalEdges, ...gapEdges].map((item) => item.id), 'data neuron and edge IDs')
   unique(chemicalEdges.map((edge) => JSON.stringify([edge.source, edge.target])), 'data chemical directed pairs')
   unique(gapEdges.map((edge) => JSON.stringify([edge.a, edge.b])), 'data physical gap pairs')
 
@@ -219,7 +224,9 @@ export function parseRealConnectome(value: unknown): ReadonlyRealConnectome {
     const neuronId = text(diagonal.neuronId, `${path}.neuronId`)
     const selected = boolean(diagonal.selected, `${path}.selected`)
     if (selected !== ids.has(neuronId)) fail(path, 'diagonal selected flag disagrees with selected cells')
-    return { ...diagonal, neuronId, selected, rawWeight: number(diagonal.rawWeight, `${path}.rawWeight`, true), sourceRef: sourceReference(diagonal.sourceRef, `${path}.sourceRef`) }
+    const sourceRef = sourceReference(diagonal.sourceRef, `${path}.sourceRef`)
+    if (sourceRef.row !== sourceRef.column) fail(`${path}.sourceRef`, 'diagonal record must sit on a diagonal cell (row equals column)')
+    return { ...diagonal, neuronId, selected, rawWeight: number(diagonal.rawWeight, `${path}.rawWeight`, true), sourceRef }
   })
   unique(excludedGapSelfEntries.map((entry) => entry.neuronId), 'data.selection.excludedGapSelfEntries')
   const selection: ConnectomeSelection = {

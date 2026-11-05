@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { experimentLink, navLabels, navLink } from './support/ui'
 
 test('system theme follows the OS while an explicit choice takes priority', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' })
@@ -26,8 +27,8 @@ test('theme persists across reloads and every lesson without changing experiment
   const before = await curves.evaluateAll(paths => paths.map(path => path.getAttribute('d')))
   await page.getByRole('combobox', { name: 'Tema', exact: true }).selectOption('dark')
   expect(await curves.evaluateAll(paths => paths.map(path => path.getAttribute('d')))).toEqual(before)
-  for (const name of ['Nörondan devreye', 'Rehberli deneyler', 'Devreyi okumak', 'Gerçek veri ve varsayımlar', 'Türler atlası']) {
-    await page.getByRole('navigation', { name: 'Öğrenme ve deneyler', exact: true }).getByRole('link', { name, exact: true }).click()
+  for (const name of [navLabels.neuron, navLabels.guided, navLabels.reading, navLabels.assumptions, navLabels.atlas]) {
+    await navLink(page, name).click()
     await expect(page.getByRole('main')).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Tema', exact: true })).toHaveValue('dark')
     await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(18, 29, 25)')
@@ -35,7 +36,7 @@ test('theme persists across reloads and every lesson without changing experiment
   }
   await page.reload()
   await expect(page.getByRole('combobox', { name: 'Tema', exact: true })).toHaveValue('dark')
-  await page.getByRole('navigation', { name: 'Öğrenme ve deneyler', exact: true }).getByRole('link', { name: 'Devre deneyleri', exact: true }).click()
+  await experimentLink(page).click()
   await expect(curves).toHaveCount(3)
   expect(await curves.evaluateAll(paths => paths.map(path => path.getAttribute('d')))).toEqual(before)
 })

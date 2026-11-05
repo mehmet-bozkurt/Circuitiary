@@ -1,16 +1,13 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
+import { exportRecord } from './support/export'
+import { cell, cells, experimentLink, experimentUi, expectNoHorizontalOverflow, main, navLabels, navLink, view } from './support/ui'
 
 const atlasPath = '/ogren/turler-atlasi'
 const neuronPath = '/ogren/norondan-devreye'
 const guidedPath = '/ogren/rehberli-deneyler'
 const readingPath = '/ogren/devreyi-okumak'
 const assumptionsPath = '/ogren/gercek-veri-ve-varsayimlar'
-const navigation = (page: Page) => page.getByRole('navigation', { name: 'Öğrenme ve deneyler', exact: true })
-const atlasLink = (page: Page) => navigation(page).getByRole('link', { name: 'Türler atlası', exact: true })
-const previousLink = (page: Page, name: string) => navigation(page).getByRole('link', { name, exact: true })
-const experimentLink = (page: Page) => previousLink(page, 'Devre deneyleri')
-const main = (page: Page) => page.getByRole('main')
+const atlasLink = (page: Page) => navLink(page, navLabels.atlas)
 const speciesFilter = (page: Page) => main(page).locator('#atlas-species-filter')
 const recordSelect = (page: Page) => main(page).locator('#atlas-record-select')
 const compareA = (page: Page) => main(page).locator('#atlas-compare-a')
@@ -59,9 +56,6 @@ const expectedRecords: ExpectedRecord[] = [
     metrics: [{ kind: 'neurons', value: 166_700, unit: 'neurons', approximate: false }],
     primary: 'https://doi.org/10.1016/j.cell.2026.08.015' },
 ]
-const cells = (page: Page) => page.getByRole('group', { name: 'İncelenecek hücre', exact: true })
-const cell = (page: Page, id: string) => cells(page).getByRole('button').filter({ has: page.locator('span', { hasText: new RegExp(`^${id}$`) }) })
-const view = (page: Page, id: '2D' | '3D') => page.getByRole('tab', { name: id === '2D' ? '2D · bağlantı haritası' : '3D · şematik uzay', exact: true })
 
 const browserErrors = new WeakMap<Page, string[]>()
 test.beforeEach(async ({ page }) => {
@@ -89,10 +83,6 @@ async function expectAtlas(page: Page) {
   await expect(main(page).getByRole('heading', { name: 'Türler atlası', level: 1, exact: true })).toHaveAttribute('id', 'atlas-title')
   await expect(atlasLink(page)).toHaveAttribute('aria-current', 'page')
   await expect(recordSelect(page)).toBeEnabled()
-}
-
-async function noOverflow(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 }
 
 async function atlasState(page: Page) {
@@ -219,7 +209,7 @@ test('all seven records expose independently pinned counts, units, sex, life sta
     await expect(link).not.toHaveAttribute('download')
     await expect(link).not.toHaveAttribute('target', '_blank')
   }
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
   await page.reload()
   await expectAtlas(page)
   await expect(recordSelect(page)).toHaveValue(defaults.selected)
@@ -275,7 +265,7 @@ test('scope questions explain incorrect and correct reasoning through native lab
     await expect(feedback).not.toHaveAttribute('data-correct')
     await expect(feedback).toContainText('Bir seçenek seçtiğinde açıklama burada görünür.')
   }
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 async function guidedSnapshot(page: Page) {
@@ -302,7 +292,7 @@ test('atlas choices persist independently across all four earlier learning pages
   await page.locator('#lesson-circuit-stimulus').fill('0.3')
   const neuronIds = ['#lesson-stimulus', '#lesson-threshold', '#lesson-circuit-stimulus']
   const neuronBefore = await Promise.all(neuronIds.map(id => page.locator(id).inputValue()))
-  await previousLink(page, 'Rehberli deneyler').click()
+  await navLink(page, navLabels.guided).click()
   await expect(page).toHaveURL(new RegExp(`${guidedPath}$`))
   await page.locator('#guided-stimulus-prediction').selectOption('unsure')
   await main(page).locator('#guided-stimulus').getByRole('button', { name: 'Deneyi çalıştır', exact: true }).click()
@@ -310,7 +300,7 @@ test('atlas choices persist independently across all four earlier learning pages
   const guidedBefore = await guidedSnapshot(page)
   expect(guidedBefore.paths).toHaveLength(2)
   expect(guidedBefore.values.length).toBeGreaterThan(8)
-  await previousLink(page, 'Devreyi okumak').click()
+  await navLink(page, navLabels.reading).click()
   await expect(page).toHaveURL(new RegExp(`${readingPath}$`))
   await expect(main(page)).toHaveAttribute('data-data-state', 'ready')
   await page.locator('#reading-neuron').selectOption('AVER')
@@ -321,7 +311,7 @@ test('atlas choices persist independently across all four earlier learning pages
   await expect(page.getByTestId('reading-step')).toHaveAttribute('data-step-index', '1')
   const readingBefore = await page.getByTestId('reading-path-hops').locator('[data-edge-id]').evaluateAll(hops => hops.map(hop => hop.getAttribute('data-edge-id')))
   expect(readingBefore).toEqual(['gap:AVAR--AVER', 'gap:AVAR--AVBL', 'gap:AVBL--AVBR'])
-  await previousLink(page, 'Gerçek veri ve varsayımlar').click()
+  await navLink(page, navLabels.assumptions).click()
   await expect(page).toHaveURL(new RegExp(`${assumptionsPath}$`))
   await expect(main(page)).toHaveAttribute('data-data-state', 'ready')
   await page.locator('#assumptions-variable').selectOption('time-constant')
@@ -337,32 +327,32 @@ test('atlas choices persist independently across all four earlier learning pages
   await expectAtlas(page)
   await exerciseAtlas(page)
   const atlasBefore = await atlasState(page)
-  await previousLink(page, 'Nörondan devreye').click()
+  await navLink(page, navLabels.neuron).click()
   expect(await Promise.all(neuronIds.map(id => page.locator(id).inputValue()))).toEqual(neuronBefore)
   await atlasLink(page).click()
   await expect.poll(() => atlasState(page)).toEqual(atlasBefore)
   await resetAtlas(page)
-  await previousLink(page, 'Rehberli deneyler').click()
+  await navLink(page, navLabels.guided).click()
   await expect(page.locator('#guided-stimulus-prediction')).toHaveValue('unsure')
   await expect(page.getByTestId('guided-result-stimulus')).toHaveAttribute('data-run-number', '1')
   // Hidden charts legitimately resize; wait for their original visible geometry
   // before asserting exact preservation of every path and recorded numeric value.
   await expect.poll(() => guidedSnapshot(page)).toEqual(guidedBefore)
-  await previousLink(page, 'Devreyi okumak').click()
+  await navLink(page, navLabels.reading).click()
   await expect(page.locator('#reading-neuron')).toHaveValue('AVER')
   await expect(page.locator('#reading-target')).toHaveValue('AVBR')
   await expect(page.locator('#reading-mode')).toHaveValue('gap')
   await expect(page.getByTestId('reading-step')).toHaveAttribute('data-step-index', '1')
   expect(await page.getByTestId('reading-path-hops').locator('[data-edge-id]').evaluateAll(hops => hops.map(hop => hop.getAttribute('data-edge-id')))).toEqual(readingBefore)
-  await previousLink(page, 'Gerçek veri ve varsayımlar').click()
+  await navLink(page, navLabels.assumptions).click()
   await expect(page.locator('#assumptions-variable')).toHaveValue('time-constant')
   await expect(page.locator('#assumptions-comparison-value')).toHaveValue('60')
   await expect(page.getByTestId('assumptions-result')).toHaveAttribute('data-run-number', '1')
   await expect(page.getByTestId('assumptions-result')).toHaveAttribute('data-stale', 'true')
   await expect.poll(() => assumptionsSnapshot(page)).toEqual(assumptionsBefore)
-  await previousLink(page, 'Nörondan devreye').click()
+  await navLink(page, navLabels.neuron).click()
   expect(await Promise.all(neuronIds.map(id => page.locator(id).inputValue()))).toEqual(neuronBefore)
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('species filters affect only the selected catalog record while both independent comparison choices remain usable', async ({ page }) => {
@@ -395,7 +385,7 @@ test('species filters affect only the selected catalog record while both indepen
   await expect(compareB(page)).toHaveValue('hemibrain2020')
   await speciesFilter(page).selectOption('all')
   await expect(recordSelect(page)).toHaveValue(wormSelection)
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('a record can be compared with itself without fabricating a ranking or treating counts with different units as equivalent', async ({ page }) => {
@@ -444,7 +434,7 @@ test('a record can be compared with itself without fabricating a ranking or trea
   await expect(chemical).toHaveAttribute('data-classification', 'missing')
   await expect(chemical.locator('[data-side="right"]')).toHaveAttribute('data-value', 'not-reported')
   await expect(chemical.locator('[data-side="right"]')).toHaveText('Bu atlas kaydında verilmedi')
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('atlas browsing, comparison, answering and reset perform no connectome fetch, external request or dataset download', async ({ page }) => {
@@ -458,7 +448,7 @@ test('atlas browsing, comparison, answering and reset perform no connectome fetc
   await exerciseAtlas(page)
   await resetAtlas(page)
   await recordSelect(page).selectOption('male-cns2026')
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
   const origin = new URL(page.url()).origin
   expect(requests.length).toBeGreaterThan(0)
   expect(requests.filter(request => new URL(request.url).origin !== origin), 'Catalog interactions keep every network request on the local application').toEqual([])
@@ -468,43 +458,6 @@ test('atlas browsing, comparison, answering and reset perform no connectome fetc
   expect(downloads).toEqual([])
 })
 
-interface ExperimentUi {
-  values: Record<string, string>
-  output: string
-  cursor: string
-  selected: string | null
-  condition: string | null
-  graphView: string | null
-  playing: boolean
-  focusedConnections: boolean | null
-  scaledChart: boolean
-}
-async function experimentUi(page: Page): Promise<ExperimentUi> {
-  const values: Record<string, string> = {}
-  for (const id of ['stimulus-target', 'amplitude', 'duration', 'silenced-edge', 'changed-neuron', 'changed-tau', 'base-tau', 'dt', 'chemical-gain', 'gap-gain']) {
-    const control = page.locator(`#${id}`)
-    if (await control.count()) values[id] = await control.inputValue()
-  }
-  const focus = page.getByRole('checkbox', { name: 'Yalnız seçili hücrenin bağlantıları', exact: true })
-  return {
-    values,
-    output: await page.getByRole('combobox', { name: 'İzlenen çıktı hücresi', exact: true }).inputValue(),
-    cursor: await page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true }).inputValue(),
-    selected: await cells(page).getByRole('button', { pressed: true }).locator('span').textContent(),
-    condition: await page.getByRole('group', { name: 'Grafikte gösterilen deney koşulu', exact: true }).getByRole('button', { pressed: true }).textContent(),
-    graphView: await page.getByRole('tab', { selected: true }).textContent(),
-    playing: await page.getByRole('button', { name: 'Oynatmayı duraklat', exact: true }).count() === 1,
-    focusedConnections: await focus.count() ? await focus.isChecked() : null,
-    scaledChart: await page.getByRole('checkbox', { name: 'Yanıta göre dikey ölçek', exact: true }).isChecked(),
-  }
-}
-async function exported(page: Page) {
-  const pending = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Deney kaydını indir/ }).click()
-  const path = await (await pending).path()
-  expect(path).not.toBeNull()
-  return JSON.parse(await readFile(path!, 'utf8')) as Record<string, unknown>
-}
 
 
 test('atlas native fragments, reload, keyboard focus, scroll restoration and touch or actual modified-link tabs retain browser semantics', async ({ page, isMobile }) => {
@@ -566,7 +519,7 @@ test('atlas native fragments, reload, keyboard focus, scroll restoration and tou
       expect(context.pages()).toHaveLength(1)
     }
   }
-  await noOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 for (const experimentMode of ['toy', 'real'] as const) {
@@ -616,7 +569,7 @@ for (const experimentMode of ['toy', 'real'] as const) {
     const beforeUi = await experimentUi(page)
     expect(beforeUi.playing).toBe(true)
     expect(Number(beforeUi.cursor)).toBeGreaterThan(400)
-    const beforeJson = await exported(page)
+    const beforeJson = await exportRecord(page)
     await atlasLink(page).click()
     await expectAtlas(page)
     await expect(page.locator('#amplitude')).not.toBeVisible()
@@ -626,11 +579,11 @@ for (const experimentMode of ['toy', 'real'] as const) {
     await expect(main(page)).toHaveAttribute('id', 'top')
     await expect(cells(page).getByRole('button')).toHaveCount(experimentMode === 'toy' ? 8 : 30)
     expect(await experimentUi(page)).toEqual(beforeUi)
-    expect(await exported(page)).toEqual(beforeJson)
+    expect(await exportRecord(page)).toEqual(beforeJson)
     if (renderer) {
       await expect(page.locator('.circuit-3d')).toHaveAttribute('data-renderer-instance', renderer)
       await expect(page.locator('.circuit-3d')).toHaveAttribute('data-renderer-status', 'ready')
     }
-    await noOverflow(page)
+    await expectNoHorizontalOverflow(page)
   })
 }

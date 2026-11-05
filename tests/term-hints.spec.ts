@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { navLabels, navLink } from './support/ui'
 
 const atlas = '/ogren/turler-atlasi'
 const hermaphrodite = (page: Page) => page.locator('[data-field="sex"] button[data-term="hermafrodit"]')
@@ -6,17 +7,26 @@ const explanation = (page: Page) => page.getByRole('dialog', { name: 'Hermafrodi
 
 test('a term explains its meaning, origin and linked sources on hover', async ({ page, isMobile }) => {
   test.skip(isMobile, 'Touch interaction is checked separately.')
+  // The card closes on a timer after the pointer leaves. Fake time makes that deterministic:
+  // nothing closes it until the test advances the clock, and no wait is tied to the delay.
+  const epoch = new Date('2030-01-01T00:00:00Z')
+  await page.clock.install({ time: epoch })
+  await page.clock.pauseAt(new Date(epoch.getTime() + 1000))
   await page.goto(atlas)
   await hermaphrodite(page).hover()
   await expect(explanation(page)).toContainText('Hermes')
   await expect(explanation(page)).toContainText('Afrodit')
   await expect(explanation(page)).toContainText('önce sperm')
+  // Moving from the word to its card keeps the source links usable: leaving the word arms the close timer,
+  // reaching the card cancels it, and the card is still there once the clock has run far past any delay.
+  await page.mouse.move(0, 0)
   await explanation(page).hover()
-  // Moving from the word to its card keeps the source links usable.
-  await page.waitForTimeout(300)
+  await page.clock.runFor(2000)
   await expect(explanation(page)).toBeVisible()
   await expect(explanation(page).getByRole('link', { name: /Académie française/ })).toHaveAttribute('href', 'https://www.dictionnaire-academie.fr/article/A9H0546')
+  // Control: leaving for good does close the card once the timer runs, so the check above is not vacuous.
   await page.locator('.atlas-summary').hover()
+  await page.clock.runFor(2000)
   await expect(explanation(page)).toHaveCount(0)
 })
 
@@ -63,8 +73,7 @@ test('changing the record removes stale terms and page navigation closes explana
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await page.locator('#atlas-record-select').selectOption('cook2019-hermaphrodite')
   await hermaphrodite(page).click()
-  const navigation = page.getByRole('navigation', { name: 'Öğrenme ve deneyler', exact: true })
-  await navigation.getByRole('link', { name: 'Nörondan devreye', exact: true }).click()
+  await navLink(page, navLabels.neuron).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   const dendrite = page.locator('#lesson-glossary button[data-term="dendrit"]').first()
   await dendrite.click()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import ExperimentPage from './App.vue'
 import { useTheme } from './theme'
 import { activeHint } from './terms/activeHint'
@@ -45,11 +45,22 @@ const guidedRegion = ref<HTMLDivElement>()
 const readingRegion = ref<HTMLDivElement>()
 const assumptionsRegion = ref<HTMLDivElement>()
 const atlasRegion = ref<HTMLDivElement>()
-const NeuronLearningPage = defineAsyncComponent(() => import('./components/NeuronLearningPage.vue'))
-const GuidedExperimentsPage = defineAsyncComponent(() => import('./components/GuidedExperimentsPage.vue'))
-const CircuitReadingPage = defineAsyncComponent(() => import('./components/CircuitReadingPage.vue'))
-const AssumptionsLearningPage = defineAsyncComponent(() => import('./components/AssumptionsLearningPage.vue'))
-const SpeciesAtlasPage = defineAsyncComponent(() => import('./components/SpeciesAtlasPage.vue'))
+// A page chunk can fail to load (offline, or a tab left open across a new build).
+// Retry once on its own, then say so instead of leaving a blank page.
+const PageLoadError = () => h('div', { class: 'page-load-error', role: 'alert' }, [
+  h('p', 'Bu sayfa yüklenemedi. İnternet bağlantını denetleyip sayfayı yenile; yeni sürüm yayımlandıysa açık sekme eski dosyaları arıyor olabilir.'),
+  h('button', { type: 'button', onClick: () => location.reload() }, 'Sayfayı yenile'),
+])
+const lazyPage = (loader: () => Promise<Component>) => defineAsyncComponent({
+  loader,
+  errorComponent: PageLoadError,
+  onError: (_error, retry, fail, attempts) => { if (attempts <= 1) retry(); else fail() },
+})
+const NeuronLearningPage = lazyPage(() => import('./components/NeuronLearningPage.vue'))
+const GuidedExperimentsPage = lazyPage(() => import('./components/GuidedExperimentsPage.vue'))
+const CircuitReadingPage = lazyPage(() => import('./components/CircuitReadingPage.vue'))
+const AssumptionsLearningPage = lazyPage(() => import('./components/AssumptionsLearningPage.vue'))
+const SpeciesAtlasPage = lazyPage(() => import('./components/SpeciesAtlasPage.vue'))
 let pendingFocus: { page: Page; hash: string; scroll: boolean } | undefined
 let inspectionToken = 0
 const handoffLoading = ref(false)
@@ -183,7 +194,7 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
     </nav>
     <!-- First visit mounts each view. Later visits preserve its independent state. -->
     <div v-show="page === 'experiment'" ref="experimentRegion" class="view-page">
-      <ExperimentPage v-if="experimentMounted" ref="experimentPage" />
+      <ExperimentPage v-if="experimentMounted" ref="experimentPage" :suspended="page !== 'experiment'" />
     </div>
     <div v-show="page === 'lesson'" ref="lessonRegion" class="view-page">
       <NeuronLearningPage v-if="lessonMounted" @ready="completeFocus" />
@@ -215,6 +226,8 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
 .section-navigation a[aria-current="page"] { background: #2c483b; color: #f7f7eb; border-color: #2c483b; }
 .shell-skip-link { position: fixed; left: 16px; top: -100px; z-index: 100; padding: 14px 18px; background: var(--theme-surface, #f5f4ed); color: var(--theme-text, #263b35); border: 2px solid #b78231; border-radius: 5px; }
 .shell-skip-link:focus { top: 12px; }
+.view-page :deep(.page-load-error) { max-width: 760px; margin: 40px auto; padding: 18px 44px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; color: var(--theme-text, #263b35); }
+.view-page :deep(.page-load-error button) { min-height: 44px; padding: 9px 14px; }
 .view-page :deep(h1[tabindex="-1"]:focus-visible) { outline: 3px solid var(--theme-focus, #b78231); outline-offset: 8px; border-radius: 3px; }
 @media (max-width: 1050px) { .section-navigation { padding-left: 28px; padding-right: 28px; } }
 @media (max-width: 760px) { .section-navigation { padding: 12px 18px; align-items: start; flex-direction: column; gap: 9px; } .section-navigation-links { width: 100%; } .section-navigation a { flex: 1; justify-content: center; font-size: 11px; padding: 9px 10px; } }

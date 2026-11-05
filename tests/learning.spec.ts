@@ -74,6 +74,10 @@ test('export contains circuit, assumptions, settings and computed traces', async
 })
 
 test('playback and keyboard seeking display the actual sampled time', async ({ page }) => {
+  // Playback advances 0.22 model ms per ms of frame time; fake time makes the run independent of machine speed.
+  const epoch = new Date('2030-01-01T00:00:00Z')
+  await page.clock.install({ time: epoch })
+  await page.clock.pauseAt(new Date(epoch.getTime() + 1000))
   await page.goto('/')
   await page.locator('#dt').selectOption('2')
   const timeSlider = page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true })
@@ -83,6 +87,8 @@ test('playback and keyboard seeking display the actual sampled time', async ({ p
   await expect(timeSlider).toHaveValue('102')
   await expect(page.locator('.timeline output')).toContainText('102')
   await page.getByRole('button', { name: 'Etkinliği oynat', exact: true }).click()
-  await expect(page.locator('.timeline output')).toContainText('700', { timeout: 7000 })
+  // (700 - 102) / 0.22 is about 2720 ms of frames; run past it so playback reaches the last sample.
+  await page.clock.runFor(4000)
+  await expect(page.locator('.timeline output')).toContainText('700')
   await expect(page.getByRole('button', { name: 'Etkinliği oynat', exact: true })).toBeVisible()
 })

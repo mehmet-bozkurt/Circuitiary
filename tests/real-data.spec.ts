@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
+import { exportRecord } from './support/export'
+import { cells } from './support/ui'
 import type { Circuit, RealConnectome, RealModelParameters, SimulationResult } from '../src/model/types'
 
 const SOURCE_HASHES = [
@@ -30,7 +31,7 @@ interface Experiment {
 const modeGroup = (page: Page) => page.getByRole('group', { name: 'Devre modu', exact: true })
 const realButton = (page: Page) => modeGroup(page).getByRole('button', { name: 'C. elegans · gerçek veri', exact: true })
 const toyButton = (page: Page) => modeGroup(page).getByRole('button', { name: 'Sekiz hücreli örnek', exact: true })
-const cellButtons = (page: Page) => page.getByRole('group', { name: 'İncelenecek hücre', exact: true }).getByRole('button')
+const cellButtons = (page: Page) => cells(page).getByRole('button')
 const outputPicker = (page: Page) => page.getByRole('combobox', { name: 'İzlenen çıktı hücresi', exact: true })
 
 async function readSource(page: Page): Promise<RealConnectome> {
@@ -49,15 +50,7 @@ async function enterRealMode(page: Page): Promise<RealConnectome> {
   return data
 }
 
-async function exportExperiment(page: Page, expectedName = 'circuitiary-cook2019-local-experiment.json'): Promise<Experiment> {
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Deney kaydını indir/ }).click()
-  const download = await downloadPromise
-  expect(download.suggestedFilename()).toBe(expectedName)
-  const path = await download.path()
-  expect(path).not.toBeNull()
-  return JSON.parse(await readFile(path!, 'utf8')) as Experiment
-}
+const exportExperiment = (page: Page, expectedName = 'circuitiary-cook2019-local-experiment.json') => exportRecord<Experiment>(page, expectedName)
 
 function incidentCount(data: RealConnectome, neuron: string): number {
   return data.chemicalEdges.filter(edge => edge.source === neuron || edge.target === neuron).length

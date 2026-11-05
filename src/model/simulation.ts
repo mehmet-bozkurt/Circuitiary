@@ -17,6 +17,15 @@ function unitInterval(value: number, name: string): void {
   if (value < 0 || value > 1) throw new Error(`${name} must be in [0, 1].`)
 }
 
+/**
+ * Looks a neuron ID up among the record's own enumerable keys only, exactly the
+ * keys validate() checks through Object.entries. A plain `record?.[id]` would
+ * also find Object.prototype members such as 'constructor' and yield NaN.
+ */
+function ownValue(record: Record<string, number> | undefined, id: string): number | undefined {
+  return record !== undefined && Object.prototype.propertyIsEnumerable.call(record, id) ? record[id] : undefined
+}
+
 function validate(circuit: Circuit, config: SimulationConfig): Map<string, number> {
   if (circuit.neurons.length === 0) throw new Error('The circuit must contain at least one neuron.')
   const neuronIds = new Set<string>()
@@ -82,7 +91,7 @@ function validate(circuit: Circuit, config: SimulationConfig): Map<string, numbe
     positive(tau, `Time constant for ${id}`)
   }
   for (const neuron of circuit.neurons) {
-    const tau = config.tauOverrides?.[neuron.id] ?? config.tauMs
+    const tau = ownValue(config.tauOverrides, neuron.id) ?? config.tauMs
     const maximumStep = tau / (1 + gapIncident.get(neuron.id)!)
     if (config.dtMs > maximumStep) {
       throw new Error(`dtMs must not exceed tau / (1 + active incident gap conductance) = ${maximumStep} for ${neuron.id}.`)
@@ -117,7 +126,11 @@ function copySettings(config: SimulationConfig): SimulationConfig {
  * Every update reads only the previous state. The pulse is evaluated at the
  * left endpoint, active on [onset, onset + duration). A partial final step
  * reaches durationMs exactly. dt <= tau_i / (1 + sum_j active g_ij) makes the
- * update a convex blend; the resulting state is never clipped.
+ * update a convex blend; the resulting state is never clipped. In real
+ * arithmetic the state therefore stays in [0, 1]. In floating point it can
+ * leave that interval by a few ulp (observed at most 4.4e-16) exactly at the
+ * dt bound with non-dyadic tau and g. It is deliberately left unclamped, so
+ * no clipping can hide a violated bound.
  */
 export function simulate(circuit: Circuit, config: SimulationConfig): SimulationResult {
   const gapIncidentById = validate(circuit, config)
@@ -133,8 +146,8 @@ export function simulate(circuit: Circuit, config: SimulationConfig): Simulation
   const chemicals = connections.filter((connection) => !connection.gap)
   const gaps = connections.filter((connection) => connection.gap)
   const gapIncident = circuit.neurons.map((neuron) => gapIncidentById.get(neuron.id)!)
-  const tau = circuit.neurons.map((neuron) => config.tauOverrides?.[neuron.id] ?? config.tauMs)
-  let state = circuit.neurons.map((neuron) => config.initialState?.[neuron.id] ?? 0)
+  const tau = circuit.neurons.map((neuron) => ownValue(config.tauOverrides, neuron.id) ?? config.tauMs)
+  let state = circuit.neurons.map((neuron) => ownValue(config.initialState, neuron.id) ?? 0)
   const activity = Object.fromEntries(circuit.neurons.map((neuron, index) => [neuron.id, [state[index]!]]))
   const timesMs = [0]
   const stepCount = Math.ceil(config.durationMs / config.dtMs)

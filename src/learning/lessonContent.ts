@@ -1,3 +1,5 @@
+import { glossaryTerms } from '../terms/glossary'
+
 export const lessonSources = {
   seer: { title: 'NIH / NCI SEER — sinir dokusu ve nöronun parçaları', url: 'https://training.seer.cancer.gov/anatomy/nervous/tissue.html' },
   openstax: { title: 'Rice University / OpenStax — Nervous Tissue', url: 'https://openstax.org/books/anatomy-and-physiology-2e/pages/12-2-nervous-tissue' },
@@ -86,16 +88,23 @@ export const lessonSections: {
   },
 ]
 
-export const glossary = [
-  ['Soma', 'Hücre gövdesi.'], ['Dendrit', 'Birçok nöronda girdilerin alındığı uzantı.'],
-  ['Akson', 'Birçok hücrede sinyali uzak bölgelere taşıyan uzantı.'], ['Zar potansiyeli', 'Hücre içi ve dışı arasındaki gerilim farkı.'],
+// Terms that also have a hint card take their meaning from src/terms/glossary.ts; only lesson-only terms are defined here.
+const shared = (id: string): readonly [string, string] => {
+  const term = glossaryTerms.find(candidate => candidate.id === id)
+  if (!term) throw new RangeError(`Unknown glossary term: ${id}`)
+  return [term.title, term.meaning]
+}
+
+export const glossary: readonly (readonly [term: string, description: string])[] = [
+  shared('soma'), shared('dendrit'),
+  shared('akson'), ['Zar potansiyeli', 'Hücre içi ve dışı arasındaki gerilim farkı.'],
   ['Depolarizasyon', 'Potansiyelin daha pozitif yöne değişmesi.'], ['Hiperpolarizasyon', 'Potansiyelin daha negatif yöne değişmesi.'],
   ['Eşik', 'Bu gösterimde olayın tetiklendiği sınır; biyolojide koşullara bağlıdır.'],
-  ['Presinaptik / postsinaptik', 'İleten taraf / yanıtlayan taraf.'], ['Reseptör', 'İleticiye yanıt veren protein.'],
-  ['Şönt baskılanması', 'Artan iletkenliğin diğer girdinin gerilim etkisini azaltması.'], ['Plastisite', 'Sinaptik etkinin geçmişe bağlı değişmesi.'],
-  ['Gap junction', 'Hücreler arasında doğrudan akım geçiren kanallar.'], ['Konnektom', 'Sinir sistemindeki bağlantıların haritası.'],
+  ['Presinaptik / postsinaptik', 'İleten taraf / yanıtlayan taraf.'], shared('reseptor'),
+  ['Şönt baskılanması', 'Artan iletkenliğin diğer girdinin gerilim etkisini azaltması.'], shared('plastisite'),
+  shared('gap-junction'), shared('konnektom'),
   ['Model', 'Seçilmiş varsayımlarla bir sistemin belirli özelliklerini temsil eden tanım.'],
-] as const
+]
 
 export const selfChecks = [
   { id: 'q1', question: 'Tipik nöron çiziminde dendritlerin temel görevi nedir?', options: [

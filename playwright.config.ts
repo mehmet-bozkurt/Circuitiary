@@ -5,8 +5,18 @@ import { defineConfig, devices } from '@playwright/test'
 // test:evidence` points it at a new timestamped folder instead, so a kept
 // evidence run never reuses (and therefore never clears) an earlier one.
 const outputDir = process.env.CIRCUITIARY_EVIDENCE_DIR ?? './test-results/latest'
-const devURL = 'http://127.0.0.1:4176'
-const previewURL = 'http://127.0.0.1:4177'
+// Both servers run with strictPort, so a second run (or anything already
+// listening on 4176/4177) fails fast. CIRCUITIARY_DEV_PORT and
+// CIRCUITIARY_PREVIEW_PORT move a run to other ports so two runs can overlap.
+function port(name: string, fallback: number): number {
+  const value = Number(process.env[name] || fallback)
+  if (!Number.isInteger(value) || value < 1 || value > 65535) throw new Error(`${name} must be a port number from 1 to 65535`)
+  return value
+}
+const devPort = port('CIRCUITIARY_DEV_PORT', 4176)
+const previewPort = port('CIRCUITIARY_PREVIEW_PORT', 4177)
+const devURL = `http://127.0.0.1:${devPort}`
+const previewURL = `http://127.0.0.1:${previewPort}`
 const desktop = { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1050 } }
 const mobile = { ...devices['iPhone 13'], defaultBrowserType: 'chromium' as const }
 // The extra profiles run only the cross-page evidence scenarios.
@@ -32,9 +42,9 @@ export default defineConfig({
     { name: 'production-mobile', testMatch: evidenceOnly, use: { ...mobile, baseURL: previewURL } },
   ],
   webServer: [
-    { command: 'npm run dev -- --port 4176', url: devURL, reuseExistingServer: false },
+    { command: `npm run dev -- --port ${devPort}`, url: devURL, reuseExistingServer: false },
     // Full type check and production bundle in dist/, then the same local preview
     // server README documents; it also serves /api/local-connectome.
-    { command: 'npm run build && npm run preview -- --port 4177', url: previewURL, reuseExistingServer: false, timeout: 180_000 },
+    { command: `npm run build && npm run preview -- --port ${previewPort}`, url: previewURL, reuseExistingServer: false, timeout: 180_000 },
   ],
 })

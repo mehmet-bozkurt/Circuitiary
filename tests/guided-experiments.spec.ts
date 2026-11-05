@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
+import { exportRecord } from './support/export'
+import { cell, cells, experimentLink, expectNoHorizontalOverflow, main, navLabels, navLink, view } from './support/ui'
 import { defaultConfig, illustrativeCircuit } from '../src/model/circuit'
 import { simulate } from '../src/model/simulation'
 import type { SimulationConfig, SimulationResult } from '../src/model/types'
@@ -7,18 +8,12 @@ import type { SimulationConfig, SimulationResult } from '../src/model/types'
 type ExperimentId = 'stimulus' | 'connection' | 'tau'
 const guidedPath = '/ogren/rehberli-deneyler'
 const lessonPath = '/ogren/norondan-devreye'
-const navigation = (page: Page) => page.getByRole('navigation', { name: 'Öğrenme ve deneyler', exact: true })
-const guidedLink = (page: Page) => navigation(page).getByRole('link', { name: 'Rehberli deneyler', exact: true })
-const lessonLink = (page: Page) => navigation(page).getByRole('link', { name: 'Nörondan devreye', exact: true })
-const experimentLink = (page: Page) => navigation(page).getByRole('link', { name: 'Devre deneyleri', exact: true })
-const main = (page: Page) => page.getByRole('main')
+const guidedLink = (page: Page) => navLink(page, navLabels.guided)
+const lessonLink = (page: Page) => navLink(page, navLabels.neuron)
 const section = (page: Page, id: ExperimentId) => main(page).locator(`#guided-${id}`)
 const result = (page: Page, id: ExperimentId) => section(page, id).getByTestId(`guided-result-${id}`)
 const runSettings = (page: Page, id: ExperimentId) => section(page, id).getByTestId(`guided-run-settings-${id}`)
 const prediction = (page: Page, id: ExperimentId) => section(page, id).locator(`#guided-${id}-prediction`)
-const cells = (page: Page) => page.getByRole('group', { name: 'İncelenecek hücre', exact: true })
-const cell = (page: Page, id: string) => cells(page).getByRole('button').filter({ has: page.locator('span', { hasText: new RegExp(`^${id}$`) }) })
-const view = (page: Page, id: '2D' | '3D') => page.getByRole('tab', { name: id === '2D' ? '2D · bağlantı haritası' : '3D · şematik uzay', exact: true })
 const browserErrors = new WeakMap<Page, string[]>()
 
 test.beforeEach(async ({ page }) => {
@@ -46,10 +41,6 @@ async function expectGuided(page: Page) {
   await expect(main(page)).toHaveAttribute('id', 'guided-experiments')
   await expect(main(page).getByRole('heading', { name: 'Rehberli deneyler', level: 1, exact: true })).toBeVisible()
   await expect(guidedLink(page)).toHaveAttribute('aria-current', 'page')
-}
-
-async function expectNoOverflow(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 }
 
 function enginePair(id: ExperimentId, options: { connectionId?: string; comparisonTauMs?: number } = {}) {
@@ -84,14 +75,6 @@ async function readNumber(locator: Locator) {
   const value = token ? Number(token.replace('−', '-').replace(',', '.')) : Number.NaN
   expect(Number.isFinite(value), `Expected a finite numeric readout: ${text}`).toBe(true)
   return value
-}
-
-async function exported(page: Page) {
-  const pending = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Deney kaydını indir/ }).click()
-  const path = await (await pending).path()
-  expect(path).not.toBeNull()
-  return JSON.parse(await readFile(path!, 'utf8'))
 }
 
 async function traceMatches(path: Locator, simulation: SimulationResult) {
@@ -219,11 +202,11 @@ test('guided direct load and reload expose accessible unrun cards, keyboard focu
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`${guidedPath}#guided-experiments$`))
   await expect(main(page)).toBeFocused()
-  await expectNoOverflow(page)
+  await expectNoHorizontalOverflow(page)
   await page.reload()
   await expectGuided(page)
   await expect(page.getByTestId('guided-progress')).toHaveText('0/3 deney çalıştırıldı')
-  await expectNoOverflow(page)
+  await expectNoHorizontalOverflow(page)
   await page.screenshot({ path: testInfo.outputPath('guided-unrun.png'), fullPage: true })
 })
 
@@ -260,7 +243,7 @@ test('optional or wrong predictions still run the real stimulus engine and prese
   await expect(result(page, 'stimulus')).toHaveCount(0)
   await expect(prediction(page, 'stimulus')).toHaveValue('')
   await expect(page.getByTestId('guided-progress')).toHaveText('0/3 deney çalıştırıldı')
-  await expectNoOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('lesson answers and controls and guided snapshots survive route changes and native history independently', async ({ page }, testInfo) => {
@@ -291,7 +274,7 @@ test('lesson answers and controls and guided snapshots survive route changes and
   await expectEngineResult(page, 'stimulus')
   await expect(page.getByTestId('guided-recorded-prediction-stimulus')).toContainText('Emin değilim')
   await expect(page.getByTestId('guided-prediction-feedback-stimulus')).toContainText('Emin değilim')
-  await expectNoOverflow(page)
+  await expectNoHorizontalOverflow(page)
   await page.screenshot({ path: testInfo.outputPath('guided-stimulus-result.png'), fullPage: true })
   await lessonLink(page).click()
   await expectLessonState()
@@ -311,7 +294,7 @@ test('lesson answers and controls and guided snapshots survive route changes and
   await expect(page.getByTestId('guided-progress')).toHaveText('0/3 deney çalıştırıldı')
   await lessonLink(page).click()
   await expectLessonState()
-  await expectNoOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('guided comparisons preserve the original toy experiment and the real anatomy, 3D view and complete simulation record', async ({ page }) => {
@@ -322,7 +305,7 @@ test('guided comparisons preserve the original toy experiment and the real anato
   await page.getByRole('slider', { name: 'Simülasyon zamanı', exact: true }).fill('400')
   await cell(page, 'O2').click()
   await page.getByRole('button', { name: 'C Zaman sabiti değişti', exact: true }).click()
-  const toyBefore = await exported(page)
+  const toyBefore = await exportRecord(page)
   await guidedLink(page).click()
   await expectGuided(page)
   await expect(page.locator('#amplitude')).not.toBeVisible()
@@ -338,7 +321,7 @@ test('guided comparisons preserve the original toy experiment and the real anato
   await expect(cell(page, 'O2')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('button', { name: 'C Zaman sabiti değişti', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(view(page, '2D')).toHaveAttribute('aria-selected', 'true')
-  expect(await exported(page)).toEqual(toyBefore)
+  expect(await exportRecord(page)).toEqual(toyBefore)
 
   await page.getByRole('group', { name: 'Devre modu', exact: true }).getByRole('button', { name: 'C. elegans · gerçek veri', exact: true }).click()
   await expect(cells(page).getByRole('button')).toHaveCount(30)
@@ -348,7 +331,7 @@ test('guided comparisons preserve the original toy experiment and the real anato
   await cell(page, 'AVAR').click()
   await view(page, '3D').click()
   await expect(page.locator('.circuit-3d')).toHaveAttribute('data-renderer-status', 'ready', { timeout: 15_000 })
-  const realBefore = await exported(page)
+  const realBefore = await exportRecord(page)
   await guidedLink(page).click()
   await expectGuided(page)
   await expect(result(page, 'stimulus')).toHaveAttribute('data-run-number', '1')
@@ -368,8 +351,8 @@ test('guided comparisons preserve the original toy experiment and the real anato
   await expect(page.locator('#gap-gain')).toHaveValue('0.4')
   await expect(page.locator('#amplitude')).toHaveValue('0.6')
   await expect(page.getByRole('region', { name: 'Gerçek veri kaynağı ve sınırları', exact: true })).toBeVisible()
-  expect(await exported(page)).toEqual(realBefore)
-  await expectNoOverflow(page)
+  expect(await exportRecord(page)).toEqual(realBefore)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('guided navigation preserves old hashes and browser history and supports native touch, modified and middle clicks', async ({ page, isMobile }) => {
@@ -405,7 +388,7 @@ test('guided navigation preserves old hashes and browser history and supports na
     await experimentLink(page).tap()
     await expect(page).toHaveURL(/\/$/)
     await expect(main(page)).toHaveAttribute('id', 'top')
-    await expectNoOverflow(page)
+    await expectNoHorizontalOverflow(page)
     return
   }
   // A native link tab can lack an opener. BrowserContext.page observes the
@@ -430,7 +413,7 @@ test('guided navigation preserves old hashes and browser history and supports na
   await expect(page).toHaveURL(sourceUrl)
   await middle.close()
   expect(context.pages()).toHaveLength(1)
-  await expectNoOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('connection and O1 tau drafts leave old results intact, reruns match the engine and resets stay scoped', async ({ page }) => {
@@ -487,7 +470,7 @@ test('connection and O1 tau drafts leave old results intact, reruns match the en
   }
   await expect(slider).toHaveValue('90')
   await expect(page.getByTestId('guided-progress')).toHaveText('0/3 deney çalıştırıldı')
-  await expectNoOverflow(page)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('a "near" prediction matches a peak change below five percent but not a larger one', async ({ page }) => {

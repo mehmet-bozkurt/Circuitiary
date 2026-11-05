@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { glossary as lessonGlossary } from '../learning/lessonContent'
 import { glossaryTerms, splitTerms } from './glossary'
 
 describe('term explanations', () => {
@@ -28,5 +29,19 @@ describe('term explanations', () => {
       expect(term.sources.length).toBeGreaterThan(0)
       for (const source of term.sources) expect(new URL(source.url).protocol).toBe('https:')
     }
+  })
+  it('defines each term once: lesson terms that have a hint card reuse its meaning', () => {
+    const titles = lessonGlossary.map(([term]) => term)
+    expect(new Set(titles).size).toBe(titles.length)
+    const shared: string[] = []
+    for (const [term, description] of lessonGlossary) {
+      const segments = splitTerms(term)
+      const hinted = segments.length === 1 ? segments[0]!.term : undefined
+      if (!hinted) continue
+      shared.push(term)
+      expect(description, term).toBe(hinted.meaning)
+    }
+    // Every term the lesson shares with the hint glossary keeps its hint, and none is redefined.
+    expect(shared).toEqual(['Soma', 'Dendrit', 'Akson', 'Reseptör', 'Plastisite', 'Gap junction', 'Konnektom'])
   })
 })
