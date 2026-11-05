@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
+  // Playwright clears outputDir on every run; keep it in a subfolder so the
+  // dated evidence folders under test-results/ survive a plain test run.
+  outputDir: './test-results/latest',
   fullyParallel: false,
   workers: 1,
   reporter: 'list',

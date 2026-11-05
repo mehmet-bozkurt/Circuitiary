@@ -88,11 +88,17 @@ npm run build
 npm run test:browser
 ```
 
-Tarayıcı testleri Mac mini'de zaten kurulu Google Chrome ile masaüstü ve mobil görünümde çalışır; yeni tarayıcı kurulumu gerekmez. Alternatif konum için `CIRCUITIARY_CHROME_PATH` kullanılabilir. [Doğrulama kaydı](docs/verification.md), geçen kontrolleri ve sınırları belirtir.
+Tarayıcı testleri Mac mini'de zaten kurulu Google Chrome ile masaüstü ve mobil görünümde çalışır; yeni tarayıcı kurulumu gerekmez. Alternatif konum için `CIRCUITIARY_CHROME_PATH` kullanılabilir. [İlk aşamanın doğrulama kaydı](docs/verification.md) (3 Ekim 2026) o günkü kontrolleri ve sınırları belirtir; bugünkü sayılar aşağıdaki bölümdedir.
+
+Playwright çıktısı `test-results/latest/` altına yazılır ve her koşuda yalnız bu klasör temizlenir; `test-results/` altındaki tarihli kanıt klasörleri korunur. `--output` ile bir klasör verilirse o klasör koşu başında silinip yeniden yazılır.
+
+### Güncel doğrulama durumu
+
+5 Kasım 2026: **190 birim testi, 15 Python testi geçti; 160 tarayıcı senaryosundan 158'i geçti, 2'si kapsamı gereği atlandı** (masaüstünde mobil dokunma, mobilde fareyle üzerine gelme). Tam tür kontrolü ve üretim derlemesi geçti. Tarayıcı: sistemdeki Google Chrome 156.0.8078.81, Playwright 1.63.0. Aşağıdaki bölümlerdeki “Bu aşamanın doğrulaması” cümleleri o aşamaya ait geçmiş kayıtlardır.
 
 ## Yerel veri / paylaşım sınırı
 
-Dosyaya özgü yeniden dağıtım lisansı **doğrulanmadı**. XLSX ve türetilmiş gerçek altküme `.gitignore` kapsamındadır; `public/` veya `dist/` içine eklenmez. `/api/local-connectome`, yalnız loopback ve aynı yerel origin üzerinden, kesin tek yerel dosyayı okur. Dev ve `npm run preview` bu uç noktayı sağlar; statik bir dağıtımda veri olmadığında uygulama açıklayıcı hata gösterir ve öğretici mod çalışır.
+Dosyaya özgü yeniden dağıtım lisansı **doğrulanmadı**. XLSX ve türetilmiş gerçek altküme `.gitignore` kapsamındadır; `public/` veya `dist/` içine eklenmez. `/api/local-connectome`, yalnız loopback ve aynı yerel origin üzerinden, kesin tek yerel dosyayı okur. Dev sunucusu `data/raw/` ve `data/local/` dosyalarını doğrudan adresle sunmaz (`server.fs.deny`, 403); veri yalnız bu uç noktadan okunur. Dev ve `npm run preview` bu uç noktayı sağlar; statik bir dağıtımda veri olmadığında uygulama açıklayıcı hata gösterir ve öğretici mod çalışır.
 
 Veriyi veya gerçek veri içeren deney JSON'unu halka açık paylaşmadan önce açık lisans/yazar izni doğrulanmalıdır. Bu çalışmada yayımlama yapılmadı. Kod için paylaşım lisansı henüz seçilmedi; bağımlılıkların kendi lisansları paketlerinde korunur.
 
@@ -125,7 +131,7 @@ Gerçek veri deney JSON'unda görünüm seçimi `display.graphView`, şematik ye
 
 Yeni görünümün kabul senaryoları ve sonuç kaydı [3D doğrulama belgesinde](docs/3d-verification.md) yer alır. Önceki sayısal/veri doğrulaması [mevcut doğrulama kaydında](docs/verification.md) korunur.
 
-Son 3D doğrulaması: **92 birim testi, 15 Python testi, 51 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma senaryosu kasıtlı olarak atlandı, mobilde çalıştı ve geçti. Son tam tür kontrolü ve üretim derlemesi geçti. Korunan 11 model/veri/2D dosyasının SHA-256 değerleri aynı kaldı. Apple M4/Metal WebGL2 üzerinde masaüstü, mobil görünüm ve iki modun üretim önizlemesi incelendi; sayısal JSON sonuçları değişmedi. Safari/Firefox ve fiziksel iPhone test edilmedi. Kanıtlar `test-results/3d-visual/` altındadır.
+Bu aşamanın doğrulaması (Ekim 2026, geçmiş kayıt): **92 birim testi, 15 Python testi, 51 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma senaryosu kasıtlı olarak atlandı, mobilde çalıştı ve geçti. Son tam tür kontrolü ve üretim derlemesi geçti. Korunan 11 model/veri/2D dosyasının SHA-256 değerleri aynı kaldı. Apple M4/Metal WebGL2 üzerinde masaüstü, mobil görünüm ve iki modun üretim önizlemesi incelendi; sayısal JSON sonuçları değişmedi. Safari/Firefox ve fiziksel iPhone test edilmedi. Kanıtlar `test-results/3d-visual/` altındadır.
 
 ## Öğrenme: Nörondan devreye
 
@@ -146,7 +152,7 @@ Yeni paket eklenmedi. İçerik ve özgün SVG çizimleri yereldir; kaynaklar yal
 
 Ayar değişikliği kayıtlı sonucu değiştirmez; eski kayıt açıkça işaretlenir ve yeni ayar için yeniden çalıştırılır. Tahmin de çalıştırma anında kaydedilir. Tek bölüm veya bütün rehberli deneyler sıfırlanabilir. İlk dersin cevapları ile ana deneyin ayarları, 2D/3D görünümü ve sayısal sonuçları sayfa geçişlerinde korunur; yenileme varsayılanları açar.
 
-Son doğrulamada **134 birim testi, 15 Python testi ve 85 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma testi kasıtlı olarak atlandı, mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/dar ekran ve yerel üretim önizlemesi geçti. Önceki 40 korunan dosya aynı kaldı; yeni paket eklenmedi. [Deneylerin kapsamı, varsayımları ve doğrulama kaydı](docs/guided-experiments.md) ayrıntıları açıklar. Kanıtlar `test-results/guided-visual/` ve `test-results/guided-browser/` altındadır.
+Bu aşamanın doğrulamasında (Ekim 2026, geçmiş kayıt) **134 birim testi, 15 Python testi ve 85 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma testi kasıtlı olarak atlandı, mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/dar ekran ve yerel üretim önizlemesi geçti. Önceki 40 korunan dosya aynı kaldı; yeni paket eklenmedi. [Deneylerin kapsamı, varsayımları ve doğrulama kaydı](docs/guided-experiments.md) ayrıntıları açıklar. Kanıtlar `test-results/guided-visual/` ve `test-results/guided-browser/` altındadır.
 
 
 ## Öğrenme: Devreyi okumak
@@ -157,7 +163,7 @@ Ham birim seri EM kesiti ağırlığıdır; sinaps sayısı veya ölçülmüş e
 
 Hücre/yol incelemesi ana deneyi değiştirmez. **Ana deneyde bu hücreyi incele** düğmesi açık aktarım yapar: gerçek modda yalnız seçili hücre değişir; bütün ayarlar, sonuçlar, zaman, oynatma ve 2D/3D görünümü korunur. İlk örnek→gerçek aktarımında geçersiz hücre/kenar kimlikleri uyarlanır; sayısal ayarlar korunur. Önceki örnek deney, mevcut **Sekiz hücreli örnek** düğmesiyle tam olarak geri alınabilir. İlk iki öğrenme sayfasının cevapları ve sonuçları da sayfa geçişlerinde korunur.
 
-Son doğrulamada **153 birim testi, 15 Python testi ve 103 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma testi kasıtlı olarak atlandı, mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/320 px dar ekran ve yerel üretim önizlemesi geçti. Önceki 46 korunan dosya, deney template/styles ve Shell CSS aynı kaldı; yeni paket eklenmedi. [Sayfanın kapsamı, kaynakları ve doğrulama kaydı](docs/circuit-reading.md) ayrıntıları açıklar. Kanıtlar `test-results/reading-browser-complete/` ve `test-results/reading-visual/` altındadır.
+Bu aşamanın doğrulamasında (Ekim 2026, geçmiş kayıt) **153 birim testi, 15 Python testi ve 103 tarayıcı testi geçti**; yalnız masaüstündeki mobil dokunma testi kasıtlı olarak atlandı, mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/320 px dar ekran ve yerel üretim önizlemesi geçti. Önceki 46 korunan dosya, deney template/styles ve Shell CSS aynı kaldı; yeni paket eklenmedi. [Sayfanın kapsamı, kaynakları ve doğrulama kaydı](docs/circuit-reading.md) ayrıntıları açıklar. Kanıtlar `test-results/reading-browser-complete/` ve `test-results/reading-visual/` altındadır.
 
 
 ## Öğrenme: Gerçek veri ve varsayımlar
@@ -166,7 +172,7 @@ Son doğrulamada **153 birim testi, 15 Python testi ve 103 tarayıcı testi geç
 
 Kontrollü örnekte aynı anatomi iki kez mevcut motorla hesaplanır. İkinci koşulda yalnız kimyasal çarpan, elektriksel çarpan veya bütün hücrelerin τ değeri değişir. Başlangıçta sonuç yoktur; açık çalıştırmanın ardından iki AVAR eğrisi, kayıt parametreleri, hesaplanan ölçütler ve ham/normalize ağırlık örnekleri gösterilir. Kaydırıcı değişince eski kayıt korunur; yeniden çalıştırma gerekir. İki eğri aynı görünür ölçeği kullanır. Sıfır çarpan anatomik kaydı silmez; kayıt sonundaki maksimum kararlı durum sayılmaz.
 
-İlk üç ders, ana deneyin bütün ayarları, sayısal sonuçları, oynatma/zamanı ve 2D/3D görünümü korunur. Son doğrulamada **173 birim, 15 veri ve 121 tarayıcı testi geçti**; masaüstünde atlanan mobil dokunma senaryosu mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/320 px reduced-motion ve yerel üretim önizlemesi geçti. Önceki 59 korunan dosya, App bütünü ve Shell CSS aynı kaldı; yeni paket eklenmedi. [Kapsam, birincil kaynaklar ve doğrulama kaydı](docs/real-data-assumptions.md) ayrıntıları açıklar. Kanıtlar `test-results/assumptions-browser-final/` ve `test-results/assumptions-visual/` altındadır.
+İlk üç ders, ana deneyin bütün ayarları, sayısal sonuçları, oynatma/zamanı ve 2D/3D görünümü korunur. Bu aşamanın doğrulamasında (Ekim 2026, geçmiş kayıt) **173 birim, 15 veri ve 121 tarayıcı testi geçti**; masaüstünde atlanan mobil dokunma senaryosu mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/320 px reduced-motion ve yerel üretim önizlemesi geçti. Önceki 59 korunan dosya, App bütünü ve Shell CSS aynı kaldı; yeni paket eklenmedi. [Kapsam, birincil kaynaklar ve doğrulama kaydı](docs/real-data-assumptions.md) ayrıntıları açıklar. Kanıtlar `test-results/assumptions-browser-final/` ve `test-results/assumptions-visual/` altındadır.
 
 
 ## Öğrenme: Türler atlası
@@ -177,4 +183,4 @@ Cook2019 erişkin hermafrodit/erkek sinir sistemi, Winding2023 dişi L1 larva be
 
 Katalog seçimi bir veri kümesini yüklemez veya Drosophila simülasyonu çalıştırmaz. Atlas statik ve yereldir; uzak veri isteği, yeni motor veya bağımlılık yoktur. Mevcut dört ders ve ana deneyin bütün ayarları, sayısal sonuçları, oynatma/zamanı ve 2D/3D görünümü korunur. Atlas sıfırlaması yalnız bu sayfanın seçimlerini ve cevaplarını sıfırlar. [Kapsam, birincil kaynaklar ve doğrulama kaydı](docs/species-atlas.md) sürüm, lisans ve bilimsel sınırları açıklar.
 
-Son doğrulamada **185 birim, 15 veri ve 139 tarayıcı senaryosu geçti**; masaüstünde atlanan mobil dokunma senaryosu mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/320 px reduced-motion ve yerel üretim önizlemesi geçti. Önceki 66 korunan dosya, App bütünü ve Shell CSS aynı kaldı. Kanıtlar `test-results/atlas-browser/` ve `test-results/atlas-visual/` altındadır.
+Bu aşamanın doğrulamasında (Ekim 2026, geçmiş kayıt) **185 birim, 15 veri ve 139 tarayıcı senaryosu geçti**; masaüstünde atlanan mobil dokunma senaryosu mobilde geçti. Tam tür kontrolü, üretim derlemesi, masaüstü/mobil/320 px reduced-motion ve yerel üretim önizlemesi geçti. Önceki 66 korunan dosya, App bütünü ve Shell CSS aynı kaldı. Kanıtlar `test-results/atlas-browser/` ve `test-results/atlas-visual/` altındadır.

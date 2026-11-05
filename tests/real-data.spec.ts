@@ -302,6 +302,41 @@ test('local anatomy API permits local GET, rejects cross-origin access and rejec
   expect(post.status()).toBe(405)
 })
 
+test('local source and derived data files are not served directly by the development server', async ({ page }) => {
+  const root = process.cwd()
+  const paths = [
+    '/data/local/cook-subset.json',
+    '/data/local/cook-subset.json?import',
+    '/data/local/cook-subset.json?raw',
+    '/data/local/acquisition.json',
+    '/data/raw/cook2019-si5-corrected-july2020.xlsx',
+    '/data/raw/cook2019-si4-cell-lists.xlsx?url',
+    `/@fs${root}/data/local/cook-subset.json`,
+  ]
+  for (const path of paths) {
+    const response = await page.request.get(path, { headers: { Origin: 'http://localhost:3000' } })
+    expect(response.status(), path).toBe(403)
+    expect(await response.text(), path).not.toContain('AVAR')
+  }
+})
+
+test('pressing the already active mode keeps the current experiment settings', async ({ page }) => {
+  await enterRealMode(page)
+  await page.locator('#amplitude').fill('0.35')
+  await page.locator('#chemical-gain').fill('0.6')
+  const peak = await page.getByTestId('peak-baseline').textContent()
+  await realButton(page).click()
+  await expect(realButton(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('#amplitude')).toHaveValue('0.35')
+  await expect(page.locator('#chemical-gain')).toHaveValue('0.6')
+  await expect(page.getByTestId('peak-baseline')).toHaveText(peak!)
+  await toyButton(page).click()
+  await page.locator('#amplitude').fill('0.35')
+  await toyButton(page).click()
+  await expect(toyButton(page)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('#amplitude')).toHaveValue('0.35')
+})
+
 test('a delayed load cannot silently override a newer illustrative-mode selection', async ({ page }) => {
   const data = await readSource(page)
   let release!: () => void

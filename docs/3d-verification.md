@@ -74,4 +74,4 @@ Gerçek donanım kontrolü Google Chrome'da **Apple M4 / ANGLE Metal / WebGL2** 
 - [Masaüstü tam sayfa](../test-results/3d-visual/desktop-real-full.png), [mobil tam sayfa](../test-results/3d-visual/mobile-real-full.png)
 - [Masaüstü çıktı grafiği](../test-results/3d-visual/desktop-real-chart.png), [mobil çıktı grafiği](../test-results/3d-visual/mobile-real-chart.png)
 
-Yeni Playwright koşusu `test-results/` klasörünü yenileyebilir. Safari, Firefox ve fiziksel iPhone test edilmedi. Chrome mobil görünüm ve dokunma emülasyonu fiziksel cihaz doğrulaması değildir. WebGL desteğinin bu makinede çalışması bütün tarayıcı ve GPU'larda çalışmayı garanti etmez. Etkinliğin görünürde doğru çizilmesi biyolojik davranışın doğrulanması anlamına gelmez.
+Playwright çıktısı artık `test-results/latest/` altına yazılır; her koşu yalnız o klasörü temizler, bu kanıt klasörü korunur. Safari, Firefox ve fiziksel iPhone test edilmedi. Chrome mobil görünüm ve dokunma emülasyonu fiziksel cihaz doğrulaması değildir. WebGL desteğinin bu makinede çalışması bütün tarayıcı ve GPU'larda çalışmayı garanti etmez. Etkinliğin görünürde doğru çizilmesi biyolojik davranışın doğrulanması anlamına gelmez.

@@ -246,4 +246,17 @@ describe('locally available pinned Cook2019 anatomy (not redistributed)', () => 
     }
     expect(JSON.stringify(data)).toBe(before)
   })
+
+  it.skipIf(!existsSync(localDatasetPath))('a chemical gain of 1 separates decaying responses from self-sustained saturation, as the lesson explains', () => {
+    const data = parseRealConnectome(JSON.parse(readFileSync(localDatasetPath, 'utf8')))
+    const incoming = new Map<string, number>()
+    for (const edge of buildRealCircuit(data, { ...defaultRealModelParameters, chemicalGain: 1.2 }).connections) {
+      if (edge.kind === 'chemical') incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + edge.weight)
+    }
+    expect(incoming.size).toBeGreaterThan(0)
+    for (const total of incoming.values()) expect(total).toBeCloseTo(1.2, 12)
+    const endValue = (comparisonValue: number) => runAssumptionExperiment(data, 1, { variable: 'chemical-gain', comparisonValue }).comparison.metrics.endValue
+    expect(endValue(.9)).toBeLessThan(.01)
+    expect(endValue(1.2)).toBeGreaterThan(.9)
+  })
 })

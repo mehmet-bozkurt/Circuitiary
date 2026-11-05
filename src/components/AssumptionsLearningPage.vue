@@ -95,7 +95,10 @@ const resultExplanation = computed(() => {
   const recordedVariable = assumptionVariables.find(option => option.id === run.controlledVariable.variable)!
   const conditions = `${recordedVariable.short}, ${parameter(run.controlledVariable.baselineValue, recordedVariable.id)} → ${parameter(run.controlledVariable.comparisonValue, recordedVariable.id)} olarak karşılaştırıldı.`
   const wholeNetwork = run.delta.maxAbsTraceDifference === 0 ? 'Bütün hücre ve zaman örnekleri iki koşulda aynı çıktı.' : `Bütün ${run.anatomyCounts.neurons} hücre ve zaman örnekleri üzerindeki en büyük mutlak fark ${format(run.delta.maxAbsTraceDifference)}. Bu, yalnız AVAR’ın tepe farkı değildir.`
-  return `${peak} ${conditions} ${wholeNetwork} Bu sonuç seçilmiş denklemlerin varsayıma duyarlılığını gösterir; ölçülmüş biyolojik etki veya genel bir artış/azalış kuralı değildir.`
+  const selfSustaining = run.controlledVariable.variable === 'chemical-gain' && run.controlledVariable.comparisonValue > 1
+    ? ' Karşılaştırma çarpanı 1’in üstünde: her hücrenin gelen kimyasal model ağırlıkları toplamı çarpana eşit olduğundan döngüler etkinliği kendi kendine besleyebilir. Buradaki büyük fark daha güçlü bir yanıttan çok bu rejim değişiminden gelebilir; uyaran bitse de etkinlik sönmeyebilir.'
+    : ''
+  return `${peak} ${conditions} ${wholeNetwork}${selfSustaining} Bu sonuç seçilmiş denklemlerin varsayıma duyarlılığını gösterir; ölçülmüş biyolojik etki veya genel bir artış/azalış kuralı değildir.`
 })
 async function loadData() {
   const version = ++requestVersion

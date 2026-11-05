@@ -46,11 +46,11 @@ Her iki deney 700 ms, sıfır başlangıç, 100 ms başlangıçlı 200 ms/0,8 uy
 
 - `data/local/acquisition.json`: dosya bütünlüğü, sürüm, edinim, seçim ve sınır raporu.
 - `data/local/cook-subset.json`: yerel ham anatomi ve kaynak koordinatları.
-- `test-results/final-real-visual/`: son masaüstü/mobil devre, çıktı grafiği, varsayım ve tam sayfa ekranları.
+- `test-results/final-real-visual/`: son masaüstü/mobil devre, çıktı grafiği, varsayım ve tam sayfa ekranları. **Bu klasör artık yok**; büyük olasılıkla `--output` verilmeden yapılan sonraki bir Playwright koşusu varsayılan `test-results/` klasörünü temizlerken silindi.
 - `tests/learning.spec.ts`, `tests/real-data.spec.ts`: iki modun tarayıcı kabul senaryoları.
 - `src/model/*.test.ts`, `scripts/tests/test_import_cook2019.py`: sayısal ve kaynak doğrulaması.
 
-Yeni Playwright koşusu `test-results/` klasörünü yenileyebilir. Kaynak ve bilimsel sınırlar [veri raporunda](real-data-next-step.md) ve [bilimsel kapsamda](scientific-scope.md) açıklanır.
+Bu belge 3 Ekim 2026 ilk aşamasının kaydıdır; bugünkü test sayıları README'deki “Güncel doğrulama durumu” bölümündedir. Playwright çıktısı artık `test-results/latest/` altına yazılır; her koşu yalnız o klasörü temizler, diğer kanıt klasörleri korunur. Kaynak ve bilimsel sınırlar [veri raporunda](real-data-next-step.md) ve [bilimsel kapsamda](scientific-scope.md) açıklanır.
 
 ## Açık sınırlar ve denenmeyen alanlar
 

@@ -147,6 +147,7 @@ async function chooseMode(next: 'illustrative' | 'real') {
     applyExperimentDraft(draft)
     return
   }
+  if (next === mode.value) return
   if (next === 'real' && !realData.value) {
     dataLoading.value = true; dataError.value = ''
     dataRequest = new AbortController()
