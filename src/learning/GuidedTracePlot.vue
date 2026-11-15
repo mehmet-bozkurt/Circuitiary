@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { decimal } from '../format'
+import { useMessages } from '../i18n'
+import { messages } from './GuidedTracePlot.messages'
 import { TICK_FRACTIONS, bandWidth, plotX, plotY, tracePath, useChartWidth } from './plotBox'
 
 const props = defineProps<{
@@ -12,6 +14,7 @@ const props = defineProps<{
   onsetMs: number
   stimulusDurationMs: number
 }>()
+const m = useMessages(messages)
 const chart = ref<SVGSVGElement | null>(null)
 const width = useChartWidth(chart, { initial: 600 })
 const height = 250
@@ -25,18 +28,18 @@ const changedPath = computed(() => tracePath(props.changed, props.timesMs, x, y)
 
 <template>
   <figure class="guided-trace-figure">
-    <figcaption>O1’in zaman içindeki model aktivitesi</figcaption>
-    <div class="guided-trace-legend"><span><i></i>{{ baselineLabel }}</span><span><i class="changed-line"></i>{{ changedLabel }}</span><span><b></b>Uyaran açık</span></div>
-    <svg ref="chart" data-testid="guided-result-plot" role="img" :aria-label="`O1 için iki koşulun boyutsuz aktivite grafiği. ${baselineLabel} düz çizgi; ${changedLabel} kesikli çizgi. Ortak dikey eksen 0 ile 1. Yatay eksen model zamanı, milisaniye.`" :viewBox="`0 0 ${width} ${height}`">
+    <figcaption>{{ m.caption }}</figcaption>
+    <div class="guided-trace-legend"><span><i></i>{{ baselineLabel }}</span><span><i class="changed-line"></i>{{ changedLabel }}</span><span><b></b>{{ m.stimulusOn }}</span></div>
+    <svg ref="chart" data-testid="guided-result-plot" role="img" :aria-label="m.chartLabel(baselineLabel, changedLabel)" :viewBox="`0 0 ${width} ${height}`">
       <rect :x="x(onsetMs)" :y="pad.top" :width="bandWidth(x, onsetMs, stimulusDurationMs, maxTime)" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity=".17" />
       <g v-for="tick in TICK_FRACTIONS" :key="tick"><line :x1="pad.left" :x2="width - pad.right" :y1="y(tick)" :y2="y(tick)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="tick ? '3 5' : undefined" /><text :x="pad.left - 8" :y="y(tick) + 3" text-anchor="end">{{ decimal(tick, 2) }}</text></g>
-      <text :x="pad.left" y="12">Boyutsuz model aktivitesi</text>
+      <text :x="pad.left" y="12">{{ m.activityAxis }}</text>
       <g v-for="fraction in TICK_FRACTIONS" :key="fraction"><text :x="x(maxTime * fraction)" :y="height - pad.bottom + 17" text-anchor="middle">{{ Math.round(maxTime * fraction) }}</text></g>
-      <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 5" text-anchor="middle">Model zamanı · ms</text>
+      <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 5" text-anchor="middle">{{ m.timeAxis }}</text>
       <path data-guided-trace="baseline" :d="baselinePath" fill="none" stroke="var(--theme-trace-neutral, #7b806d)" stroke-width="3" stroke-linejoin="round" />
       <path data-guided-trace="comparison" :d="changedPath" fill="none" stroke="var(--theme-trace-green, #3a7652)" stroke-width="3" stroke-dasharray="8 5" stroke-linejoin="round" />
     </svg>
-    <p>İki eğri aynı ölçekle gösterilir. Tepe değerleri, tepe zamanları ve son değerler aşağıdaki tablodadır.</p>
+    <p>{{ m.note }}</p>
   </figure>
 </template>
 

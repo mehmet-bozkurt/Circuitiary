@@ -1,4 +1,5 @@
 import { plainNumber } from './exportData'
+import { L } from './i18n'
 import type { ExperimentDraft } from './learning/readingHandoff'
 
 /**
@@ -9,25 +10,28 @@ import type { ExperimentDraft } from './learning/readingHandoff'
 export type ShareState = Omit<ExperimentDraft, 'playing' | 'cursorMs'>
 export type ShareField = keyof ShareState
 
-/** Short query keys and the Turkish names used when a part of a link is ignored. Order is the order in the URL. */
-export const shareFields: Record<ShareField, { key: string; label: string }> = {
-  mode: { key: 'm', label: 'Devre modu' },
-  graphView: { key: 'v', label: 'Devre görünümü' },
-  activeCondition: { key: 'c', label: 'Gösterilen koşul' },
-  stimulusTarget: { key: 'st', label: 'Uyaranın girdiği hücre' },
-  amplitude: { key: 'am', label: 'Uyaran gücü' },
-  pulseDuration: { key: 'du', label: 'Uyaran süresi' },
-  baseTau: { key: 'tb', label: 'Referans zaman sabiti' },
-  changedNeuron: { key: 'tn', label: 'Zaman sabiti değişen hücre' },
-  changedTau: { key: 'tc', label: 'Değişen zaman sabiti' },
-  selectedEdge: { key: 'se', label: 'Susturulan bağlantı' },
-  outputNeuron: { key: 'o', label: 'Okunan hücre' },
-  selectedNeuron: { key: 'n', label: 'Seçili hücre' },
-  dt: { key: 'dt', label: 'Zaman adımı' },
-  chemicalGain: { key: 'cg', label: 'Kimyasal katsayı' },
-  gapGain: { key: 'gg', label: 'Gap katsayısı' },
-  focusConnections: { key: 'fc', label: 'Seçili hücreye odaklan' },
-  scaleToResponse: { key: 'sc', label: 'Yanıta göre dikey ölçek' },
+/**
+ * Short query keys and the names used when a part of a link is ignored: `label` in Turkish, `labelEn` in English
+ * (shareNotice chooses when it is called). Order is the order in the URL.
+ */
+export const shareFields: Record<ShareField, { key: string; label: string; labelEn: string }> = {
+  mode: { key: 'm', label: 'Devre modu', labelEn: 'Circuit mode' },
+  graphView: { key: 'v', label: 'Devre görünümü', labelEn: 'Circuit view' },
+  activeCondition: { key: 'c', label: 'Gösterilen koşul', labelEn: 'Condition shown' },
+  stimulusTarget: { key: 'st', label: 'Uyaranın girdiği hücre', labelEn: 'Cell the stimulus enters' },
+  amplitude: { key: 'am', label: 'Uyaran gücü', labelEn: 'Stimulus strength' },
+  pulseDuration: { key: 'du', label: 'Uyaran süresi', labelEn: 'Stimulus duration' },
+  baseTau: { key: 'tb', label: 'Referans zaman sabiti', labelEn: 'Reference time constant' },
+  changedNeuron: { key: 'tn', label: 'Zaman sabiti değişen hücre', labelEn: 'Cell whose time constant is changed' },
+  changedTau: { key: 'tc', label: 'Değişen zaman sabiti', labelEn: 'Changed time constant' },
+  selectedEdge: { key: 'se', label: 'Susturulan bağlantı', labelEn: 'Silenced connection' },
+  outputNeuron: { key: 'o', label: 'Okunan hücre', labelEn: 'Readout cell' },
+  selectedNeuron: { key: 'n', label: 'Seçili hücre', labelEn: 'Selected cell' },
+  dt: { key: 'dt', label: 'Zaman adımı', labelEn: 'Time step' },
+  chemicalGain: { key: 'cg', label: 'Kimyasal katsayı', labelEn: 'Chemical gain' },
+  gapGain: { key: 'gg', label: 'Gap katsayısı', labelEn: 'Gap gain' },
+  focusConnections: { key: 'fc', label: 'Seçili hücreye odaklan', labelEn: 'Focus on the selected cell' },
+  scaleToResponse: { key: 'sc', label: 'Yanıta göre dikey ölçek', labelEn: 'Vertical scale fitted to the response' },
 }
 const fieldOrder = Object.keys(shareFields) as ShareField[]
 
@@ -156,10 +160,17 @@ export function buildShareUrl(state: ShareState, base: string): string {
 
 export interface ShareOutcome { applied: number; ignored: readonly ShareField[]; realUnavailable: boolean }
 
-/** The polite status line shown after a link was applied. */
+/** The polite status line shown after a link was applied, in the language of the moment it is called. */
 export function shareNotice({ applied, ignored, realUnavailable }: ShareOutcome): string {
-  const ignoredText = ignored.length ? ` Geçersiz olduğu için yok sayılan parçalar: ${ignored.map(field => shareFields[field].label).join(', ')}.` : ''
-  if (realUnavailable) return `Bağlantıdaki ayarlar sekiz hücreli örneğe uygulandı. Bağlantı gerçek veri modunu istiyordu, ama yerel veri bu bilgisayarda yok; hücre ve bağlantı seçimleri atlandı.${ignoredText}`
-  if (applied === 0) return `Bağlantıda geçerli ayar bulunamadı; varsayılan deney açıldı.${ignoredText}`
-  return `Bağlantıdaki ayarlar uygulandı.${ignoredText}`
+  const names = ignored.map(field => L(shareFields[field].label, shareFields[field].labelEn)).join(', ')
+  const ignoredText = ignored.length ? L(` Geçersiz olduğu için yok sayılan parçalar: ${names}.`, ` Parts ignored because they were invalid: ${names}.`) : ''
+  if (realUnavailable) return L(
+    `Bağlantıdaki ayarlar sekiz hücreli örneğe uygulandı. Bağlantı gerçek veri modunu istiyordu, ama yerel veri bu bilgisayarda yok; hücre ve bağlantı seçimleri atlandı.${ignoredText}`,
+    `The settings in the link were applied to the eight-cell example. The link asked for real-data mode, but the local data is not on this computer; the cell and connection selections were skipped.${ignoredText}`,
+  )
+  if (applied === 0) return L(
+    `Bağlantıda geçerli ayar bulunamadı; varsayılan deney açıldı.${ignoredText}`,
+    `No valid setting was found in the link; the default experiment was opened.${ignoredText}`,
+  )
+  return L(`Bağlantıdaki ayarlar uygulandı.${ignoredText}`, `The settings in the link were applied.${ignoredText}`)
 }

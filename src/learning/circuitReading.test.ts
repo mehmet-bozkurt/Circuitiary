@@ -103,7 +103,7 @@ describe('anatomical graph inspection', () => {
     expect(() => { (graph.chemicalEdges[0] as { rawWeight: number }).rawWeight = 2 }).toThrow()
   })
 
-  it('separates directed reciprocal neighbours, one physical gap and self records, with per-cell omission metadata', () => {
+  it('separates directed reciprocal neighbors, one physical gap and self records, with per-cell omission metadata', () => {
     const raw = fixture(['A', 'B', 'C'], [['A', 'B', 6], ['B', 'A', 2], ['C', 'B', 3], ['B', 'B', 9]], [['A', 'B', 4], ['B', 'C', 8]])
     Object.assign(raw.selection.omittedByNeuron[1]!, { chemicalIncomingCount: 2, chemicalIncomingWeight: 17, chemicalOutgoingCount: 1, chemicalOutgoingWeight: 5, gapCount: 3, gapWeight: 11, note: 'Outside selected graph' })
     Object.assign(raw.selection.omittedExternal, raw.selection.omittedByNeuron[1])
@@ -192,7 +192,7 @@ describe('minimum-hop structural routes', () => {
     expect(changed.hops.map(hop => hop.edgeId)).toEqual(route.hops.map(hop => hop.edgeId))
   })
 
-  it('breaks equal-length ties by exact neighbour ID, then chemical before gap, regardless of input order', () => {
+  it('breaks equal-length ties by exact neighbor ID, then chemical before gap, regardless of input order', () => {
     const raw = fixture(['T', 'B2', 'A', 'B10'], [['A', 'B2'], ['B2', 'T'], ['A', 'B10'], ['B10', 'T']], [['A', 'B10']])
     const graph = createReadingGraph(raw)
     const route = findShortestRoute(graph, 'A', 'T', 'mixed')

@@ -5,6 +5,8 @@
 // DEMO is true only in the build the Pages workflow makes (VITE_DEMO=1): it has no local data endpoint.
 // With the default base every function below returns its input unchanged, so a root deployment behaves exactly as before.
 
+import { L } from './i18n'
+
 export const BASE: string = import.meta.env.BASE_URL
 export const DEMO: boolean = import.meta.env.VITE_DEMO === '1'
 
@@ -23,5 +25,8 @@ export function appPath(pathname: string, base: string = BASE): string {
 /** The local-only data endpoint served by the Vite dev and preview servers (vite.local-data.ts). */
 export const LOCAL_DATA_URL: string = withBase('/api/local-connectome')
 
-/** Shown instead of the "local data not found" states in the online demo, which never has the data. */
-export const DEMO_DATA_NOTICE = 'Bu çevrimiçi demoda gerçek veri yoktur: veri kümesinin dağıtım lisansı doğrulanmadığı için depoya konmaz. Yerel kurulumda kendi indirdiğin dosyalarla çalışır (README).'
+/** Shown instead of the "local data not found" states in the online demo, which never has the data. Read it when rendering, so it follows the language. */
+export const demoDataNotice = (): string => L(
+  'Bu çevrimiçi demoda gerçek veri yoktur: veri kümesinin dağıtım lisansı doğrulanmadığı için depoya konmaz. Yerel kurulumda kendi indirdiğin dosyalarla çalışır (README).',
+  'This online demo has no real data: the dataset is not in the repository because its redistribution license is unverified. A local installation works with the files you download yourself (README).',
+)

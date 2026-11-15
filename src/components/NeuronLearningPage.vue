@@ -2,15 +2,24 @@
 import TermText from './TermText.vue'
 import { computed, onMounted, ref } from 'vue'
 import LessonTracePlot from '../learning/LessonTracePlot.vue'
-import { glossary, lessonSections, lessonSources, neuronParts, selfChecks } from '../learning/lessonContent'
+import { glossary, glossaryEn, lessonSections, lessonSectionsEn, lessonSources, lessonSourcesEn, neuronParts, neuronPartsEn, selfChecks, selfChecksEn } from '../learning/lessonContent'
 import { chemicalLesson, gapLesson, smallCircuitLesson, thresholdLesson } from '../learning/lessonMath'
 import { decimal } from '../format'
+import { L, useMessages } from '../i18n'
 import { BASE } from '../siteBase'
+import { messages, type LinkState } from './NeuronLearningPage.messages'
 
 const emit = defineEmits<{ ready: [] }>()
 onMounted(() => emit('ready'))
+const m = useMessages(messages)
+// Content in the current language. State below keeps ids and numbers only, so a language switch keeps every choice.
+const sections = computed(() => L(lessonSections, lessonSectionsEn))
+const sourceList = computed(() => L(lessonSources, lessonSourcesEn))
+const parts = computed(() => L(neuronParts, neuronPartsEn))
+const glossaryEntries = computed(() => L(glossary, glossaryEn))
+const questions = computed(() => L(selfChecks, selfChecksEn))
 const selectedPart = ref<string>('dendrite')
-const currentPart = computed(() => neuronParts.find(part => part.id === selectedPart.value) ?? neuronParts[0])
+const currentPart = computed(() => parts.value.find(part => part.id === selectedPart.value) ?? parts.value[0]!)
 const stimulus = ref(.38)
 const threshold = ref(.60)
 const excitation = ref(.65)
@@ -30,8 +39,9 @@ const gapB = computed(() => reverseGap.value ? gap.value.a : gap.value.b)
 const gapIndex = computed(() => Math.max(0, Math.min(100, Math.round(gapTime.value / .05))))
 const gapAtA = computed(() => gapA.value[gapIndex.value] ?? 0)
 const gapAtB = computed(() => gapB.value[gapIndex.value] ?? 0)
-const gapDirection = computed(() => gapStrength.value === 0 ? 'Akım yok' : gapAtA.value > gapAtB.value ? 'A → B' : gapAtB.value > gapAtA.value ? 'B → A' : 'Düzeyler eşit')
+const gapDirection = computed(() => gapStrength.value === 0 ? m.value.noCurrent : gapAtA.value > gapAtB.value ? 'A → B' : gapAtB.value > gapAtA.value ? 'B → A' : m.value.equalLevels)
 const circuit = computed(() => smallCircuitLesson({ stimulus: circuitStimulus.value, inhibitory: circuitInhibitory.value, ablated: circuitAblated.value }))
+const circuitLink = computed<LinkState>(() => circuitAblated.value ? 'ablated' : circuitInhibitory.value ? 'inhibitory' : 'excitatory')
 const correctCount = computed(() => selfChecks.filter(question => answers.value[question.id] === question.correct).length)
 const answeredCount = computed(() => Object.keys(answers.value).length)
 const format = (value: number, digits = 2) => decimal(value, digits)
@@ -56,37 +66,37 @@ function resetLesson() {
   <main id="neuron-lesson" tabindex="-1" class="neuron-lesson">
     <header class="lesson-intro">
       <div>
-        <p class="lesson-eyebrow">CIRCUITIARY / ÖĞRENME NOTLARI / 01</p>
-        <h1 id="lesson-title" tabindex="-1"><TermText text="Nörondan " /><em>devreye</em></h1>
-        <p class="lesson-summary">Bir hücrenin parçalarını tanı. Bir sinyalin nasıl değiştiğini gör. Sonra üç hücreyle küçük, sınanabilir bir deney yap.</p>
-        <p class="lesson-duration">Yaklaşık 25–35 dakika · Ön bilgi gerektirmez · Kendi hızında ilerle</p>
+        <p class="lesson-eyebrow">{{ m.eyebrow }}</p>
+        <h1 id="lesson-title" tabindex="-1"><TermText :text="m.titleLead" /><em>{{ m.titleEmphasis }}</em></h1>
+        <p class="lesson-summary">{{ m.summary }}</p>
+        <p class="lesson-duration">{{ m.duration }}</p>
       </div>
-      <button type="button" class="lesson-reset" @click="resetLesson">Dersi sıfırla</button>
+      <button type="button" class="lesson-reset" @click="resetLesson">{{ m.reset }}</button>
     </header>
 
-    <div class="lesson-boundary"><strong>Bu sayfayı nasıl okumalı?</strong><p>Biyolojik açıklamalar kaynaklara dayanır. Etkileşimlerin sayıları ise öğretim için seçilmiştir. Grafiklerdeki düzey ve zaman boyutsuzdur; mV, milisaniye, kalsiyum ölçümü veya gerçek olay sayısı değildir. Kaydırıcılar anında hesaplanır; animasyon beklemen gerekmez.</p></div>
+    <div class="lesson-boundary"><strong>{{ m.boundaryTitle }}</strong><p>{{ m.boundaryText }}</p></div>
 
     <div class="lesson-layout">
       <aside class="lesson-navigation">
-        <nav aria-label="Dersin bölümleri">
-          <p class="lesson-eyebrow">BU DERSTE</p>
-          <a v-for="(section, index) in lessonSections" :key="section.id" :href="`#${section.id}`"><span>{{ String(index + 1).padStart(2, '0') }}</span>{{ section.short }}</a>
-          <a href="#lesson-glossary"><span>+</span>Mini sözlük</a>
-          <a href="#lesson-self-check"><span>?</span>Kendini dene</a>
-          <a href="#lesson-sources"><span>↗</span>Kaynaklar</a>
+        <nav :aria-label="m.navLabel">
+          <p class="lesson-eyebrow">{{ m.navEyebrow }}</p>
+          <a v-for="(section, index) in sections" :key="section.id" :href="`#${section.id}`"><span>{{ String(index + 1).padStart(2, '0') }}</span>{{ section.short }}</a>
+          <a href="#lesson-glossary"><span>+</span>{{ m.miniGlossary }}</a>
+          <a href="#lesson-self-check"><span>?</span>{{ m.selfCheck }}</a>
+          <a href="#lesson-sources"><span>↗</span>{{ m.sources }}</a>
         </nav>
-        <p class="navigation-note">Bir kavramı oku, gösterimde tek bir şeyi değiştir, sonucu kendi cümlenle açıkla.</p>
+        <p class="navigation-note">{{ m.navNote }}</p>
       </aside>
 
       <div class="lesson-body">
-        <section v-for="(section, index) in lessonSections" :id="section.id" :key="section.id" :data-lesson-section="index + 1" :aria-labelledby="`${section.id}-title`" class="lesson-section">
+        <section v-for="(section, index) in sections" :id="section.id" :key="section.id" :data-lesson-section="index + 1" :aria-labelledby="`${section.id}-title`" class="lesson-section">
           <p class="section-number">{{ String(index + 1).padStart(2, '0') }} / 06</p>
           <h2 :id="`${section.id}-title`"><TermText :text="section.title" /></h2>
           <p class="section-lead"><TermText :text="section.lead" /></p>
           <p v-for="paragraph in section.paragraphs" :key="paragraph" class="lesson-paragraph"><TermText :text="paragraph" /></p>
 
           <div v-if="section.id === 'lesson-neuron'" class="lesson-demo anatomy-demo">
-            <p class="demo-eyebrow">KEŞFET / BİR PARÇA SEÇ</p>
+            <p class="demo-eyebrow">{{ m.anatomyEyebrow }}</p>
             <svg viewBox="0 0 780 300" class="neuron-drawing" aria-hidden="true">
               <g class="drawing-part" :class="{ chosen: selectedPart === 'dendrite' }" @click="selectedPart = 'dendrite'">
                 <g fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
@@ -115,89 +125,89 @@ function resetLesson() {
                 <circle cx="690" cy="249" r="21" class="part-number" /><text x="690" y="258">5</text>
               </g>
             </svg>
-            <div class="part-buttons" role="group" aria-label="Nöronun parçaları">
-              <button v-for="part in neuronParts" :key="part.id" type="button" :aria-pressed="selectedPart === part.id" @click="selectedPart = part.id"><span aria-hidden="true">{{ part.number }}</span>{{ part.title }}</button>
+            <div class="part-buttons" role="group" :aria-label="m.partsLabel">
+              <button v-for="part in parts" :key="part.id" type="button" :aria-pressed="selectedPart === part.id" @click="selectedPart = part.id"><span aria-hidden="true">{{ part.number }}</span>{{ part.title }}</button>
             </div>
             <div class="part-inspector" aria-live="polite" aria-atomic="true"><h3 data-testid="neuron-part-title"><TermText :text="currentPart.title" /></h3><p><TermText :text="currentPart.description" /></p><p class="try-question"><TermText :text="currentPart.prompt" /></p></div>
-            <p class="model-note">Özgün şematik çizim; anatomik konum, ölçek veya belirli bir türün hücre biçimi değildir. Çizime dokunabilir ya da üstteki düğmeleri klavyeyle seçebilirsin.</p>
+            <p class="model-note">{{ m.anatomyNote }}</p>
           </div>
 
           <div v-else-if="section.id === 'lesson-signal'" class="lesson-demo">
-            <p class="demo-eyebrow">DENE / EŞİĞİN İKİ YANI</p>
+            <p class="demo-eyebrow">{{ m.signalEyebrow }}</p>
             <div class="slider-grid">
-              <div><label for="lesson-stimulus">Uyaran <output for="lesson-stimulus">{{ format(stimulus) }}</output></label><input id="lesson-stimulus" v-model.number="stimulus" type="range" :aria-valuetext="format(stimulus)" min="0" max="1" step="0.01" /></div>
-              <div><label for="lesson-threshold">Eşik <output for="lesson-threshold">{{ format(threshold) }}</output></label><input id="lesson-threshold" v-model.number="threshold" type="range" :aria-valuetext="format(threshold)" min="0" max="1" step="0.01" /></div>
+              <div><label for="lesson-stimulus">{{ m.stimulus }} <output for="lesson-stimulus">{{ format(stimulus) }}</output></label><input id="lesson-stimulus" v-model.number="stimulus" type="range" :aria-valuetext="format(stimulus)" min="0" max="1" step="0.01" /></div>
+              <div><label for="lesson-threshold">{{ m.threshold }} <output for="lesson-threshold">{{ format(threshold) }}</output></label><input id="lesson-threshold" v-model.number="threshold" type="range" :aria-valuetext="format(threshold)" min="0" max="1" step="0.01" /></div>
             </div>
             <div class="demo-readouts">
-              <div><span>Eşik kararı</span><strong data-testid="threshold-status">{{ thresholdResult.fired ? 'Tek olay oluştu' : 'Olay oluşmadı' }}</strong></div>
-              <div><span>Olay tepesi</span><output data-testid="threshold-peak">{{ format(thresholdResult.fired ? 1 : 0) }}</output></div>
-              <div><span>Çizimin tepesi</span><output>{{ format(thresholdResult.peak) }}</output></div>
+              <div><span>{{ m.thresholdDecision }}</span><strong data-testid="threshold-status">{{ thresholdResult.fired ? m.fired : m.notFired }}</strong></div>
+              <div><span>{{ m.eventPeak }}</span><output data-testid="threshold-peak">{{ format(thresholdResult.fired ? 1 : 0) }}</output></div>
+              <div><span>{{ m.drawingPeak }}</span><output>{{ format(thresholdResult.peak) }}</output></div>
             </div>
-            <LessonTracePlot :times="thresholdResult.trace.times" :traces="[{ id: 'response', label: thresholdResult.fired ? 'Tek olay şeması' : 'Yerel yanıt şeması', color: 'var(--theme-trace-green, #35694f)', values: thresholdResult.trace.values }]" title="Bir yerel yanıt veya tek olayın çizimi" y-label="Göreli çizim değeri" />
-            <p class="model-note"><strong>Varsayım:</strong> Sıfır olmayan uyaran eşiğe ulaştığında aynı, tepe değeri 1 olan tek eğri seçilir. Eşik altında daha küçük eğri yerel yanıtı temsil eder. Eğri biçimi çizim tercihidir; gerçek aksiyon potansiyeli biçimi, mV veya frekans hesabı değildir.</p>
+            <LessonTracePlot :times="thresholdResult.trace.times" :traces="[{ id: 'response', label: thresholdResult.fired ? m.eventTrace : m.localTrace, color: 'var(--theme-trace-green, #35694f)', values: thresholdResult.trace.values }]" :title="m.thresholdPlotTitle" :y-label="m.thresholdAxis" />
+            <p class="model-note"><strong>{{ m.assumption }}</strong> {{ m.thresholdNote }}</p>
           </div>
 
-          <div v-else-if="section.id === 'lesson-chemical'" class="chemical-steps" role="group" aria-label="Kimyasal sinapsın üç aşaması">
-            <div><span>01</span><h3>Salım</h3><p><TermText text="Presinaptik uç, iletici molekülleri aralığa bırakır." /></p></div>
-            <div><span>02</span><h3>Bağlanma</h3><p><TermText text="İletici, postsinaptik reseptörle etkileşir." /></p></div>
-            <div><span>03</span><h3>Yanıt</h3><p><TermText text="Reseptör ve hücrenin koşulları sonucu belirler." /></p></div>
+          <div v-else-if="section.id === 'lesson-chemical'" class="chemical-steps" role="group" :aria-label="m.chemicalStepsLabel">
+            <div><span>01</span><h3>{{ m.release }}</h3><p><TermText :text="m.releaseText" /></p></div>
+            <div><span>02</span><h3>{{ m.binding }}</h3><p><TermText :text="m.bindingText" /></p></div>
+            <div><span>03</span><h3>{{ m.response }}</h3><p><TermText :text="m.responseText" /></p></div>
           </div>
 
           <div v-else-if="section.id === 'lesson-ei'" class="lesson-demo">
-            <p class="demo-eyebrow">DENE / İKİ ATANMIŞ ETKİYİ BİRLEŞTİR</p>
+            <p class="demo-eyebrow">{{ m.effectsEyebrow }}</p>
             <div class="slider-grid">
-              <div><label for="lesson-excitation">Uyarıcı girdi <output for="lesson-excitation">{{ format(excitation) }}</output></label><input id="lesson-excitation" v-model.number="excitation" type="range" :aria-valuetext="format(excitation)" min="0" max="1" step="0.01" /></div>
-              <div><label for="lesson-inhibition">Baskılayıcı girdi <output for="lesson-inhibition">{{ format(inhibition) }}</output></label><input id="lesson-inhibition" v-model.number="inhibition" type="range" :aria-valuetext="format(inhibition)" min="0" max="1" step="0.01" /></div>
+              <div><label for="lesson-excitation">{{ m.excitatoryInput }} <output for="lesson-excitation">{{ format(excitation) }}</output></label><input id="lesson-excitation" v-model.number="excitation" type="range" :aria-valuetext="format(excitation)" min="0" max="1" step="0.01" /></div>
+              <div><label for="lesson-inhibition">{{ m.inhibitoryInput }} <output for="lesson-inhibition">{{ format(inhibition) }}</output></label><input id="lesson-inhibition" v-model.number="inhibition" type="range" :aria-valuetext="format(inhibition)" min="0" max="1" step="0.01" /></div>
             </div>
-            <div class="effect-bars" aria-hidden="true"><div><span>+ Uyarıcı</span><i><b :style="{ width: `${excitation * 100}%` }"></b></i></div><div class="inhibitory-bar"><span>− Baskılayıcı</span><i><b :style="{ width: `${inhibition * 100}%` }"></b></i></div><div><span>Çıktı</span><i><b :style="{ width: `${chemical.activity * 100}%` }"></b></i></div></div>
-            <div class="demo-readouts"><div><span>Net girdi: uyarıcı − baskılayıcı</span><output data-testid="chemical-drive">{{ signed(chemical.drive) }}</output></div><div><span>0–1 aralığına sınırlanan çıktı</span><output data-testid="chemical-activity">{{ format(chemical.activity) }}</output></div></div>
-            <p class="model-note"><strong>Varsayım:</strong><TermText text=" İşaretler atanmıştır. Çıktı = en küçük(1, en büyük(0, uyarıcı − baskılayıcı)). Negatif net girdi, bu gösterimde negatif gerilim demek değildir. İyon kanalı, reseptör ve şönt baskılanması hesaplanmıyor." /></p>
+            <div class="effect-bars" aria-hidden="true"><div><span>{{ m.excitatoryBar }}</span><i><b :style="{ width: `${excitation * 100}%` }"></b></i></div><div class="inhibitory-bar"><span>{{ m.inhibitoryBar }}</span><i><b :style="{ width: `${inhibition * 100}%` }"></b></i></div><div><span>{{ m.outputBar }}</span><i><b :style="{ width: `${chemical.activity * 100}%` }"></b></i></div></div>
+            <div class="demo-readouts"><div><span>{{ m.netInput }}</span><output data-testid="chemical-drive">{{ signed(chemical.drive) }}</output></div><div><span>{{ m.clippedOutput }}</span><output data-testid="chemical-activity">{{ format(chemical.activity) }}</output></div></div>
+            <p class="model-note"><strong>{{ m.assumption }}</strong><TermText :text="m.effectsNote" /></p>
           </div>
 
           <div v-else-if="section.id === 'lesson-gap'" class="lesson-demo">
-            <p class="demo-eyebrow">DENE / FARKI VE YÖNÜ DEĞİŞTİR</p>
-            <div class="slider-grid"><div><label for="lesson-gap-strength">Elektriksel bağ kuvveti <output for="lesson-gap-strength">{{ format(gapStrength) }}</output></label><input id="lesson-gap-strength" v-model.number="gapStrength" type="range" :aria-valuetext="format(gapStrength)" min="0" max="1" step="0.01" /></div><div><label for="lesson-gap-time">İncelenen öğretici zaman <output for="lesson-gap-time">{{ format(gapTime) }}</output></label><input id="lesson-gap-time" v-model.number="gapTime" type="range" :aria-valuetext="format(gapTime)" min="0" max="5" step="0.05" /></div></div>
-            <button type="button" class="demo-button" :aria-pressed="reverseGap" @click="reverseGap = !reverseGap">Başlangıcı ters çevir</button>
+            <p class="demo-eyebrow">{{ m.gapEyebrow }}</p>
+            <div class="slider-grid"><div><label for="lesson-gap-strength">{{ m.gapStrength }} <output for="lesson-gap-strength">{{ format(gapStrength) }}</output></label><input id="lesson-gap-strength" v-model.number="gapStrength" type="range" :aria-valuetext="format(gapStrength)" min="0" max="1" step="0.01" /></div><div><label for="lesson-gap-time">{{ m.gapTime }} <output for="lesson-gap-time">{{ format(gapTime) }}</output></label><input id="lesson-gap-time" v-model.number="gapTime" type="range" :aria-valuetext="format(gapTime)" min="0" max="5" step="0.05" /></div></div>
+            <button type="button" class="demo-button" :aria-pressed="reverseGap" @click="reverseGap = !reverseGap">{{ m.reverseStart }}</button>
             <div class="coupled-cells" aria-hidden="true"><span>A <b>{{ format(gapAtA) }}</b></span><i>{{ gapStrength === 0 ? '⋯' : '↔' }}</i><span>B <b>{{ format(gapAtB) }}</b></span></div>
-            <div class="demo-readouts"><div><span>A’nın düzeyi</span><output data-testid="gap-a-value">{{ format(gapAtA, 3) }}</output></div><div><span>B’nin düzeyi</span><output data-testid="gap-b-value">{{ format(gapAtB, 3) }}</output></div><div><span>Modelde etki yönü</span><strong data-testid="gap-direction">{{ gapDirection }}</strong></div></div>
-            <LessonTracePlot :times="gap.times" :traces="[{ id: 'a', label: 'A', color: 'var(--theme-trace-blue, #456e91)', values: gapA }, { id: 'b', label: 'B', color: 'var(--theme-trace-red, #9b5c4f)', values: gapB, dashed: true }]" :marker-time="gapTime" title="İki göreli düzeyin yakınlaşması" />
-            <p class="model-note"><strong>Varsayım:</strong> dA/dt = g(B − A), dB/dt = g(A − B). Eşit, doğrusal iki yönlü bağ; sızıntı, dış girdi ve doğrultma yok. Başlangıç 1 ve 0; toplam bu modelde 1 kalır. Bu değerler gerçek hücre gerilimleri değildir.</p>
+            <div class="demo-readouts"><div><span>{{ m.levelA }}</span><output data-testid="gap-a-value">{{ format(gapAtA, 3) }}</output></div><div><span>{{ m.levelB }}</span><output data-testid="gap-b-value">{{ format(gapAtB, 3) }}</output></div><div><span>{{ m.effectDirection }}</span><strong data-testid="gap-direction">{{ gapDirection }}</strong></div></div>
+            <LessonTracePlot :times="gap.times" :traces="[{ id: 'a', label: 'A', color: 'var(--theme-trace-blue, #456e91)', values: gapA }, { id: 'b', label: 'B', color: 'var(--theme-trace-red, #9b5c4f)', values: gapB, dashed: true }]" :marker-time="gapTime" :title="m.gapPlotTitle" />
+            <p class="model-note"><strong>{{ m.assumption }}</strong> {{ m.gapNote }}</p>
           </div>
 
           <div v-else-if="section.id === 'lesson-circuit'" class="lesson-demo">
-            <p class="demo-eyebrow">DENE / BİR DEĞİŞKEN, BİR KARŞILAŞTIRMA</p>
-            <div class="slider-grid circuit-controls"><div><label for="lesson-circuit-stimulus">A’ya verilen uyaran <output for="lesson-circuit-stimulus">{{ format(circuitStimulus) }}</output></label><input id="lesson-circuit-stimulus" v-model.number="circuitStimulus" type="range" :aria-valuetext="format(circuitStimulus)" min="0" max="1" step="0.01" /></div><div class="check-controls"><label for="lesson-circuit-inhibitory"><input id="lesson-circuit-inhibitory" v-model="circuitInhibitory" type="checkbox" /> B→C baskılayıcı olsun</label><label for="lesson-circuit-ablated"><input id="lesson-circuit-ablated" v-model="circuitAblated" type="checkbox" /> B→C bağlantısını kaldır</label></div></div>
-            <div class="small-circuit" role="img" :aria-label="`A, B'yi uyarır. B ile C bağlantısı ${circuitAblated ? 'kaldırılmış' : circuitInhibitory ? 'baskılayıcı' : 'uyarıcı'}. C ayrıca sabit 0,35 taban girdisi alır.`"><span>A</span><i>→</i><span>B</span><i :class="{ muted: circuitAblated, negative: circuitInhibitory && !circuitAblated }">{{ circuitAblated ? '⋯' : circuitInhibitory ? '⊣' : '→' }}</i><span>C<small>taban: 0,35</small></span></div>
-            <LessonTracePlot :times="circuit.times" :traces="[{ id: 'a', label: 'A', color: 'var(--theme-trace-blue, #456e91)', values: circuit.a }, { id: 'b', label: 'B', color: 'var(--theme-trace-gold, #9b7242)', values: circuit.b, dashed: true }, { id: 'c', label: 'C', color: 'var(--theme-trace-green, #35694f)', values: circuit.c }]" title="Üç hücrenin boyutsuz aktivitesi" y-label="Model aktivitesi" />
-            <div class="demo-readouts"><div><span>C’nin en düşük değeri</span><output data-testid="circuit-min">{{ format(circuit.outputMinimum, 3) }}</output></div><div><span>C’nin en yüksek değeri</span><output data-testid="circuit-max">{{ format(circuit.outputMaximum, 3) }}</output></div><div><span>Girdi bitiminde C − taban</span><output data-testid="circuit-delta">{{ signed(circuit.deltaAtPulseEnd) }}</output></div></div>
-            <p class="model-note"><strong>Varsayım:</strong> A girdisi 1 ≤ t &lt; 3 aralığında açık. Yanıtlar sızıntılı sürekli düzeyler; olay sayısı değildir. C’nin tabanı ve başlangıcı 0,35. Bağlantıyı kaldırmak yalnız B→C katsayısını sıfırlar. Hücreyi susturmaz.</p>
-            <details class="lesson-equations"><summary>Bu küçük devrenin denklemlerini gör</summary><p>clip(x), değeri 0–1 aralığına sınırlar. τ = 0,35 ve adım = 0,02; ikisi de öğretici birimdedir.</p><code>τ dA/dt = −A + uyaran(t)<br />τ dB/dt = −B + clip(0,9 A)<br />τ dC/dt = −C + clip(0,35 + w B)</code><p>w, uyarıcı durumda +1; baskılayıcı durumda −0,9; bağlantı kaldırıldığında 0. Güncellemeler önceki adımdaki A/B/C değerlerini kullanır. Hiçbir katsayı biyolojik ölçümden alınmadı.</p></details>
+            <p class="demo-eyebrow">{{ m.circuitEyebrow }}</p>
+            <div class="slider-grid circuit-controls"><div><label for="lesson-circuit-stimulus">{{ m.circuitStimulus }} <output for="lesson-circuit-stimulus">{{ format(circuitStimulus) }}</output></label><input id="lesson-circuit-stimulus" v-model.number="circuitStimulus" type="range" :aria-valuetext="format(circuitStimulus)" min="0" max="1" step="0.01" /></div><div class="check-controls"><label for="lesson-circuit-inhibitory"><input id="lesson-circuit-inhibitory" v-model="circuitInhibitory" type="checkbox" /> {{ m.makeInhibitory }}</label><label for="lesson-circuit-ablated"><input id="lesson-circuit-ablated" v-model="circuitAblated" type="checkbox" /> {{ m.removeConnection }}</label></div></div>
+            <div class="small-circuit" role="img" :aria-label="m.circuitLabel(circuitLink)"><span>A</span><i>→</i><span>B</span><i :class="{ muted: circuitAblated, negative: circuitInhibitory && !circuitAblated }">{{ circuitAblated ? '⋯' : circuitInhibitory ? '⊣' : '→' }}</i><span>C<small>{{ m.baselineTag }}</small></span></div>
+            <LessonTracePlot :times="circuit.times" :traces="[{ id: 'a', label: 'A', color: 'var(--theme-trace-blue, #456e91)', values: circuit.a }, { id: 'b', label: 'B', color: 'var(--theme-trace-gold, #9b7242)', values: circuit.b, dashed: true }, { id: 'c', label: 'C', color: 'var(--theme-trace-green, #35694f)', values: circuit.c }]" :title="m.circuitPlotTitle" :y-label="m.circuitAxis" />
+            <div class="demo-readouts"><div><span>{{ m.circuitMinimum }}</span><output data-testid="circuit-min">{{ format(circuit.outputMinimum, 3) }}</output></div><div><span>{{ m.circuitMaximum }}</span><output data-testid="circuit-max">{{ format(circuit.outputMaximum, 3) }}</output></div><div><span>{{ m.circuitDelta }}</span><output data-testid="circuit-delta">{{ signed(circuit.deltaAtPulseEnd) }}</output></div></div>
+            <p class="model-note"><strong>{{ m.assumption }}</strong> {{ m.circuitNote }}</p>
+            <details class="lesson-equations"><summary>{{ m.equationsSummary }}</summary><p>{{ m.equationsIntro }}</p><code>{{ m.equationA }}<br />{{ m.equationB }}<br />{{ m.equationC }}</code><p>{{ m.equationsNote }}</p></details>
           </div>
 
-          <p class="inline-sources"><strong>Okuma kaynakları:</strong> <template v-for="(sourceId, sourceIndex) in section.sources" :key="sourceId"><span v-if="sourceIndex"> · </span><a :href="lessonSources[sourceId].url">{{ lessonSources[sourceId].title }}</a></template></p>
+          <p class="inline-sources"><strong>{{ m.readingSources }}</strong> <template v-for="(sourceId, sourceIndex) in section.sources" :key="sourceId"><span v-if="sourceIndex"> · </span><a :href="sourceList[sourceId].url">{{ sourceList[sourceId].title }}</a></template></p>
         </section>
 
         <section id="lesson-glossary" aria-labelledby="lesson-glossary-title" class="lesson-section">
-          <p class="section-number">BAŞVURU</p><h2 id="lesson-glossary-title">Mini sözlük</h2><p class="section-lead">Bir sözcük takıldığında buraya dön. Aynı sözcüğün modeldeki anlamı ile biyolojideki kapsamını ayır.</p>
-          <dl class="lesson-glossary"><div v-for="[term, description] in glossary" :key="term"><dt><TermText :text="term" /></dt><dd><TermText :text="description" /></dd></div></dl>
+          <p class="section-number">{{ m.glossaryKicker }}</p><h2 id="lesson-glossary-title">{{ m.miniGlossary }}</h2><p class="section-lead">{{ m.glossaryLead }}</p>
+          <dl class="lesson-glossary"><div v-for="[term, description] in glossaryEntries" :key="term"><dt><TermText :text="term" /></dt><dd><TermText :text="description" /></dd></div></dl>
         </section>
 
         <section id="lesson-self-check" aria-labelledby="lesson-self-check-title" class="lesson-section">
-          <p class="section-number">KENDİNİ DENE</p><h2 id="lesson-self-check-title">Sekiz küçük kontrol</h2><p class="section-lead">Bir yanıt seç; gerekçesini hemen oku. Yanıtını değiştirebilirsin. Amaç puan toplamak kadar, varsayım ile ölçüm arasındaki farkı anlatabilmek.</p>
-          <p class="quiz-progress"><TermText :text="answeredCount" />/8 yanıtlandı · <TermText :text="correctCount" />/8 doğru</p>
-          <fieldset v-for="(question, index) in selfChecks" :key="question.id" :data-question-id="question.id" class="quiz-question">
+          <p class="section-number">{{ m.selfCheckKicker }}</p><h2 id="lesson-self-check-title">{{ m.selfCheckTitle }}</h2><p class="section-lead">{{ m.selfCheckLead }}</p>
+          <p class="quiz-progress">{{ m.quizProgress(answeredCount, correctCount) }}</p>
+          <fieldset v-for="(question, index) in questions" :key="question.id" :data-question-id="question.id" class="quiz-question">
             <legend><span><TermText :text="index + 1" />.</span> <TermText :text="question.question" /></legend>
             <label v-for="option in question.options" :key="option.id" :class="{ selected: answers[question.id] === option.id }"><input v-model="answers[question.id]" type="radio" :name="question.id" :value="option.id" :aria-describedby="answers[question.id] ? `lesson-feedback-${question.id}` : undefined" />{{ option.text }}</label>
-            <div v-if="answers[question.id]" :id="`lesson-feedback-${question.id}`" role="status" :data-testid="`quiz-feedback-${question.id}`" :data-correct="answers[question.id] === question.correct" class="quiz-feedback"><strong>{{ answers[question.id] === question.correct ? 'Doğru.' : 'Yeniden düşün.' }}</strong> {{ question.explanation }}</div>
+            <div v-if="answers[question.id]" :id="`lesson-feedback-${question.id}`" role="status" :data-testid="`quiz-feedback-${question.id}`" :data-correct="answers[question.id] === question.correct" class="quiz-feedback"><strong>{{ answers[question.id] === question.correct ? m.correct : m.thinkAgain }}</strong> {{ question.explanation }}</div>
           </fieldset>
         </section>
 
         <section id="lesson-sources" aria-labelledby="lesson-sources-title" class="lesson-section lesson-source-section">
-          <p class="section-number">KAYNAKLARI İZLE</p><h2 id="lesson-sources-title">Dersin dayandığı okumalar</h2><p class="lesson-paragraph">Temel açıklamalar için kurumsal sitelerden erişilen ders kitapları; hayvana özgü örnekler için özgün araştırmalar kullanıldı. Erişilebilir olmak açık lisans anlamına gelmez. Bu sayfadaki çizimler ve hesaplar öğretici tasarımdır. Kaynaklardaki deneysel ölçümlerin kopyası değildir.</p>
-          <ul><li v-for="source in lessonSources" :key="source.url"><a :href="source.url">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul>
+          <p class="section-number">{{ m.sourcesKicker }}</p><h2 id="lesson-sources-title">{{ m.sourcesTitle }}</h2><p class="lesson-paragraph">{{ m.sourcesText }}</p>
+          <ul><li v-for="source in sourceList" :key="source.url"><a :href="source.url">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul>
         </section>
 
-        <div class="lesson-next"><div><p class="lesson-eyebrow">BİR SONRAKİ ADIM</p><h2>Şimdi bağlantıyı sorgula.</h2><p>Devre deneyinde bir bağlantıyı seç. Anatomik kanıtı, atanan etkiyi ve seçilen dinamiği ayrı ayrı anlatmayı dene.</p></div><a :href="BASE">Devre deneyine geç <span aria-hidden="true">→</span></a></div>
+        <div class="lesson-next"><div><p class="lesson-eyebrow">{{ m.nextEyebrow }}</p><h2>{{ m.nextTitle }}</h2><p>{{ m.nextText }}</p></div><a :href="BASE">{{ m.nextLink }} <span aria-hidden="true">→</span></a></div>
       </div>
     </div>
   </main>

@@ -5,6 +5,10 @@ import type { OrbitControls as OrbitControlsType } from 'three/addons/controls/O
 import type { Circuit, Connection } from '../model/types'
 import { schematicPositions } from '../view/layout3d'
 import { decimal } from '../format'
+import { useMessages } from '../i18n'
+import { messages } from './CircuitGraph3D.messages'
+
+const m = useMessages(messages)
 
 const props = withDefaults(defineProps<{
   circuit: Circuit
@@ -24,7 +28,8 @@ type NodeMesh = ThreeTypes.Mesh<ThreeTypes.SphereGeometry, ThreeTypes.MeshStanda
 const viewport = ref<HTMLDivElement>()
 const canvas = ref<HTMLCanvasElement>()
 const rendererStatus = ref<RendererStatus>('loading')
-const failureMessage = ref('')
+// Kept as a function, so the notice follows a later change of language.
+const failureMessage = ref<(() => string) | null>(null)
 const renderCount = ref(0)
 const nodeCount = ref(0)
 const visibleEdgeCount = ref(0)
@@ -138,7 +143,7 @@ function releaseGraphics() {
   raycaster = undefined
 }
 
-function fail(status: Exclude<RendererStatus, 'loading' | 'ready'>, message: string) {
+function fail(status: Exclude<RendererStatus, 'loading' | 'ready'>, message: () => string) {
   if (disposed) return
   rendererStatus.value = status
   failureMessage.value = message
@@ -147,7 +152,7 @@ function fail(status: Exclude<RendererStatus, 'loading' | 'ready'>, message: str
 
 function contextLost(event: Event) {
   event.preventDefault()
-  fail('context-lost', '3D görünüm kesildi. 2D görünümden deneyine devam edebilirsin.')
+  fail('context-lost', () => m.value.contextLost)
 }
 
 /** Client size of the 3D viewport, or undefined while it is not displayed (hidden page region reports 0x0). */
@@ -267,7 +272,7 @@ function renderScene() {
     cameraQuaternion.value = camera.quaternion.toArray().map(value => value.toFixed(6)).join(',')
     rendererStatus.value = 'ready'
   } catch {
-    fail('error', '3D görünüm hazırlanamadı. 2D görünümden deneyine devam edebilirsin.')
+    fail('error', () => m.value.prepareFailed)
   }
 }
 
@@ -479,7 +484,7 @@ async function start() {
   try {
     rawContext = graphicsCanvas.getContext('webgl2', { antialias: true, alpha: true, powerPreference: 'low-power' }) ?? undefined
     if (!rawContext) {
-      fail('unavailable', 'Bu tarayıcıda 3D görünüm kullanılamıyor. 2D görünümden deneyine devam edebilirsin.')
+      fail('unavailable', () => m.value.unavailable)
       return
     }
     graphicsCanvas.addEventListener('webglcontextlost', contextLost)
@@ -487,7 +492,7 @@ async function start() {
     // A context loss plus a retry while the chunks loaded gave a newer start this state: leave it alone.
     if (disposed || rendererStatus.value !== 'loading' || graphicsCanvas !== startedOn) return
     if (!rawContext || rawContext.isContextLost() || !graphicsCanvas) {
-      fail('context-lost', '3D görünüm kesildi. 2D görünümden deneyine devam edebilirsin.')
+      fail('context-lost', () => m.value.contextLost)
       return
     }
     THREE = three
@@ -519,7 +524,7 @@ async function start() {
     resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(viewport.value)
   } catch {
-    fail('error', '3D görünüm hazırlanamadı. 2D görünümden deneyine devam edebilirsin.')
+    fail('error', () => m.value.prepareFailed)
   }
 }
 
@@ -527,7 +532,7 @@ async function start() {
 async function retry() {
   if (disposed || rendererStatus.value === 'loading' || rendererStatus.value === 'ready') return
   rendererStatus.value = 'loading'
-  failureMessage.value = ''
+  failureMessage.value = null
   instanceId.value = newInstanceId()
   await nextTick()
   // The retry button is gone now; hand keyboard focus to the new canvas.
@@ -544,38 +549,38 @@ onBeforeUnmount(() => { disposed = true; releaseGraphics(); THREE = undefined })
 
 <template>
   <section class="circuit-3d" :data-renderer-status="rendererStatus" :data-renderer-instance="instanceId" :data-node-count="nodeCount" :data-visible-edge-count="visibleEdgeCount" :data-render-count="renderCount" :data-camera-position="cameraPosition" :data-camera-target="cameraTarget" :data-camera-quaternion="cameraQuaternion">
-    <p class="schematic-note">Şematik 3D; anatomik konum/morfoloji değildir.</p>
-    <div v-if="rendererStatus === 'loading' || rendererStatus === 'ready'" class="camera-tools" role="group" aria-label="3D kamera denetimleri">
-      <button type="button" :disabled="rendererStatus !== 'ready'" @click="fitCamera(true)">Devreyi sığdır</button>
+    <p class="schematic-note">{{ m.schematicNote }}</p>
+    <div v-if="rendererStatus === 'loading' || rendererStatus === 'ready'" class="camera-tools" role="group" :aria-label="m.cameraControls">
+      <button type="button" :disabled="rendererStatus !== 'ready'" @click="fitCamera(true)">{{ m.fit }}</button>
       <div class="camera-tool-group">
-        <button type="button" :disabled="rendererStatus !== 'ready'" aria-label="3D görünümü uzaklaştır" @click="zoomCamera(1.2)">−</button>
-        <button type="button" :disabled="rendererStatus !== 'ready'" aria-label="3D görünümü yakınlaştır" @click="zoomCamera(1 / 1.2)">+</button>
+        <button type="button" :disabled="rendererStatus !== 'ready'" :aria-label="m.zoomOut" @click="zoomCamera(1.2)">−</button>
+        <button type="button" :disabled="rendererStatus !== 'ready'" :aria-label="m.zoomIn" @click="zoomCamera(1 / 1.2)">+</button>
       </div>
       <div class="camera-tool-group">
-        <button type="button" :disabled="rendererStatus !== 'ready'" aria-label="3D görünümü sola döndür" @click="rotateCamera(-Math.PI / 14, 0)">←</button>
-        <button type="button" :disabled="rendererStatus !== 'ready'" aria-label="3D görünümü sağa döndür" @click="rotateCamera(Math.PI / 14, 0)">→</button>
-        <button type="button" :disabled="rendererStatus !== 'ready'" aria-label="3D görünümü yukarı döndür" @click="rotateCamera(0, -Math.PI / 14)">↑</button>
-        <button type="button" :disabled="rendererStatus !== 'ready'" aria-label="3D görünümü aşağı döndür" @click="rotateCamera(0, Math.PI / 14)">↓</button>
+        <button type="button" :disabled="rendererStatus !== 'ready'" :aria-label="m.rotateLeft" @click="rotateCamera(-Math.PI / 14, 0)">←</button>
+        <button type="button" :disabled="rendererStatus !== 'ready'" :aria-label="m.rotateRight" @click="rotateCamera(Math.PI / 14, 0)">→</button>
+        <button type="button" :disabled="rendererStatus !== 'ready'" :aria-label="m.rotateUp" @click="rotateCamera(0, -Math.PI / 14)">↑</button>
+        <button type="button" :disabled="rendererStatus !== 'ready'" :aria-label="m.rotateDown" @click="rotateCamera(0, Math.PI / 14)">↓</button>
       </div>
     </div>
     <div v-if="rendererStatus === 'loading' || rendererStatus === 'ready'" ref="viewport" class="viewport-3d">
-      <canvas ref="canvas" class="circuit-3d-canvas" tabindex="0" role="img" aria-label="Şematik üç boyutlu devre. Döndürmek için sürükle; yakınlaştırmak için tekerlek veya iki parmak kullan. Klavyede ok tuşları döndürür, artı ve eksi yakınlaştırır, Home devreyi sığdırır."></canvas>
+      <canvas ref="canvas" class="circuit-3d-canvas" tabindex="0" role="img" :aria-label="m.canvasLabel"></canvas>
       <svg class="label-guides-3d" aria-hidden="true">
         <line v-for="label in labels.filter(item => item.visible)" :key="label.id" :x1="label.projectedX" :y1="label.projectedY" :x2="label.x" :y2="label.y" />
       </svg>
       <div class="node-labels-3d">
-        <button v-for="label in labels" v-show="label.visible" :key="label.id" type="button" class="node-label-3d" :class="{ selected: label.id === selectedNode }" :style="{ left: `${label.x}px`, top: `${label.y}px`, zIndex: label.layer }" :data-node-id="label.id" :data-activity="activityFor(label.id)" :data-projected-x="label.projectedX" :data-projected-y="label.projectedY" :data-visible="label.visible" :aria-pressed="label.id === selectedNode" :aria-label="`${label.id} hücresini seç; etkinlik ${decimal(activityFor(label.id), 3)}`" @click="emit('select', label.id)">{{ label.id }}</button>
+        <button v-for="label in labels" v-show="label.visible" :key="label.id" type="button" class="node-label-3d" :class="{ selected: label.id === selectedNode }" :style="{ left: `${label.x}px`, top: `${label.y}px`, zIndex: label.layer }" :data-node-id="label.id" :data-activity="activityFor(label.id)" :data-projected-x="label.projectedX" :data-projected-y="label.projectedY" :data-visible="label.visible" :aria-pressed="label.id === selectedNode" :aria-label="m.selectCell(label.id, decimal(activityFor(label.id), 3))" @click="emit('select', label.id)">{{ label.id }}</button>
       </div>
-      <p v-if="rendererStatus === 'loading'" class="loading-3d" role="status">3D devre hazırlanıyor…</p>
+      <p v-if="rendererStatus === 'loading'" class="loading-3d" role="status">{{ m.loading }}</p>
     </div>
     <div v-else class="fallback-3d" role="status">
-      <p>{{ failureMessage }}</p>
+      <p>{{ failureMessage?.() }}</p>
       <div class="fallback-actions">
-        <button v-if="rendererStatus !== 'unavailable'" type="button" @click="retry">3D görünümü yeniden dene</button>
-        <button type="button" @click="emit('request2d')">2D görünümüne dön</button>
+        <button v-if="rendererStatus !== 'unavailable'" type="button" @click="retry">{{ m.retry }}</button>
+        <button type="button" @click="emit('request2d')">{{ m.backTo2d }}</button>
       </div>
     </div>
-    <p v-if="rendererStatus === 'ready'" class="instructions-3d">Sürükle: döndür · İki parmak / tekerlek: yakınlaştır · Hücreye veya etiketine tıkla: seç. Parlaklık hesaplanan boyutsuz etkinliği gösterir.</p>
+    <p v-if="rendererStatus === 'ready'" class="instructions-3d">{{ m.instructions }}</p>
   </section>
 </template>
 

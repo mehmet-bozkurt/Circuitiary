@@ -2,6 +2,10 @@
 import { computed, useId } from 'vue'
 import { decimal } from '../format'
 import { sampleRows, type TableSeries } from '../chartTableRows'
+import { useMessages } from '../i18n'
+import { messages } from './ChartDataTable.messages'
+
+const m = useMessages(messages)
 
 interface Column extends TableSeries { label: string; short: string }
 // The same `times` and `traces` the activation chart plots, and the same peaks the peak row shows.
@@ -17,21 +21,22 @@ const props = withDefaults(defineProps<{
 const captionId = useId()
 const noteId = useId()
 const rows = computed(() => sampleRows(props.times, props.traces, props.everyMs))
+const hasPinned = computed(() => props.traces.some(trace => trace.id === 'pinned'))
 const cell = (value: number | null) => value === null ? '—' : decimal(value, 3)
 </script>
 
 <template>
   <details class="chart-table">
-    <summary><span>Grafiğin veri tablosu</span><small>{{ rows.length }} satır · her {{ everyMs }} ms</small></summary>
-    <p :id="noteId" class="chart-table-note">Grafikle aynı hesaplanmış değerler; ayarlar değişince birlikte güncellenir. Satırlar, kayıtlı {{ times.length }} örnekten her {{ everyMs }} ms'deki {{ rows.length }} tanesidir; aradaki örnekler tabloda yok. Tepe satırı ise tablodaki satırlardan değil, kayıtlı örneklerin hepsinden alınır. Değerler 0–1 arasında boyutsuz model etkinliğidir, ölçülmüş bir yanıt değildir.</p>
+    <summary><span>{{ m.title }}</span><small>{{ m.summary(rows.length, everyMs) }}</small></summary>
+    <p :id="noteId" class="chart-table-note">{{ m.note(times.length, everyMs, rows.length) }}</p>
     <div class="chart-table-scroll" role="region" tabindex="0" :aria-labelledby="captionId">
       <table :aria-describedby="noteId">
-        <caption :id="captionId">{{ output }} hücresinin model etkinliği · üç koşul</caption>
-        <thead><tr><th scope="col">Zaman (ms)</th><th v-for="trace in traces" :key="trace.id" scope="col">{{ trace.short }} · {{ trace.label }}</th></tr></thead>
+        <caption :id="captionId">{{ hasPinned ? m.captionPinned(output) : m.caption(output) }}</caption>
+        <thead><tr><th scope="col">{{ m.time }}</th><th v-for="trace in traces" :key="trace.id" scope="col">{{ trace.short }} · {{ trace.label }}</th></tr></thead>
         <tbody>
           <tr v-for="row in rows" :key="row.timeMs"><th scope="row">{{ decimal(row.timeMs, 0) }}</th><td v-for="(value, index) in row.values" :key="traces[index]!.id">{{ cell(value) }}</td></tr>
         </tbody>
-        <tfoot><tr><th scope="row">Tepe etkinlik</th><td v-for="trace in traces" :key="trace.id">{{ cell(peaks[trace.id] ?? null) }}</td></tr></tfoot>
+        <tfoot><tr><th scope="row">{{ m.peak }}</th><td v-for="trace in traces" :key="trace.id">{{ cell(peaks[trace.id] ?? null) }}</td></tr></tfoot>
       </table>
     </div>
   </details>

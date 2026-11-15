@@ -1,0 +1,53 @@
+import { defineMessages } from '../i18n'
+
+// Text of one run record: the two condition labels and the list of assumptions the record rests on.
+export const messages = defineMessages({
+  tr: {
+    baselineLabel: 'Temel varsayımlar',
+    chemicalLabel: (value: string) => `Kimyasal model ölçeği ${value}`,
+    gapLabel: (value: string) => `Gap model ölçeği ${value}`,
+    tauLabel: (value: number) => `Bütün hücrelerde zaman sabiti ${value} model ms`,
+    assumptions: (title: string, version: string, weightUnit: string): string[] => [
+      `${title} (${version}) anatomisi ve kaynak referansları iki koşulda aynıdır.`,
+      `Ham ağırlık birimi: ${weightUnit}. Ham kayıtlar sinaps sayısı, ölçülmüş iletim gücü veya model ağırlığı değildir.`,
+      'Bu içe aktarılmış anatomi verisinde kimyasal işaretler yok; bu model bütün kimyasal etkileri pozitif varsayar. Verici, reseptör veya baskılayıcı etki ölçümü aktarılmamıştır.',
+      'Normalize kimyasal ağırlıklar ve gap katsayıları boyutsuz model varsayımlarıdır; EM kayıtlarından seçilmiş bir normalizasyonla üretilir, ölçülmüş fizyolojik güç değildir.',
+      'Gap çifti tek fiziksel kayıt olarak tutulur ve g·(komşu−hücre) terimiyle iki yönde eşit katsayı kullanır. Doğrultucu fizyoloji veya çiftlere özgü işlev ölçümü burada modellenmez.',
+      'Seçilmiş alt ağ dışında kalan kimyasal girdiler sıfır kabul edilir; dış gap bağlantıları çıkarılmıştır. Dış hücreleri sıfıra bağlayan bir gap sınırı uygulanmaz.',
+      'Kimyasal öz bağlantılar korunur; kaynak gap köşegen kayıtları yalnız metadatadır ve fiziksel gap olarak simüle edilmez.',
+      'Her iki koşulda başlangıç aktiviteleri sıfır, AVER darbesi [100,300) model ms, genlik 0,8; kayıt 700 model ms ve Euler adımı 1 model ms’dir.',
+      'AVER uyaran hedefi, AVAR gözlenen hücre olarak seçilmiştir. Bu deney rolleri ölçülmüş duyusal veya motor işlev ataması değildir.',
+      'Aktivite 0–1 aralığında boyutsuz sürekli model değeridir; zar gerilimi, kalsiyum, olay sayısı veya ateşleme hızı değildir. Zaman sabitleri fizyolojik ölçümlere kalibre edilmemiştir.',
+      'Bütün hücreler aynı önceki adımı okuyarak güncellenir; kimyasal toplam 0–1 hedef aralığına sınırlanır, gap yayılımı bu sınırlamanın dışındadır.',
+      'Yalnız controlledVariable ile belirtilen varsayım değişir. Zaman sabiti deneyinde değişiklik seçilmiş bütün hücrelere uygulanır; tek hücreye özgü bir override yoktur.',
+      'Sıfır model ölçeği anatomik kayıtları silmez; yalnız ilgili model katkılarını sıfırlar. Diğer bağlantı türü hâlâ etkin olabilir.',
+      'Tepe zamanı kaydedilen pozitif en büyük değerin ilk örneğidir; eşik geçişi, akson iletim gecikmesi veya biyolojik tepki başlangıcı değildir. Sıfır kalan çıktının tepe zamanı yoktur.',
+      'Son değer yalnız kayıt penceresinin son örneğidir; kalıcı veya kararlı durum iddiası değildir. En büyük mutlak iz farkı bütün seçilmiş hücre ve zaman örnekleri üzerinde hesaplanır.',
+      'Sonuçlar bu sabit modelin varsayımlara duyarlılığını gösterir; hayvan davranışı, kalsiyum ölçümü, beden veya biyolojik beyin emülasyonu doğrulanmış değildir.',
+    ],
+  },
+  en: {
+    baselineLabel: 'Baseline assumptions',
+    chemicalLabel: (value: string) => `Chemical model scale ${value}`,
+    gapLabel: (value: string) => `Gap model scale ${value}`,
+    tauLabel: (value: number) => `Time constant in all cells ${value} model ms`,
+    assumptions: (title: string, version: string, weightUnit: string): string[] => [
+      `The anatomy and source references of ${title} (${version}) are the same in both conditions.`,
+      `Raw weight unit: ${weightUnit}. The raw records are not a synapse count, a measured transmission strength or a model weight.`,
+      'This imported anatomy data has no chemical signs; this model assumes that all chemical effects are positive. No measurement of transmitter, receptor or inhibitory effect was imported.',
+      'The normalized chemical weights and the gap coefficients are dimensionless model assumptions; they are produced from the EM records with a chosen normalization and are not measured physiological strength.',
+      'A gap pair is kept as a single physical record and uses an equal coefficient in both directions through the g·(neighbor−cell) term. Rectifying physiology or pair-specific functional measurement is not modeled here.',
+      'Chemical inputs from outside the selected subnetwork are taken as zero; external gap connections have been removed. No gap boundary that ties outside cells to zero is applied.',
+      'Chemical self-connections are kept; the diagonal gap entries of the source are metadata only and are not simulated as physical gaps.',
+      'In both conditions the initial activities are zero, the AVER pulse is [100,300) model ms with amplitude 0.8; the recording is 700 model ms and the Euler step is 1 model ms.',
+      'AVER was chosen as the stimulus target and AVAR as the observed cell. These experiment roles are not a measured assignment of sensory or motor function.',
+      'Activity is a dimensionless continuous model value in the range 0–1; it is not membrane voltage, calcium, an event count or a firing rate. The time constants are not calibrated to physiological measurements.',
+      'All cells are updated by reading the same previous step; the chemical sum is limited to the 0–1 target range, and gap diffusion is outside this limit.',
+      'Only the assumption named by controlledVariable changes. In the time constant experiment the change is applied to all selected cells; there is no override specific to a single cell.',
+      'A zero model scale does not delete the anatomical records; it only sets the corresponding model contributions to zero. The other connection type can still be active.',
+      'Peak time is the first sample of the largest positive recorded value; it is not a threshold crossing, an axonal conduction delay or the onset of a biological response. An output that stays at zero has no peak time.',
+      'The final value is only the last sample of the recording window; it is not a claim of a lasting or steady state. The largest absolute trace difference is computed over all selected cells and time samples.',
+      'The results show the sensitivity of this fixed model to its assumptions; animal behavior, calcium measurement, a body or a biological brain emulation has not been validated.',
+    ],
+  },
+})

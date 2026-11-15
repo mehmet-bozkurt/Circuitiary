@@ -25,6 +25,13 @@
   @bottom-left { content: "Circuitiary · eğitim amaçlı model; ölçüm değildir"; font: 8pt/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #4b5a53; }
   @bottom-right { content: counter(page) " / " counter(pages); font: 8pt/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #4b5a53; }
 }
+/* The footer in English. A margin box cannot be chosen by a selector, so the English page is a named page:
+   <html lang> follows the language (src/i18n.ts) and puts the whole document on it. Margins and the page
+   counter still come from the rules above; only the footer text differs. */
+@page english {
+  @bottom-left { content: "Circuitiary · educational model; not a measurement"; font: 8pt/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #4b5a53; }
+}
+html[lang="en"] body { page: english; }
 
 .print-snapshot { display: none; }
 
@@ -42,6 +49,7 @@
   /* The 3D view is canvas only. If it is the shown one, say so instead of leaving an empty frame. */
   #graph-panel-3d > * { display: none !important; }
   #graph-panel-3d:not([style*="display: none"])::before { content: "Üç boyutlu şematik görünüm yazdırılmaz. Bağlantı haritasını yazdırmak için 2D görünümünü seç."; display: block; padding: 18px 0; font-size: 11px; line-height: 1.8; }
+  html[lang="en"] #graph-panel-3d:not([style*="display: none"])::before { content: "The three-dimensional schematic view is not printed. To print the connection map, choose the 2D view."; }
   /* Dark figure panel: keep its fill even when the browser skips background graphics, or its light text would vanish. */
   .circuit-panel { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .circuit-canvas { display: none !important; }

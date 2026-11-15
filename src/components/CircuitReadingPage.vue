@@ -5,15 +5,23 @@ import { parseRealConnectome } from '../model/realConnectome'
 import type { DeepReadonly, ReadonlyRealConnectome, SourceReference } from '../model/types'
 import { createReadingGraph, findChemicalCycle, findShortestRoute, inspectNeuron } from '../learning/circuitReading'
 import type { ReadingGraph, ReadingHop, ReadingMode, ReadingRoute } from '../learning/circuitReading'
-import { readingNotes, readingPrompts, readingSources } from '../learning/readingContent'
-import { BASE, DEMO, DEMO_DATA_NOTICE, LOCAL_DATA_URL, withBase } from '../siteBase'
+import { readingNotes, readingNotesEn, readingPrompts, readingPromptsEn, readingSources, readingSourcesEn } from '../learning/readingContent'
+import { BASE, DEMO, LOCAL_DATA_URL, demoDataNotice, withBase } from '../siteBase'
+import { L, useMessages } from '../i18n'
+import { messages } from './CircuitReadingPage.messages'
 
 withDefaults(defineProps<{ handoffLoading?: boolean; handoffError?: string }>(), { handoffLoading: false, handoffError: '' })
 const emit = defineEmits<{ ready: []; inspect: [payload: { neuronId: string }] }>()
 type LoadState = 'loading' | 'ready' | 'missing' | 'invalid' | 'error'
+const m = useMessages(messages)
+const notes = computed(() => L<typeof readingNotesEn>(readingNotes, readingNotesEn))
+const prompts = computed(() => L<typeof readingPromptsEn>(readingPrompts, readingPromptsEn))
+const sources = computed(() => L<typeof readingSourcesEn>(readingSources, readingSourcesEn))
+/** A status or error line is kept as a function, so it is written in the language of the moment it is shown. */
+type Line = (() => string) | null
 const loadState = ref<LoadState>('loading')
-const loadMessage = ref('Yerel bağlantı verisi yükleniyor…')
-const errorMessage = ref('')
+const loadMessage = ref<Line>(() => m.value.loading)
+const errorMessage = ref<Line>(null)
 const data = shallowRef<ReadonlyRealConnectome | null>(null)
 const graph = shallowRef<ReadingGraph | null>(null)
 const selectedNeuron = ref('AVER')
@@ -21,7 +29,7 @@ const targetNeuron = ref('AVAR')
 const mode = ref<ReadingMode>('chemical')
 const route = shallowRef<ReadingRoute | null>(null)
 const stepIndex = ref(0)
-const pathAnnouncement = ref('')
+const pathAnnouncement = ref<Line>(null)
 let request: AbortController | null = null
 let requestTimer: ReturnType<typeof setTimeout> | undefined
 let requestVersion = 0
@@ -31,15 +39,13 @@ const selected = computed(() => graph.value?.neuronIds.includes(selectedNeuron.v
 const cycle = computed(() => graph.value && selected.value ? findChemicalCycle(graph.value, selectedNeuron.value) : null)
 const activeHop = computed(() => route.value?.hops[stepIndex.value] ?? null)
 const neighborGroups = computed(() => selected.value ? [
-  { id: 'incoming', title: 'Kimyasal girişler', symbol: '→', description: 'Başka hücre → seçili hücre', hops: selected.value.incomingChemical },
-  { id: 'outgoing', title: 'Kimyasal çıkışlar', symbol: '→', description: 'Seçili hücre → başka hücre', hops: selected.value.outgoingChemical },
-  { id: 'gaps', title: 'Elektriksel bağlantılar', symbol: '↔', description: 'Bir kez tutulan fiziksel çiftler', hops: selected.value.gaps },
-  { id: 'self-loops', title: 'Kimyasal öz döngüler', symbol: '↺', description: 'Aynı kaynak ve hedef; ayrı kayıt', hops: selected.value.selfLoops },
+  { id: 'incoming', ...m.value.groups.incoming, symbol: '→', hops: selected.value.incomingChemical },
+  { id: 'outgoing', ...m.value.groups.outgoing, symbol: '→', hops: selected.value.outgoingChemical },
+  { id: 'gaps', ...m.value.groups.gaps, symbol: '↔', hops: selected.value.gaps },
+  { id: 'self-loops', ...m.value.groups.selfLoops, symbol: '↺', hops: selected.value.selfLoops },
 ] : [])
 const allSelfLoops = computed<ReadingHop[]>(() => (graph.value?.chemicalEdges ?? []).filter(edge => edge.source === edge.target).map(edge => ({ edgeId: edge.id, kind: 'chemical', from: edge.source, to: edge.target, rawWeight: edge.rawWeight, sourceRef: edge.sourceRef })))
-const typeLabels = { sensory: 'Duyusal nöron', interneuron: 'Ara nöron', motorneuron: 'Motor nöron', neuron: 'Nöron' } as const
-const modeLabel = computed(() => mode.value === 'chemical' ? 'kimyasal' : mode.value === 'gap' ? 'elektriksel' : 'karma')
-const sourceText = (source: DeepReadonly<SourceReference>) => `${source.sheet} · ${source.cell} · satır ${source.row}, sütun ${source.column}`
+const sourceText = (source: DeepReadonly<SourceReference>) => m.value.sourceRef(source.sheet, source.cell, source.row, source.column)
 const symbol = (hop: ReadingHop) => hop.kind === 'gap' ? '↔' : '→'
 function hopAttributes(hop: ReadingHop) {
   return {
@@ -51,22 +57,24 @@ function hopAttributes(hop: ReadingHop) {
 watch([selectedNeuron, targetNeuron, mode], () => {
   route.value = null
   stepIndex.value = 0
-  pathAnnouncement.value = 'Seçim değişti. Yeni koşullar için yol bulabilirsin.'
+  pathAnnouncement.value = () => m.value.selectionChanged
 })
 function searchRoute() {
   if (!graph.value) return
   route.value = findShortestRoute(graph.value, selectedNeuron.value, targetNeuron.value, mode.value)
   stepIndex.value = 0
-  pathAnnouncement.value = route.value.status === 'same-cell'
-    ? 'Kaynak ve hedef aynı hücre. Sıfır bağlantılı yol; bir etkileşim kanıtı değildir.'
-    : route.value.status === 'unreachable'
-      ? 'Bu 30 hücrelik alt grafikte seçilen bağlantı türünde yol bulunamadı.'
-      : `${route.value.hops.length} bağlantılı anatomik yol bulundu. İlk adım gösteriliyor.`
+  const { status, hops } = route.value
+  pathAnnouncement.value = status === 'same-cell'
+    ? () => m.value.announceSameCell
+    : status === 'unreachable'
+      ? () => m.value.announceUnreachable
+      : () => m.value.announceFound(hops.length)
 }
 function selectStep(index: number) {
   if (!route.value || index < 0 || index >= route.value.hops.length) return
   stepIndex.value = index
-  pathAnnouncement.value = `${index + 1}. adım: ${route.value.hops[index]!.from}, ${route.value.hops[index]!.kind === 'gap' ? 'elektriksel çift üzerinden' : 'kimyasal kayıt yönünde'}, ${route.value.hops[index]!.to}.`
+  const hop = route.value.hops[index]!
+  pathAnnouncement.value = () => m.value.announceStep(index + 1, hop.from, hop.kind, hop.to)
 }
 function indirectExample() {
   if (!graph.value?.neuronIds.includes('RICL') || !graph.value.neuronIds.includes('AVBR')) return
@@ -85,22 +93,22 @@ async function loadData() {
   const timer = setTimeout(() => { timedOut = true; controller.abort() }, 10_000)
   requestTimer = timer
   loadState.value = 'loading'
-  loadMessage.value = 'Yerel bağlantı verisi yükleniyor…'
-  errorMessage.value = ''
+  loadMessage.value = () => m.value.loading
+  errorMessage.value = null
   data.value = null
   graph.value = null
   route.value = null
   stepIndex.value = 0
-  pathAnnouncement.value = ''
+  pathAnnouncement.value = null
   try {
     // The online demo has no local data endpoint: say so instead of asking for it.
-    if (DEMO) { loadState.value = 'missing'; loadMessage.value = ''; errorMessage.value = DEMO_DATA_NOTICE; return }
+    if (DEMO) { loadState.value = 'missing'; loadMessage.value = null; errorMessage.value = demoDataNotice; return }
     const response = await fetch(LOCAL_DATA_URL, { cache: 'no-store', signal: controller.signal })
     if (disposed || version !== requestVersion) return
     if (response.status === 404) {
       loadState.value = 'missing'
-      loadMessage.value = ''
-      errorMessage.value = 'Yerel bağlantı verisi bulunamadı. Bu sayfa gerçek veri dosyası olmadan örnek sonuç üretmez. Veri hazır olduğunda tekrar deneyebilirsin.'
+      loadMessage.value = null
+      errorMessage.value = () => m.value.missing
       return
     }
     if (!response.ok) throw new Error('Local data request failed')
@@ -113,16 +121,16 @@ async function loadData() {
     data.value = parsed
     graph.value = readingGraph
     loadState.value = 'ready'
-    loadMessage.value = `${readingGraph.neurons.length} hücre, ${readingGraph.chemicalEdges.length} kimyasal kayıt ve ${readingGraph.gapEdges.length} fiziksel elektriksel çift yüklendi.`
+    loadMessage.value = () => m.value.loaded(readingGraph.neurons.length, readingGraph.chemicalEdges.length, readingGraph.gapEdges.length)
   } catch {
     if (disposed || version !== requestVersion) return
-    loadMessage.value = ''
+    loadMessage.value = null
     loadState.value = timedOut || phase === 'request' ? 'error' : 'invalid'
     errorMessage.value = timedOut
-      ? 'Yerel veri 10 saniyede yanıt vermedi. Tekrar deneyebilirsin.'
+      ? () => m.value.timedOut
       : phase === 'parse'
-        ? 'Yerel dosya beklenen bağlantı şemasına uymuyor veya okunabilir JSON içermiyor. Bu veriyle anatomik sonuç gösterilmiyor.'
-        : 'Yerel bağlantı verisi okunamadı. Bağlantı yeniden hazır olduğunda tekrar deneyebilirsin.'
+        ? () => m.value.invalid
+        : () => m.value.unreadable
   } finally {
     clearTimeout(timer)
     if (version === requestVersion) { request = null; requestTimer = undefined }
@@ -143,72 +151,72 @@ onBeforeUnmount(() => {
 
 <template>
   <main id="circuit-reading" tabindex="-1" class="reading-page" :data-data-state="loadState">
-    <header class="reading-intro"><p class="reading-eyebrow">CIRCUITIARY / ÖĞRENME NOTLARI / 03</p><h1 id="reading-title" tabindex="-1">Devreyi okumak</h1><p class="reading-summary">Bir hücreyi seç. Girişini, çıkışını ve komşusunu ayır. Sonra bir anatomik yolun ne gösterdiğini, neyi kanıtlamak için ek veri gerektiğini anlat.</p><p class="reading-meta">Gerçek yerel veri · 30 hücrelik alt ağ · Yeni bir dinamik simülasyon çalıştırılmaz</p></header>
-    <div class="reading-boundary"><strong>Bağlantı kaydı ile işlevsel etkiyi ayır.</strong><p><TermText :text="readingNotes.function" /></p></div>
-    <nav class="reading-navigation" aria-label="Devreyi okumak dersinin bölümleri"><a href="#reading-data">01 · Veriyi tanı</a><a href="#reading-neighbours">02 · Komşuları ayır</a><a href="#reading-path">03 · Yolu izle</a><a href="#reading-cycles">04 · Döngüyü ve sınırı oku</a><a href="#reading-provenance">Kaynaklar</a></nav>
+    <header class="reading-intro"><p class="reading-eyebrow">{{ m.kicker }}</p><h1 id="reading-title" tabindex="-1">{{ m.title }}</h1><p class="reading-summary">{{ m.summary }}</p><p class="reading-meta">{{ m.meta }}</p></header>
+    <div class="reading-boundary"><strong>{{ m.boundaryLead }}</strong><p><TermText :text="notes.function" /></p></div>
+    <nav class="reading-navigation" :aria-label="m.sectionsNav"><a href="#reading-data">{{ m.nav.data }}</a><a href="#reading-neighbors">{{ m.nav.neighbors }}</a><a href="#reading-path">{{ m.nav.path }}</a><a href="#reading-cycles">{{ m.nav.cycles }}</a><a href="#reading-provenance">{{ m.nav.provenance }}</a></nav>
 
     <section id="reading-data" tabindex="-1" aria-labelledby="reading-data-title" class="reading-section">
-      <p class="reading-eyebrow">01 / KAYDI TANI</p><h2 id="reading-data-title">Anatominin kaydı nasıl tutuluyor?</h2><p class="reading-paragraph"><TermText :text="readingNotes.anatomy" /></p><p class="reading-paragraph"><TermText :text="readingNotes.weight" /></p>
-      <div data-testid="reading-load-status" :data-state="loadState" class="reading-load-state"><p role="status" aria-live="polite" aria-atomic="true">{{ loadMessage }}</p><div v-if="errorMessage" :role="DEMO ? 'status' : 'alert'" class="reading-error"><p>{{ errorMessage }}</p><button v-if="!DEMO" type="button" @click="loadData">Tekrar dene</button></div></div>
-      <div v-if="graph" data-testid="reading-data-summary" :data-neuron-count="graph.neurons.length" :data-chemical-count="graph.chemicalEdges.length" :data-gap-count="graph.gapEdges.length" :data-self-loop-count="allSelfLoops.length" class="reading-data-summary"><div><span>Hücre</span><strong>{{ graph.neurons.length }}</strong></div><div><span>Kimyasal kayıt</span><strong>{{ graph.chemicalEdges.length }}</strong></div><div><span>Fiziksel elektriksel çift</span><strong>{{ graph.gapEdges.length }}</strong></div><p><TermText :text="graph.chemicalEdges.length" /> kimyasal kaydın <TermText :text="allSelfLoops.length" /> tanesi öz döngüdür. Elektriksel çiftler iki kez sayılmaz.</p><p>Ham birim: seri EM kesiti ağırlığı.</p></div>
-      <p class="reading-model-note">Ham kayıtları okuyoruz; burada bağlantılara uyarıcı/baskılayıcı işaret, dinamik ağırlık veya etkinlik değeri atanmıyor.</p>
+      <p class="reading-eyebrow">{{ m.dataKicker }}</p><h2 id="reading-data-title">{{ m.dataTitle }}</h2><p class="reading-paragraph"><TermText :text="notes.anatomy" /></p><p class="reading-paragraph"><TermText :text="notes.weight" /></p>
+      <div data-testid="reading-load-status" :data-state="loadState" class="reading-load-state"><p role="status" aria-live="polite" aria-atomic="true">{{ loadMessage?.() }}</p><div v-if="errorMessage" :role="DEMO ? 'status' : 'alert'" class="reading-error"><p>{{ errorMessage() }}</p><button v-if="!DEMO" type="button" @click="loadData">{{ m.retry }}</button></div></div>
+      <div v-if="graph" data-testid="reading-data-summary" :data-neuron-count="graph.neurons.length" :data-chemical-count="graph.chemicalEdges.length" :data-gap-count="graph.gapEdges.length" :data-self-loop-count="allSelfLoops.length" class="reading-data-summary"><div><span>{{ m.cells }}</span><strong>{{ graph.neurons.length }}</strong></div><div><span>{{ m.chemicalRecords }}</span><strong>{{ graph.chemicalEdges.length }}</strong></div><div><span>{{ m.physicalPairs }}</span><strong>{{ graph.gapEdges.length }}</strong></div><p>{{ m.selfLoopShare(graph.chemicalEdges.length, allSelfLoops.length) }}</p><p>{{ m.rawUnit }}</p></div>
+      <p class="reading-model-note">{{ m.rawOnly }}</p>
     </section>
 
-    <section id="reading-neighbours" tabindex="-1" aria-labelledby="reading-neighbours-title" class="reading-section">
-      <p class="reading-eyebrow">02 / HÜCRENİN ÇEVRESİ</p><h2 id="reading-neighbours-title">Gelen, giden ve çift yönlü okunan bağlantı</h2><p class="reading-paragraph"><TermText :text="readingNotes.neighbours" /></p>
+    <section id="reading-neighbors" tabindex="-1" aria-labelledby="reading-neighbors-title" class="reading-section">
+      <p class="reading-eyebrow">{{ m.neighboursKicker }}</p><h2 id="reading-neighbors-title">{{ m.neighboursTitle }}</h2><p class="reading-paragraph"><TermText :text="notes.neighbors" /></p>
       <div v-if="graph && selected" class="neuron-reading">
-        <div class="neuron-selector"><label for="reading-neuron">İncelenen hücre / yolun kaynağı</label><select id="reading-neuron" v-model="selectedNeuron" :disabled="handoffLoading"><option v-for="neuron in graph.neurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}</option></select></div>
-        <div data-testid="reading-selected-neuron" class="selected-neuron"><h3><TermText :text="selected.neuron.id" /></h3><p>Kaynak hücre sınıfı: <strong><TermText :text="typeLabels[selected.neuron.cellType]" /></strong></p><p class="source-reference">Hücre listesi: <TermText :text="sourceText(selected.neuron.sourceRef)" /></p><p>Bu sınıf, burada atanmış bir girdi/çıktı rolü değildir.</p></div>
+        <div class="neuron-selector"><label for="reading-neuron">{{ m.inspectedCell }}</label><select id="reading-neuron" v-model="selectedNeuron" :disabled="handoffLoading"><option v-for="neuron in graph.neurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}</option></select></div>
+        <div data-testid="reading-selected-neuron" class="selected-neuron"><h3><TermText :text="selected.neuron.id" /></h3><p>{{ m.cellClass }} <strong><TermText :text="m.cellTypes[selected.neuron.cellType]" /></strong></p><p class="source-reference">{{ m.cellList }} <TermText :text="sourceText(selected.neuron.sourceRef)" /></p><p>{{ m.classNotRole }}</p></div>
         <div class="neighbor-grid">
-          <div v-for="group in neighborGroups" :key="group.id" :data-testid="`reading-${group.id}`" class="neighbor-group"><h3><TermText :text="group.title" /> <span><TermText :text="group.hops.length" /></span></h3><p class="group-description"><TermText :text="group.description" /></p><p v-if="!group.hops.length" class="empty-records">Bu alt ağda bu tür kayıt yok.</p><ul v-else class="edge-list"><li v-for="hop in group.hops" :key="hop.edgeId" v-bind="hopAttributes(hop)"><div class="edge-heading"><strong><TermText :text="hop.from" /> <span aria-hidden="true">{{ hop.kind === 'gap' ? '↔' : '→' }}</span><span class="sr-only"><TermText :text="hop.kind === 'gap' ? 'ile fiziksel çift' : 'hücresinden hedef'" /></span> <TermText :text="hop.to" /></strong><span><TermText :text="hop.rawWeight" /> EM kesiti</span></div><p class="source-reference">Kaynak: <TermText :text="sourceText(hop.sourceRef)" /></p><p v-if="hop.reciprocalSourceRef" class="source-reference">Karşılıklı matris kaydı: <TermText :text="sourceText(hop.reciprocalSourceRef)" /></p></li></ul></div>
+          <div v-for="group in neighborGroups" :key="group.id" :data-testid="`reading-${group.id}`" class="neighbor-group"><h3><TermText :text="group.title" /> <span><TermText :text="group.hops.length" /></span></h3><p class="group-description"><TermText :text="group.description" /></p><p v-if="!group.hops.length" class="empty-records">{{ m.noRecords }}</p><ul v-else class="edge-list"><li v-for="hop in group.hops" :key="hop.edgeId" v-bind="hopAttributes(hop)"><div class="edge-heading"><strong><TermText :text="hop.from" /> <span aria-hidden="true">{{ hop.kind === 'gap' ? '↔' : '→' }}</span><span class="sr-only"><TermText :text="hop.kind === 'gap' ? m.srGapPair : m.srChemicalTarget" /></span> <TermText :text="hop.to" /></strong><span>{{ m.emSections(hop.rawWeight) }}</span></div><p class="source-reference">{{ m.sourceRefLabel }} <TermText :text="sourceText(hop.sourceRef)" /></p><p v-if="hop.reciprocalSourceRef" class="source-reference">{{ m.reciprocalRecord }} <TermText :text="sourceText(hop.reciprocalSourceRef)" /></p></li></ul></div>
         </div>
-        <p class="reading-model-note"><TermText :text="readingNotes.gap" /></p>
-        <div class="reading-handoff"><p><TermText :text="readingNotes.handoff" /></p><button type="button" :disabled="handoffLoading" @click="emit('inspect', { neuronId: selectedNeuron })">{{ handoffLoading ? 'Ana deney hazırlanıyor…' : 'Ana deneyde bu hücreyi incele' }}</button><p v-if="handoffError" data-testid="reading-handoff-error" role="alert">{{ handoffError }}</p></div>
+        <p class="reading-model-note"><TermText :text="notes.gap" /></p>
+        <div class="reading-handoff"><p><TermText :text="notes.handoff" /></p><button type="button" :disabled="handoffLoading" @click="emit('inspect', { neuronId: selectedNeuron })">{{ handoffLoading ? m.handoffLoading : m.handoff }}</button><p v-if="handoffError" data-testid="reading-handoff-error" role="alert">{{ handoffError }}</p></div>
       </div>
-      <p v-else class="waiting-for-data">Hücre seçimi ve bağlantı listeleri, yerel veri başarıyla yüklendiğinde açılır.</p>
+      <p v-else class="waiting-for-data">{{ m.neighboursWaiting }}</p>
     </section>
 
     <section id="reading-path" tabindex="-1" aria-labelledby="reading-path-title" class="reading-section">
-      <p class="reading-eyebrow">03 / DOĞRUDAN VE DOLAYLI</p><h2 id="reading-path-title">En az kenarlı anatomik yolu izle</h2><p class="reading-paragraph"><TermText :text="readingNotes.route" /></p><p class="reading-paragraph"><TermText :text="readingNotes.direct" /></p>
+      <p class="reading-eyebrow">{{ m.pathKicker }}</p><h2 id="reading-path-title">{{ m.pathTitle }}</h2><p class="reading-paragraph"><TermText :text="notes.route" /></p><p class="reading-paragraph"><TermText :text="notes.direct" /></p>
       <div v-if="graph" class="route-workspace">
-        <div class="route-controls"><div><label for="reading-target">Yolun hedef hücresi</label><select id="reading-target" v-model="targetNeuron"><option v-for="neuron in graph.neurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}</option></select></div><div><label for="reading-mode">Okunacak bağlantı türü</label><select id="reading-mode" v-model="mode"><option value="chemical">Kimyasal · yönlü</option><option value="gap">Elektriksel · çift yönlü okuma</option><option value="mixed">Karma · her ikisi</option></select></div></div>
-        <p class="source-choice">Kaynak: <strong><TermText :text="selectedNeuron" /></strong>. Kaynağı üstteki hücre seçiminden değiştirebilirsin.</p>
-        <div class="route-actions"><button type="button" class="reading-primary" aria-controls="reading-route-region" @click="searchRoute">Yol bul <span aria-hidden="true">→</span></button><button type="button" class="reading-secondary" :disabled="handoffLoading" @click="indirectExample">Dolaylı yol örneği: RICL → AVBR</button></div>
-        <p data-testid="reading-path-status" role="status" aria-live="polite" aria-atomic="true" class="path-announcement">{{ pathAnnouncement }}</p>
-        <div id="reading-route-region" data-testid="reading-path" :data-status="route?.status ?? 'not-searched'" :data-source="selectedNeuron" :data-target="targetNeuron" :data-mode="mode" role="region" aria-label="Anatomik yol aramasının sonucu" class="route-result">
-          <p v-if="!route" class="not-searched">Kaynak, hedef ve bağlantı türünü seç; “Yol bul” ile bu alt grafiği ara. Sonuç yalnız seçilen anatomik kayıtları kullanır.</p>
-          <template v-else-if="route.status === 'same-cell'"><h3>Sıfır bağlantılı yol</h3><p data-testid="reading-same-cell"><TermText :text="selectedNeuron" /> ile <TermText :text="targetNeuron" /> aynı hücre. Arada 0 kenar var; bu sonuç bir öz döngü veya etkileşim kanıtı değildir.</p></template>
-          <template v-else-if="route.status === 'unreachable'"><h3>Bu alt grafikte yol bulunamadı</h3><p data-testid="reading-no-path"><TermText :text="selectedNeuron" /> → <TermText :text="targetNeuron" /> için <TermText :text="modeLabel" /> modda bu 30 hücrelik alt grafikte yol yok. Hayvanın tüm ağında bağlantı veya yol olmadığını söylemeyiz.</p></template>
+        <div class="route-controls"><div><label for="reading-target">{{ m.targetCell }}</label><select id="reading-target" v-model="targetNeuron"><option v-for="neuron in graph.neurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}</option></select></div><div><label for="reading-mode">{{ m.connectionTypeToRead }}</label><select id="reading-mode" v-model="mode"><option value="chemical">{{ m.modeOptions.chemical }}</option><option value="gap">{{ m.modeOptions.gap }}</option><option value="mixed">{{ m.modeOptions.mixed }}</option></select></div></div>
+        <p class="source-choice">{{ m.pathSource }} <strong><TermText :text="selectedNeuron" /></strong>{{ m.pathSourceChange }}</p>
+        <div class="route-actions"><button type="button" class="reading-primary" aria-controls="reading-route-region" @click="searchRoute">{{ m.findPath }} <span aria-hidden="true">→</span></button><button type="button" class="reading-secondary" :disabled="handoffLoading" @click="indirectExample">{{ m.indirectExample }}</button></div>
+        <p data-testid="reading-path-status" role="status" aria-live="polite" aria-atomic="true" class="path-announcement">{{ pathAnnouncement?.() }}</p>
+        <div id="reading-route-region" data-testid="reading-path" :data-status="route?.status ?? 'not-searched'" :data-source="selectedNeuron" :data-target="targetNeuron" :data-mode="mode" role="region" :aria-label="m.resultRegion" class="route-result">
+          <p v-if="!route" class="not-searched">{{ m.notSearched }}</p>
+          <template v-else-if="route.status === 'same-cell'"><h3>{{ m.sameCellTitle }}</h3><p data-testid="reading-same-cell">{{ m.sameCell(selectedNeuron, targetNeuron) }}</p></template>
+          <template v-else-if="route.status === 'unreachable'"><h3>{{ m.noPathTitle }}</h3><p data-testid="reading-no-path">{{ m.noPath(selectedNeuron, targetNeuron, mode) }}</p></template>
           <template v-else>
-            <h3><TermText :text="route.hops.length === 1 ? 'Doğrudan komşuluk' : 'Dolaylı anatomik yol'" /></h3><p class="route-length" data-testid="reading-path-length"><TermText :text="route.hops.length" /> kenar · <TermText :text="route.hops.length === 1 ? 'Arada başka hücre yok' : `${route.hops.length - 1} ara hücre`" /></p>
-            <div class="written-route" data-testid="reading-path-nodes" role="group" aria-label="Yolun hücre sırası"><template v-for="(node, index) in route.nodes" :key="`${index}-${node}`"><span v-if="index" class="route-symbol" aria-hidden="true">{{ symbol(route.hops[index - 1]!) }}</span><strong>{{ node }}</strong></template></div>
-            <p class="scheme-note">Hücre sırası yazılı bir şemadır; anatomik konum, mesafe veya sinyal animasyonu değildir.</p>
-            <div class="route-step-controls"><button type="button" :disabled="stepIndex === 0" @click="selectStep(stepIndex - 1)">Önceki adım</button><span data-testid="reading-step" :data-step-index="stepIndex">{{ stepIndex + 1 }} / {{ route.hops.length }}</span><button type="button" :disabled="stepIndex >= route.hops.length - 1" @click="selectStep(stepIndex + 1)">Sonraki adım</button></div>
-            <ol data-testid="reading-path-hops" class="path-hop-list"><li v-for="(hop, index) in route.hops" :key="hop.edgeId" v-bind="hopAttributes(hop)"><button type="button" :aria-pressed="stepIndex === index" @click="selectStep(index)"><span>{{ index + 1 }}.</span> {{ hop.from }} {{ symbol(hop) }} {{ hop.to }} <small>{{ hop.kind === 'chemical' ? 'Kimyasal' : 'Elektriksel çift' }}</small></button></li></ol>
-            <div v-if="activeHop" data-testid="reading-active-hop" v-bind="hopAttributes(activeHop)" class="active-hop"><p class="reading-eyebrow"><TermText :text="stepIndex + 1" />. KAYDI İNCELE</p><h4><TermText :text="activeHop.from" /> <TermText :text="symbol(activeHop)" /> <TermText :text="activeHop.to" /></h4><dl><div><dt>Bağlantı türü</dt><dd><TermText :text="activeHop.kind === 'chemical' ? 'Yönlü kimyasal kayıt' : 'Tek fiziksel elektriksel çift; bu adımda okuma yönü'" /></dd></div><div><dt>Ham anatomik ağırlık</dt><dd><TermText :text="activeHop.rawWeight" /> EM kesiti</dd></div><div><dt>Kaynak tablo hücresi</dt><dd><TermText :text="sourceText(activeHop.sourceRef)" /></dd></div><div v-if="activeHop.reciprocalSourceRef"><dt>Karşılıklı tablo hücresi</dt><dd><TermText :text="sourceText(activeHop.reciprocalSourceRef)" /></dd></div></dl><p v-if="activeHop.kind === 'gap'">Çiftin kaynak referansları kanonik kayıttan korunur; grafikte ters yönde okumak yeni bir fiziksel bağlantı üretmez.</p></div>
+            <h3><TermText :text="route.hops.length === 1 ? m.directTitle : m.indirectTitle" /></h3><p class="route-length" data-testid="reading-path-length">{{ m.pathLength(route.hops.length) }}</p>
+            <div class="written-route" data-testid="reading-path-nodes" role="group" :aria-label="m.cellOrder"><template v-for="(node, index) in route.nodes" :key="`${index}-${node}`"><span v-if="index" class="route-symbol" aria-hidden="true">{{ symbol(route.hops[index - 1]!) }}</span><strong>{{ node }}</strong></template></div>
+            <p class="scheme-note">{{ m.schemeNote }}</p>
+            <div class="route-step-controls"><button type="button" :disabled="stepIndex === 0" @click="selectStep(stepIndex - 1)">{{ m.previousStep }}</button><span data-testid="reading-step" :data-step-index="stepIndex">{{ stepIndex + 1 }} / {{ route.hops.length }}</span><button type="button" :disabled="stepIndex >= route.hops.length - 1" @click="selectStep(stepIndex + 1)">{{ m.nextStep }}</button></div>
+            <ol data-testid="reading-path-hops" class="path-hop-list"><li v-for="(hop, index) in route.hops" :key="hop.edgeId" v-bind="hopAttributes(hop)"><button type="button" :aria-pressed="stepIndex === index" @click="selectStep(index)"><span>{{ index + 1 }}.</span> {{ hop.from }} {{ symbol(hop) }} {{ hop.to }} <small>{{ hop.kind === 'chemical' ? m.kindChemical : m.kindGap }}</small></button></li></ol>
+            <div v-if="activeHop" data-testid="reading-active-hop" v-bind="hopAttributes(activeHop)" class="active-hop"><p class="reading-eyebrow">{{ m.inspectRecord(stepIndex + 1) }}</p><h4><TermText :text="activeHop.from" /> <TermText :text="symbol(activeHop)" /> <TermText :text="activeHop.to" /></h4><dl><div><dt>{{ m.connectionType }}</dt><dd><TermText :text="activeHop.kind === 'chemical' ? m.directedChemical : m.singleGapPair" /></dd></div><div><dt>{{ m.rawWeight }}</dt><dd>{{ m.emSections(activeHop.rawWeight) }}</dd></div><div><dt>{{ m.sourceTableCell }}</dt><dd><TermText :text="sourceText(activeHop.sourceRef)" /></dd></div><div v-if="activeHop.reciprocalSourceRef"><dt>{{ m.reciprocalTableCell }}</dt><dd><TermText :text="sourceText(activeHop.reciprocalSourceRef)" /></dd></div></dl><p v-if="activeHop.kind === 'gap'">{{ m.gapCanonical }}</p></div>
           </template>
-          <p v-if="route" class="visited-count" data-testid="reading-visited-count">Aramada keşfedilen farklı hücre: <TermText :text="route.visitedCount" />. Bu sayı hücre etkinliği veya sinyal yayılımı değildir.</p>
+          <p v-if="route" class="visited-count" data-testid="reading-visited-count">{{ m.visited(route.visitedCount) }}</p>
         </div>
-        <p class="reading-model-note"><TermText :text="readingNotes.routeLimit" /></p>
+        <p class="reading-model-note"><TermText :text="notes.routeLimit" /></p>
       </div>
-      <p v-else class="waiting-for-data">Yol arama, doğrulanmış yerel bağlantı verisi yüklendiğinde açılır.</p>
+      <p v-else class="waiting-for-data">{{ m.pathWaiting }}</p>
     </section>
 
     <section id="reading-cycles" tabindex="-1" aria-labelledby="reading-cycles-title" class="reading-section">
-      <p class="reading-eyebrow">04 / DÖNGÜ VE SINIR</p><h2 id="reading-cycles-title">Başlangıca dönmek, ağı tamamlamak değildir</h2><p class="reading-paragraph"><TermText :text="readingNotes.cycle" /></p>
-      <div v-if="graph && selected" class="cycle-boundary-grid"><div data-testid="reading-cycle" :data-found="Boolean(cycle)" class="reading-card"><h3><TermText :text="selectedNeuron" /> için kimyasal döngü</h3><template v-if="cycle"><p>Bu alt grafikte en az iki hücreli yönlü döngü:</p><div class="written-route" data-testid="reading-cycle-nodes"><template v-for="(node, index) in cycle.nodes" :key="`${index}-${node}`"><span v-if="index" class="route-symbol" aria-hidden="true">→</span><strong>{{ node }}</strong></template></div><ol data-testid="reading-cycle-hops" class="cycle-hop-list"><li v-for="hop in cycle.hops" :key="hop.edgeId" v-bind="hopAttributes(hop)"><strong><TermText :text="hop.from" /> → <TermText :text="hop.to" /></strong><span><TermText :text="hop.rawWeight" /> EM kesiti</span><p class="source-reference"><TermText :text="sourceText(hop.sourceRef)" /></p></li></ol></template><p v-else data-testid="reading-no-cycle">Seçili hücreden başlayıp geri dönen, öz döngü dışındaki kimyasal döngü bu alt grafikte bulunamadı.</p></div><div class="reading-card" data-testid="reading-all-self-loops"><h3>Alt ağdaki kimyasal öz döngüler <span><TermText :text="allSelfLoops.length" /></span></h3><p>A→A kayıtları; en az iki hücreli döngülerden ayrıdır.</p><ul class="edge-list"><li v-for="hop in allSelfLoops" :key="hop.edgeId" v-bind="hopAttributes(hop)"><div class="edge-heading"><strong><TermText :text="hop.from" /> → <TermText :text="hop.to" /></strong><span><TermText :text="hop.rawWeight" /> EM kesiti</span></div><p class="source-reference"><TermText :text="sourceText(hop.sourceRef)" /></p></li></ul></div></div>
-      <p class="reading-paragraph"><TermText :text="readingNotes.boundary" /></p>
-      <div v-if="selected" data-testid="reading-external-boundary" class="external-boundary"><h3><TermText :text="selectedNeuron" /> için dışarıda kalan kayıtlar</h3><dl><div><dt>Kimyasal giriş</dt><dd data-testid="reading-omitted-incoming" :data-count="selected.omittedExternal.chemicalIncomingCount"><TermText :text="selected.omittedExternal.chemicalIncomingCount" /> kayıt <span>· <TermText :text="selected.omittedExternal.chemicalIncomingWeight" /> EM kesiti</span></dd></div><div><dt>Kimyasal çıkış</dt><dd data-testid="reading-omitted-outgoing" :data-count="selected.omittedExternal.chemicalOutgoingCount"><TermText :text="selected.omittedExternal.chemicalOutgoingCount" /> kayıt <span>· <TermText :text="selected.omittedExternal.chemicalOutgoingWeight" /> EM kesiti</span></dd></div><div><dt>Elektriksel çift</dt><dd data-testid="reading-omitted-gaps" :data-count="selected.omittedExternal.gapCount"><TermText :text="selected.omittedExternal.gapCount" /> çift <span>· <TermText :text="selected.omittedExternal.gapWeight" /> EM kesiti</span></dd></div></dl><p v-if="selected.excludedGapSelfEntries.length" class="reading-model-note">Kaynak matrisindeki <TermText :text="selected.excludedGapSelfEntries.length" /> elektriksel köşegen kaydı metadata olarak korunur; fiziksel öz bağlantı olarak çizilmez veya yol aramasına katılmaz.</p></div>
-      <div class="reading-prompts"><h3>Kendi cümlenle açıkla</h3><ul><li v-for="prompt in readingPrompts" :key="prompt"><TermText :text="prompt" /></li></ul></div>
+      <p class="reading-eyebrow">{{ m.cyclesKicker }}</p><h2 id="reading-cycles-title">{{ m.cyclesTitle }}</h2><p class="reading-paragraph"><TermText :text="notes.cycle" /></p>
+      <div v-if="graph && selected" class="cycle-boundary-grid"><div data-testid="reading-cycle" :data-found="Boolean(cycle)" class="reading-card"><h3>{{ m.cycleFor(selectedNeuron) }}</h3><template v-if="cycle"><p>{{ m.cycleFound }}</p><div class="written-route" data-testid="reading-cycle-nodes"><template v-for="(node, index) in cycle.nodes" :key="`${index}-${node}`"><span v-if="index" class="route-symbol" aria-hidden="true">→</span><strong>{{ node }}</strong></template></div><ol data-testid="reading-cycle-hops" class="cycle-hop-list"><li v-for="hop in cycle.hops" :key="hop.edgeId" v-bind="hopAttributes(hop)"><strong><TermText :text="hop.from" /> → <TermText :text="hop.to" /></strong><span>{{ m.emSections(hop.rawWeight) }}</span><p class="source-reference"><TermText :text="sourceText(hop.sourceRef)" /></p></li></ol></template><p v-else data-testid="reading-no-cycle">{{ m.noCycle }}</p></div><div class="reading-card" data-testid="reading-all-self-loops"><h3>{{ m.allSelfLoops }} <span><TermText :text="allSelfLoops.length" /></span></h3><p>{{ m.selfLoopNote }}</p><ul class="edge-list"><li v-for="hop in allSelfLoops" :key="hop.edgeId" v-bind="hopAttributes(hop)"><div class="edge-heading"><strong><TermText :text="hop.from" /> → <TermText :text="hop.to" /></strong><span>{{ m.emSections(hop.rawWeight) }}</span></div><p class="source-reference"><TermText :text="sourceText(hop.sourceRef)" /></p></li></ul></div></div>
+      <p class="reading-paragraph"><TermText :text="notes.boundary" /></p>
+      <div v-if="selected" data-testid="reading-external-boundary" class="external-boundary"><h3>{{ m.omittedFor(selectedNeuron) }}</h3><dl><div><dt>{{ m.chemicalInput }}</dt><dd data-testid="reading-omitted-incoming" :data-count="selected.omittedExternal.chemicalIncomingCount">{{ m.records(selected.omittedExternal.chemicalIncomingCount) }} <span>· {{ m.emSections(selected.omittedExternal.chemicalIncomingWeight) }}</span></dd></div><div><dt>{{ m.chemicalOutput }}</dt><dd data-testid="reading-omitted-outgoing" :data-count="selected.omittedExternal.chemicalOutgoingCount">{{ m.records(selected.omittedExternal.chemicalOutgoingCount) }} <span>· {{ m.emSections(selected.omittedExternal.chemicalOutgoingWeight) }}</span></dd></div><div><dt>{{ m.electricalPair }}</dt><dd data-testid="reading-omitted-gaps" :data-count="selected.omittedExternal.gapCount">{{ m.pairs(selected.omittedExternal.gapCount) }} <span>· {{ m.emSections(selected.omittedExternal.gapWeight) }}</span></dd></div></dl><p v-if="selected.excludedGapSelfEntries.length" class="reading-model-note">{{ m.excludedDiagonal(selected.excludedGapSelfEntries.length) }}</p></div>
+      <div class="reading-prompts"><h3>{{ m.promptsTitle }}</h3><ul><li v-for="prompt in prompts" :key="prompt"><TermText :text="prompt" /></li></ul></div>
     </section>
 
     <section id="reading-provenance" tabindex="-1" aria-labelledby="reading-provenance-title" data-testid="reading-provenance" class="reading-section">
-      <p class="reading-eyebrow">KAYNAĞI İZLE</p><h2 id="reading-provenance-title">Kaynak, sürüm ve yerel kullanım</h2><p class="reading-paragraph"><TermText :text="readingNotes.dataset" /></p><p class="reading-paragraph"><TermText :text="readingNotes.local" /></p>
-      <dl v-if="data" class="provenance-facts"><div><dt>Yerel veri başlığı</dt><dd><TermText :text="data.dataset.title" /></dd></div><div><dt>Sürüm</dt><dd><TermText :text="data.dataset.version" /></dd></div><div><dt>Kaynakta kayıtlı ham birim</dt><dd><TermText :text="data.dataset.anatomicalWeightUnit" /></dd></div><div><dt>Yön / kayıt düzeni</dt><dd><TermText :text="data.dataset.orientation" /></dd></div><div><dt>Dosya lisansı durumu</dt><dd>Doğrulanmadı · yalnız yerel kullanım <code>{{ data.dataset.license.status }}</code></dd></div></dl>
-      <details v-if="data" class="source-files"><summary>Yerel veri kaynaklarının kimliğini gör</summary><div v-for="source in data.dataset.sources" :key="source.sha256"><a :href="source.url">{{ source.name }}</a><p>Yerel veri kaydındaki edinim zamanı: <TermText :text="source.downloadedAtUtc" /></p><p>SHA-256: <code>{{ source.sha256 }}</code></p></div></details>
-      <ul class="primary-sources"><li v-for="source in readingSources" :key="source.id"><a :href="source.url">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul>
+      <p class="reading-eyebrow">{{ m.provenanceKicker }}</p><h2 id="reading-provenance-title">{{ m.provenanceTitle }}</h2><p class="reading-paragraph"><TermText :text="notes.dataset" /></p><p class="reading-paragraph"><TermText :text="notes.local" /></p>
+      <dl v-if="data" class="provenance-facts"><div><dt>{{ m.datasetTitle }}</dt><dd><TermText :text="data.dataset.title" /></dd></div><div><dt>{{ m.version }}</dt><dd><TermText :text="data.dataset.version" /></dd></div><div><dt>{{ m.rawUnitInSource }}</dt><dd><TermText :text="data.dataset.anatomicalWeightUnit" /></dd></div><div><dt>{{ m.orientation }}</dt><dd><TermText :text="data.dataset.orientation" /></dd></div><div><dt>{{ m.licenceStatus }}</dt><dd>{{ m.licenceUnverified }} <code>{{ data.dataset.license.status }}</code></dd></div></dl>
+      <details v-if="data" class="source-files"><summary>{{ m.sourceFiles }}</summary><div v-for="source in data.dataset.sources" :key="source.sha256"><a :href="source.url">{{ source.name }}</a><p>{{ m.acquiredAt }} <TermText :text="source.downloadedAtUtc" /></p><p>SHA-256: <code>{{ source.sha256 }}</code></p></div></details>
+      <ul class="primary-sources"><li v-for="source in sources" :key="source.id"><a :href="source.url">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul>
     </section>
-    <div class="reading-next"><a :href="withBase('/ogren/rehberli-deneyler')">Rehberli deneylere dön <span aria-hidden="true">←</span></a><a :href="BASE" class="reading-primary">Devre deneyine geç <span aria-hidden="true">→</span></a></div>
+    <div class="reading-next"><a :href="withBase('/ogren/rehberli-deneyler')">{{ m.backToGuided }} <span aria-hidden="true">←</span></a><a :href="BASE" class="reading-primary">{{ m.toExperiment }} <span aria-hidden="true">→</span></a></div>
   </main>
 </template>
 

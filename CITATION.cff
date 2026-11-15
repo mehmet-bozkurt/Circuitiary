@@ -11,7 +11,7 @@ authors:
 license: MIT
 repository-code: "https://github.com/mehmet-bozkurt/Circuitiary"
 url: "https://mehmet-bozkurt.github.io/Circuitiary/"
-abstract: "Circuitiary is an interactive teaching notebook for small neuron circuits, with a Turkish user interface. It lets learners build and probe an eight-cell illustrative circuit and a 30-neuron anatomical subgraph of the C. elegans connectome (Cook et al. 2019 wiring data, imported locally and not redistributed), run a parameterised continuous rate model on it, and compare the effect of changed connections, time constants and thresholds in 2D and 3D views, guided lessons, a glossary, a species atlas and a circuit builder. The anatomy comes from the cited source; all dynamics are explicit teaching assumptions. It is not a measurement, a behaviour simulation or a biological brain emulation."
+abstract: "Circuitiary is an interactive teaching notebook for small neuron circuits, with a Turkish user interface and an optional English one. It lets learners build and probe an eight-cell illustrative circuit and a 30-neuron anatomical subgraph of the C. elegans connectome (Cook et al. 2019 wiring data, imported locally and not redistributed), run a parameterised continuous rate model on it, and compare the effect of changed connections, time constants and thresholds in 2D and 3D views, guided lessons, a glossary, a species atlas and a circuit builder. The anatomy comes from the cited source; all dynamics are explicit teaching assumptions. It is not a measurement, a behaviour simulation or a biological brain emulation."
 keywords:
   - neuroscience
   - connectome

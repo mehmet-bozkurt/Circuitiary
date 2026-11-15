@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { glossaryAlphabetical, glossaryTerms, termAnchorId } from './glossary'
-import { foldTurkish, resultsMessage, searchGlossary, termIdFromHash } from './glossarySearch'
+import { afterEach, describe, expect, it } from 'vitest'
+import { DEFAULT_LOCALE, locale } from '../i18n'
+import { glossaryAlphabetical, glossaryAlphabeticalEn, glossaryTerms, glossaryTermsEn, termAnchorId } from './glossary'
+import { foldEnglish, foldText, foldTurkish, resultsMessage, searchGlossary, termIdFromHash } from './glossarySearch'
+
+afterEach(() => { locale.value = DEFAULT_LOCALE })
 
 const ids = (query: string) => searchGlossary(glossaryAlphabetical, query).map(term => term.id)
 
@@ -83,5 +86,65 @@ describe('deep link fragments', () => {
     expect(termIdFromHash('#noron')).toBeNull()
     expect(termIdFromHash('')).toBeNull()
     expect(termIdFromHash('#term-%E0%A4%A')).toBeNull()
+  })
+})
+
+describe('English glossary', () => {
+  const idsEn = (query: string) => searchGlossary(glossaryAlphabeticalEn, query).map(term => term.id)
+
+  it('lists every term once, in English alphabetical order', () => {
+    expect(glossaryAlphabeticalEn.map(term => term.id).sort()).toEqual(glossaryTerms.map(term => term.id).sort())
+    expect(glossaryAlphabeticalEn.every(term => glossaryTermsEn.includes(term))).toBe(true)
+    const collator = new Intl.Collator('en')
+    for (let i = 1; i < glossaryAlphabeticalEn.length; i++) {
+      expect(collator.compare(glossaryAlphabeticalEn[i - 1]!.title, glossaryAlphabeticalEn[i]!.title), glossaryAlphabeticalEn[i]!.title).toBeLessThan(0)
+    }
+    expect(glossaryAlphabeticalEn[0]!.title).toBe('Ablation')
+  })
+  it('folds English text without the Turkish I', () => {
+    expect(foldEnglish('PLASTICITY')).toBe('plasticity')
+    expect(foldEnglish('SINAPS')).toBe('sinaps')
+    expect(foldEnglish('SİNAPS')).toBe('sinaps')
+    expect(foldEnglish('  Gap   Junction ')).toBe('gap junction')
+    expect(foldEnglish('récepteur synaptıc')).toBe('recepteur synaptic')
+    expect(foldText('ISI')).toBe('isi')
+    locale.value = 'en'
+    expect(foldText('PLASTICITY')).toBe('plasticity')
+  })
+  it('finds English terms by title, form and meaning, in any case', () => {
+    locale.value = 'en'
+    expect(idsEn('')).toEqual(glossaryAlphabeticalEn.map(term => term.id))
+    for (const query of ['plasticity', 'PLASTICITY', 'Plasticity']) expect(idsEn(query), query).toEqual(['plastisite'])
+    expect(idsEn('SYNAPTIC')).toContain('sinaps')
+    expect(idsEn('ganglia')).toEqual(['ganglion'])
+    expect(idsEn('belly side')).toEqual(['ventral'])
+    expect(idsEn('junction gap')).toEqual(['gap-junction'])
+    expect(idsEn('gap xyz')).toEqual([])
+    expect(idsEn('Hermes')).toEqual([])
+    expect(idsEn('Merriam')).toEqual([])
+    const found = idsEn('neuron')
+    expect(found.length).toBeGreaterThan(1)
+    expect(found).toEqual(glossaryAlphabeticalEn.map(term => term.id).filter(id => found.includes(id)))
+  })
+  it('still finds a term by its Turkish name in English', () => {
+    locale.value = 'en'
+    for (const query of ['nöron', 'NÖRON', 'noron']) expect(idsEn(query), query).toEqual(['noron'])
+    for (const query of ['reseptör', 'reseptor', 'RESEPTÖR']) expect(idsEn(query), query).toEqual(['reseptor'])
+    expect(idsEn('konnektom')).toEqual(['konnektom'])
+    expect(idsEn('SİNAPS')).toEqual(['sinaps'])
+    // Turkish meanings are not searched in English.
+    expect(idsEn('karın tarafına')).toEqual([])
+  })
+  it('announces the result in English', () => {
+    locale.value = 'en'
+    expect(resultsMessage('', 15, 15)).toBe('All 15 words are listed.')
+    expect(resultsMessage('  gap   junction ', 1, 15)).toBe('Found 1 of 15 words for “gap junction”.')
+    expect(resultsMessage('zzzz', 0, 15)).toBe('No word matches “zzzz”.')
+  })
+  it('resolves the same fragments in both languages', () => {
+    locale.value = 'en'
+    expect(termIdFromHash('#term-noron')).toBe('noron')
+    expect(termIdFromHash('#term-noron', glossaryTermsEn)).toBe('noron')
+    expect(termIdFromHash('#term-neuron')).toBeNull()
   })
 })

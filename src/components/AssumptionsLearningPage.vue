@@ -3,33 +3,45 @@ import TermText from './TermText.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { chemicalNormalizationFormula, gapNormalizationFormula, parseRealConnectome } from '../model/realConnectome'
 import type { DeepReadonly, ReadonlyRealConnectome, SourceReference } from '../model/types'
-import { runAssumptionExperiment } from '../learning/assumptionExperiments'
+import { conditionLabel, runAssumptionExperiment } from '../learning/assumptionExperiments'
 import type { AssumptionRunSnapshot, AssumptionVariable } from '../learning/assumptionExperiments'
 import AssumptionTracePlot from '../learning/AssumptionTracePlot.vue'
-import { assumptionCopy, assumptionSources, assumptionVariables, sweepPrediction } from '../learning/assumptionsContent'
+import {
+  assumptionCopy, assumptionCopyEn, assumptionSources, assumptionSourcesEn, assumptionVariables, assumptionVariablesEn,
+  sweepPrediction, sweepPredictionEn,
+} from '../learning/assumptionsContent'
 import ThresholdSweepPlot from '../learning/ThresholdSweepPlot.vue'
 import { runThresholdSweep, sweepGrid, thresholdCrossing, thresholdGain } from '../learning/thresholdSweep'
 import type { CompletedPoint, ThresholdSweep } from '../learning/thresholdSweep'
 import { decimal, withComma } from '../format'
-import { BASE, DEMO, DEMO_DATA_NOTICE, LOCAL_DATA_URL, withBase } from '../siteBase'
+import { L, useMessages } from '../i18n'
+import { BASE, DEMO, LOCAL_DATA_URL, demoDataNotice, withBase } from '../siteBase'
+import { messages } from './AssumptionsLearningPage.messages'
 
 const emit = defineEmits<{ ready: [] }>()
 type LoadState = 'loading' | 'ready' | 'missing' | 'invalid' | 'error'
+/** Status and error lines are kept as functions, so a line already on screen follows a language change. */
+type Line = (() => string) | null
+const m = useMessages(messages)
+const copy = computed(() => L(assumptionCopy, assumptionCopyEn))
+const sources = computed(() => L(assumptionSources, assumptionSourcesEn))
+const variables = computed(() => L(assumptionVariables, assumptionVariablesEn))
+const prediction = computed(() => L(sweepPrediction, sweepPredictionEn))
 const loadState = ref<LoadState>('loading')
-const loadMessage = ref('Yerel anatomi verisi yükleniyor…')
-const dataError = ref('')
+const loadMessage = ref<Line>(() => m.value.loading)
+const dataError = ref<Line>(null)
 const data = shallowRef<ReadonlyRealConnectome | null>(null)
 const variable = ref<AssumptionVariable>('chemical-gain')
 const comparisonValue = ref(1.2)
 const snapshot = shallowRef<AssumptionRunSnapshot | null>(null)
 const runNumber = ref(0)
-const runMessage = ref('')
-const runError = ref('')
+const runMessage = ref<Line>(null)
+const runError = ref<Line>(null)
 const responseScale = ref(true)
 const sweep = shallowRef<ThresholdSweep | null>(null)
 const sweepRun = ref(0)
-const sweepMessage = ref('')
-const sweepError = ref('')
+const sweepMessage = ref<Line>(null)
+const sweepError = ref<Line>(null)
 const sweepDraft = ref('')
 const sweepRecorded = ref('')
 let request: AbortController | null = null
@@ -37,7 +49,7 @@ let requestTimer: ReturnType<typeof setTimeout> | undefined
 let requestVersion = 0
 let disposed = false
 
-const chosenVariable = computed(() => assumptionVariables.find(option => option.id === variable.value) ?? assumptionVariables[0])
+const chosenVariable = computed(() => variables.value.find(option => option.id === variable.value) ?? variables.value[0])
 const isStale = computed(() => snapshot.value !== null && (snapshot.value.controlledVariable.variable !== variable.value || snapshot.value.controlledVariable.comparisonValue !== comparisonValue.value))
 const sourceSelfLoops = computed(() => data.value?.chemicalEdges.filter(edge => edge.source === edge.target).length ?? 0)
 const yMax = computed(() => {
@@ -50,7 +62,7 @@ const format = (value: number, digits = 5) => value === 0 ? '0' : withComma(Math
 const signed = (value: number) => `${value > 0 ? '+' : ''}${format(value)}`
 const parameter = (value: number, id: AssumptionVariable) => id === 'time-constant' ? `${value} model ms` : decimal(value, 1)
 const timeText = (value: number | null) => value === null ? '—' : `${value} model ms`
-const regime = (gain: number) => gain < thresholdGain ? { id: 'below', text: 'eşiğin altı' } : gain > thresholdGain ? { id: 'above', text: 'eşiğin üstü' } : { id: 'at', text: 'eşik' }
+const regime = (gain: number) => gain < thresholdGain ? { id: 'below', text: m.value.regimeBelow } : gain > thresholdGain ? { id: 'above', text: m.value.regimeAbove } : { id: 'at', text: m.value.regimeAt }
 const crossing = computed(() => sweep.value ? thresholdCrossing(sweep.value) : null)
 const sweepWindowEnd = computed(() => { const run = sweep.value; return run ? run.points.filter((point): point is CompletedPoint => point.ok && point.peakTimeMs === run.fixed.durationMs).map(point => point.gain) : [] })
 const sweepNeverPositive = computed(() => sweep.value?.points.some(point => point.ok && point.peakTimeMs === null) ?? false)
@@ -58,16 +70,17 @@ const sweepDraftChanged = computed(() => sweep.value !== null && sweepDraft.valu
 const sweepFeedback = computed(() => {
   if (!sweep.value) return ''
   const found = crossing.value
-  if (!found) return 'Eşiğin altında ve üstünde birer tamamlanmış hesap olmadığı için bu karşılaştırma yapılamadı.'
-  const verdict = sweepRecorded.value === '' ? 'Bu taramaya tahmin eklenmedi; sonuç yine hesaplandı.' : sweepRecorded.value === 'unsure' ? 'Emin olmamak iyi bir başlangıçtı.' : sweepRecorded.value === found.trend ? 'Kaydettiğin tahmin sonuçla örtüşüyor.' : 'Kaydettiğin tahmin bu sonuçtan farklı çıktı.'
-  const change = `Çarpan ${decimal(found.below.gain, 1)} → ${decimal(found.above.gain, 1)} (≈${decimal(found.gainFactor, 1)} kat) olurken AVAR’ın son değeri ${format(found.below.endValue, 3)} → ${format(found.above.endValue, 3)} oldu`
-  const size = found.trend === 'steep' ? `${found.factor === null ? ' (sıfırdan yükseldi)' : ` (≈${decimal(found.factor, found.factor < 10 ? 1 : 0)} kat)`}. Bu, eşiğin çevresindeki rejim değişimidir; seçilen normalizasyonun ve modelin sonucudur, ölçülmüş biyolojik bir eşik değildir.`
-    : found.trend === 'proportional' ? '; bu, çarpanın kendi büyümesiyle aynı mertebede.' : found.trend === 'flat' ? '; hemen hiç değişmedi.' : '; azaldı.'
+  const text = m.value.feedback
+  if (!found) return text.noCrossing
+  const verdict = sweepRecorded.value === '' ? text.noPrediction : sweepRecorded.value === 'unsure' ? text.unsure : sweepRecorded.value === found.trend ? text.matches : text.differs
+  const change = text.change(decimal(found.below.gain, 1), decimal(found.above.gain, 1), decimal(found.gainFactor, 1), format(found.below.endValue, 3), format(found.above.endValue, 3))
+  const size = found.trend === 'steep' ? `${found.factor === null ? text.fromZero : text.byFactor(decimal(found.factor, found.factor < 10 ? 1 : 0))}${text.steep}`
+    : found.trend === 'proportional' ? text.proportional : found.trend === 'flat' ? text.flat : text.falling
   return `${verdict} ${change}${size}`
 })
-const sourceText = (source: DeepReadonly<SourceReference>) => `${source.sheet} · ${source.cell} · satır ${source.row}, sütun ${source.column}`
-const scopeText = (run: AssumptionRunSnapshot) => run.controlledVariable.scope === 'all-neurons' ? `Bütün ${run.anatomyCounts.neurons} hücrenin zaman sabiti` : run.controlledVariable.scope === 'chemical-edges' ? 'Bütün kimyasal model bağlantıları' : 'Bütün fiziksel çiftlerin model bağ katsayıları'
-watch(variable, () => { comparisonValue.value = chosenVariable.value.initial; runError.value = '' })
+const sourceText = (source: DeepReadonly<SourceReference>) => m.value.sourceText(source.sheet, source.cell, source.row, source.column)
+const scopeText = (run: AssumptionRunSnapshot) => run.controlledVariable.scope === 'all-neurons' ? m.value.scopeAllNeurons(run.anatomyCounts.neurons) : run.controlledVariable.scope === 'chemical-edges' ? m.value.scopeChemical : m.value.scopeGap
+watch(variable, () => { comparisonValue.value = chosenVariable.value.initial; runError.value = null })
 
 const examples = computed(() => {
   const run = snapshot.value
@@ -77,11 +90,11 @@ const examples = computed(() => {
   const before = run.baseline.circuit.realData?.normalization
   const after = run.comparison.circuit.realData?.normalization
   return [
-    ...(chemical ? [{ kind: 'chemical' as const, label: 'Kimyasal: AVER → AVAR', id: chemical.id, from: chemical.source, to: chemical.target, rawWeight: chemical.rawWeight, sourceRef: chemical.sourceRef, reciprocalSourceRef: undefined,
+    ...(chemical ? [{ kind: 'chemical' as const, label: m.value.chemicalExample, id: chemical.id, from: chemical.source, to: chemical.target, rawWeight: chemical.rawWeight, sourceRef: chemical.sourceRef, reciprocalSourceRef: undefined,
       baselineWeight: run.baseline.circuit.connections.find(edge => edge.id === chemical.id)?.weight, comparisonWeight: run.comparison.circuit.connections.find(edge => edge.id === chemical.id)?.weight,
       baselineDenominator: before?.chemicalDenominatorByTarget.AVAR, comparisonDenominator: after?.chemicalDenominatorByTarget.AVAR,
       firstTotal: before?.chemicalIncomingRawWeight.AVAR, secondTotal: undefined }] : []),
-    ...(gap ? [{ kind: 'gap' as const, label: 'Elektriksel çift: AVAR ↔ AVER', id: gap.id, from: gap.a, to: gap.b, rawWeight: gap.rawWeight, sourceRef: gap.sourceRef, reciprocalSourceRef: gap.reciprocalSourceRef,
+    ...(gap ? [{ kind: 'gap' as const, label: m.value.gapExample, id: gap.id, from: gap.a, to: gap.b, rawWeight: gap.rawWeight, sourceRef: gap.sourceRef, reciprocalSourceRef: gap.reciprocalSourceRef,
       baselineWeight: run.baseline.circuit.connections.find(edge => edge.id === gap.id)?.weight, comparisonWeight: run.comparison.circuit.connections.find(edge => edge.id === gap.id)?.weight,
       baselineDenominator: before?.gapDenominatorByConnection[gap.id], comparisonDenominator: after?.gapDenominatorByConnection[gap.id],
       firstTotal: before?.gapIncidentRawWeight.AVAR, secondTotal: before?.gapIncidentRawWeight.AVER }] : []),
@@ -99,47 +112,47 @@ function runExperiment() {
     const result = runAssumptionExperiment(data.value, runNumber.value + 1, { variable: variable.value, comparisonValue: comparisonValue.value })
     snapshot.value = result
     runNumber.value = result.runNumber
-    runError.value = ''
-    runMessage.value = `Koşul kaydı #${result.runNumber} hazır. İki AVAR eğrisi ve hesaplanan ölçütler sonuç bölümünde.`
+    runError.value = null
+    runMessage.value = () => m.value.runReady(result.runNumber)
   } catch {
-    runError.value = 'Bu koşullarla hesap tamamlanamadı. Veri ve karşılaştırma değerini kontrol edip yeniden çalıştır. Başarısız hesap yeni bir sonuç kaydı üretmedi.'
+    runError.value = () => m.value.runFailed
   }
 }
 function runSweep() {
   if (!data.value) return
   const result = runThresholdSweep(data.value)
   if (result.completed === 0) {
-    sweepError.value = 'Bu verinin hiçbir çarpanı için hesap tamamlanamadı. Veriyi kontrol edip yeniden çalıştır. Başarısız tarama yeni bir sonuç kaydı üretmedi.'
+    sweepError.value = () => m.value.sweepAllFailed
     return
   }
   sweep.value = result
   sweepRun.value += 1
   sweepRecorded.value = sweepDraft.value
-  sweepError.value = ''
-  sweepMessage.value = `Tarama kaydı #${sweepRun.value} hazır: ${result.points.length} çarpanın ${result.completed}’i hesaplandı. Grafik ve tablo sonuç bölümünde.`
+  sweepError.value = null
+  const record = sweepRun.value
+  sweepMessage.value = () => m.value.sweepReady(record, result.points.length, result.completed)
 }
 function resetExperiment() {
-  sweep.value = null; sweepRun.value = 0; sweepMessage.value = ''; sweepError.value = ''; sweepDraft.value = ''; sweepRecorded.value = ''
+  sweep.value = null; sweepRun.value = 0; sweepMessage.value = null; sweepError.value = null; sweepDraft.value = ''; sweepRecorded.value = ''
   variable.value = 'chemical-gain'
   comparisonValue.value = 1.2
   snapshot.value = null
   runNumber.value = 0
   responseScale.value = true
-  runError.value = ''
-  runMessage.value = 'Bu sayfanın deney ayarları ve sonucu sıfırlandı. Yüklenmiş kaynak verisi ve diğer sayfalardaki deneyler korunuyor.'
+  runError.value = null
+  runMessage.value = () => m.value.resetDone
 }
 const resultExplanation = computed(() => {
   const run = snapshot.value
   if (!run) return ''
+  const text = m.value.explanation
   const difference = run.delta.peak
-  const peak = difference > 0 ? `AVAR’ın kayıt içindeki en yüksek aktivitesi ${format(difference)} arttı.` : difference < 0 ? `AVAR’ın kayıt içindeki en yüksek aktivitesi ${format(-difference)} azaldı.` : 'AVAR’ın kayıt içindeki en yüksek aktivitesi iki koşulda aynı.'
-  const recordedVariable = assumptionVariables.find(option => option.id === run.controlledVariable.variable)!
-  const conditions = `${recordedVariable.short}, ${parameter(run.controlledVariable.baselineValue, recordedVariable.id)} → ${parameter(run.controlledVariable.comparisonValue, recordedVariable.id)} olarak karşılaştırıldı.`
-  const wholeNetwork = run.delta.maxAbsTraceDifference === 0 ? 'Bütün hücre ve zaman örnekleri iki koşulda aynı çıktı.' : `Bütün ${run.anatomyCounts.neurons} hücre ve zaman örnekleri üzerindeki en büyük mutlak fark ${format(run.delta.maxAbsTraceDifference)}. Bu, yalnız AVAR’ın tepe farkı değildir.`
-  const selfSustaining = run.controlledVariable.variable === 'chemical-gain' && run.controlledVariable.comparisonValue > 1
-    ? ' Karşılaştırma çarpanı 1’in üstünde: her hücrenin gelen kimyasal model ağırlıkları toplamı çarpana eşit olduğundan döngüler etkinliği kendi kendine besleyebilir. Buradaki büyük fark daha güçlü bir yanıttan çok bu rejim değişiminden gelebilir; uyaran bitse de etkinlik sönmeyebilir.'
-    : ''
-  return `${peak} ${conditions} ${wholeNetwork}${selfSustaining} Bu sonuç seçilmiş denklemlerin varsayıma duyarlılığını gösterir; ölçülmüş biyolojik etki veya genel bir artış/azalış kuralı değildir.`
+  const peak = difference > 0 ? text.peakUp(format(difference)) : difference < 0 ? text.peakDown(format(-difference)) : text.peakSame
+  const recordedVariable = variables.value.find(option => option.id === run.controlledVariable.variable)!
+  const conditions = text.conditions(recordedVariable.short, parameter(run.controlledVariable.baselineValue, recordedVariable.id), parameter(run.controlledVariable.comparisonValue, recordedVariable.id))
+  const wholeNetwork = run.delta.maxAbsTraceDifference === 0 ? text.networkSame : text.networkDiffers(run.anatomyCounts.neurons, format(run.delta.maxAbsTraceDifference))
+  const selfSustaining = run.controlledVariable.variable === 'chemical-gain' && run.controlledVariable.comparisonValue > 1 ? text.selfSustaining : ''
+  return `${peak} ${conditions} ${wholeNetwork}${selfSustaining}${text.closing}`
 })
 async function loadData() {
   const version = ++requestVersion
@@ -152,26 +165,26 @@ async function loadData() {
   const timer = setTimeout(() => { timedOut = true; controller.abort() }, 10_000)
   requestTimer = timer
   loadState.value = 'loading'
-  loadMessage.value = 'Yerel anatomi verisi yükleniyor…'
-  dataError.value = ''
+  loadMessage.value = () => m.value.loading
+  dataError.value = null
   data.value = null
   snapshot.value = null
   runNumber.value = 0
-  runMessage.value = ''
-  runError.value = ''
+  runMessage.value = null
+  runError.value = null
   sweep.value = null
   sweepRun.value = 0
-  sweepMessage.value = ''
-  sweepError.value = ''
+  sweepMessage.value = null
+  sweepError.value = null
   sweepRecorded.value = ''
   try {
     // The online demo has no local data endpoint: say so instead of asking for it.
-    if (DEMO) { loadState.value = 'missing'; loadMessage.value = ''; dataError.value = DEMO_DATA_NOTICE; return }
+    if (DEMO) { loadState.value = 'missing'; loadMessage.value = null; dataError.value = demoDataNotice; return }
     const response = await fetch(LOCAL_DATA_URL, { cache: 'no-store', signal: controller.signal })
     if (disposed || version !== requestVersion) return
     if (response.status === 404) {
-      loadState.value = 'missing'; loadMessage.value = ''
-      dataError.value = 'Yerel anatomi dosyası bulunamadı. Bu sayfa veri olmadan örnek sonuç üretmez. Veri hazır olduğunda tekrar deneyebilirsin.'
+      loadState.value = 'missing'; loadMessage.value = null
+      dataError.value = () => m.value.missing
       return
     }
     if (!response.ok) throw new Error('Local data request failed')
@@ -180,12 +193,12 @@ async function loadData() {
     if (disposed || version !== requestVersion) return
     data.value = parsed
     loadState.value = 'ready'
-    loadMessage.value = `${parsed.neurons.length} hücre, ${parsed.chemicalEdges.length} kimyasal kayıt ve ${parsed.gapEdges.length} fiziksel elektriksel çift doğrulandı.`
+    loadMessage.value = () => m.value.loaded(parsed.neurons.length, parsed.chemicalEdges.length, parsed.gapEdges.length)
   } catch {
     if (disposed || version !== requestVersion) return
     loadState.value = timedOut || phase === 'request' ? 'error' : 'invalid'
-    loadMessage.value = ''
-    dataError.value = timedOut ? 'Yerel veri 10 saniyede yanıt vermedi. Tekrar deneyebilirsin.' : phase === 'parse' ? 'Yerel dosya beklenen bağlantı şemasına uymuyor veya okunabilir JSON içermiyor. Bu veriyle hesaplanan sonuç gösterilmiyor.' : 'Yerel anatomi verisi okunamadı. Veri yeniden hazır olduğunda tekrar deneyebilirsin.'
+    loadMessage.value = null
+    dataError.value = timedOut ? () => m.value.timedOut : phase === 'parse' ? () => m.value.invalid : () => m.value.unreadable
   } finally {
     clearTimeout(timer)
     if (version === requestVersion) { request = null; requestTimer = undefined }
@@ -201,78 +214,78 @@ onBeforeUnmount(() => { disposed = true; requestVersion += 1; request?.abort(); 
 
 <template>
   <main id="real-assumptions" tabindex="-1" class="assumptions-page" :data-data-state="loadState">
-    <header class="assumptions-intro"><div><p class="assumptions-eyebrow">CIRCUITIARY / ÖĞRENME NOTLARI / 04</p><h1 id="assumptions-title" tabindex="-1">Gerçek veri ve <em>varsayımlar</em></h1><p class="assumptions-summary"><TermText :text="assumptionCopy.lead" /></p><p class="assumptions-meta">Aynı anatomi · Tek parametre değişikliği · İki hesaplanan yanıt</p></div><button type="button" class="assumptions-reset" @click="resetExperiment">Varsayım deneyini sıfırla</button></header>
-    <div class="assumptions-boundary"><strong>Anatomi kaydı ile model sonucu farklı kanıtlar taşır.</strong><p>Bu sayfadaki grafikler varsayımsal denklemlerle hesaplanır. Gerçek hayvanın gerilimi, kalsiyumu veya davranışı ölçülmez. Kaydırıcıyı değiştirmek kayıtlı sonucu güncellemez; yeniden çalıştırmak gerekir.</p></div>
-    <nav class="assumptions-navigation" aria-label="Gerçek veri ve varsayımlar dersinin bölümleri"><a href="#assumptions-data">01 · Kaynaktan gelen</a><a href="#assumptions-model">02 · Modelin eklediği</a><a href="#assumptions-experiment">03 · Varsayımı değiştir</a><a href="#assumptions-sweep">03b · Eşik taraması</a><a href="#assumptions-validation">04 · Doğrulamayı ayır</a><a href="#assumptions-provenance">Kaynaklar</a></nav>
+    <header class="assumptions-intro"><div><p class="assumptions-eyebrow">{{ m.eyebrow }}</p><h1 id="assumptions-title" tabindex="-1">{{ m.titleLead }}<em>{{ m.titleEmphasis }}</em></h1><p class="assumptions-summary"><TermText :text="copy.lead" /></p><p class="assumptions-meta">{{ m.meta }}</p></div><button type="button" class="assumptions-reset" @click="resetExperiment">{{ m.reset }}</button></header>
+    <div class="assumptions-boundary"><strong>{{ m.boundaryTitle }}</strong><p>{{ m.boundaryText }}</p></div>
+    <nav class="assumptions-navigation" :aria-label="m.navigation"><a href="#assumptions-data">{{ m.nav.data }}</a><a href="#assumptions-model">{{ m.nav.model }}</a><a href="#assumptions-experiment">{{ m.nav.experiment }}</a><a href="#assumptions-sweep">{{ m.nav.sweep }}</a><a href="#assumptions-validation">{{ m.nav.validation }}</a><a href="#assumptions-provenance">{{ m.nav.provenance }}</a></nav>
 
     <section id="assumptions-data" tabindex="-1" aria-labelledby="assumptions-data-title" class="assumptions-section">
-      <p class="assumptions-eyebrow">01 / KAYNAKTA RAPORLANAN ANATOMİ</p><h2 id="assumptions-data-title">Bu veri bize ne söylüyor?</h2><p class="assumptions-paragraph"><TermText :text="assumptionCopy.raw" /></p><p class="assumptions-paragraph"><TermText :text="assumptionCopy.identity" /></p>
-      <div data-testid="assumptions-load-status" :data-state="loadState" class="data-load-state"><p role="status" aria-live="polite" aria-atomic="true">{{ loadMessage }}</p><div v-if="dataError" :role="DEMO ? 'status' : 'alert'" class="assumptions-error"><p>{{ dataError }}</p><button v-if="!DEMO" type="button" @click="loadData">Tekrar dene</button></div></div>
-      <div v-if="data" data-testid="assumptions-source-summary" :data-neuron-count="data.neurons.length" :data-chemical-count="data.chemicalEdges.length" :data-gap-count="data.gapEdges.length" :data-self-loop-count="sourceSelfLoops" :data-synapse-count="'not-provided'" class="source-counts"><div><span>Seçili hücre</span><strong>{{ data.neurons.length }}</strong></div><div><span>Kimyasal kayıt</span><strong>{{ data.chemicalEdges.length }}</strong></div><div><span>Fiziksel elektriksel çift</span><strong>{{ data.gapEdges.length }}</strong></div><p>Kimyasal kayıtlardan <TermText :text="sourceSelfLoops" /><TermText text=" tanesi öz döngüdür. Bu sayılar bağlantı kayıtlarını sayar; sinaps sayısı verilmiyor." /></p><p>Ham birim: seri EM kesiti ağırlığı.</p></div>
-      <table data-testid="assumptions-evidence-table" class="evidence-table"><caption>Kaynak kaydı, model seçimi ve bu içe aktarımda bulunmayan bilgi</caption><thead><tr><th scope="col">Kaynakta raporlanan</th><th scope="col">Modelin eklediği</th><th scope="col">Bu içe aktarımda yok</th></tr></thead><tbody><tr><td>Hücre kimlikleri, kaynak hücre sınıfları ve Excel kaynak hücreleri.</td><td>AVER’i uyaran hedefi, AVAR’ı okunan hücre seçmek; çizim yerleşimi.</td><td>Bu deneye kalibre edilmiş hücre rolleri; gerçek anatomik 3D konum/morfoloji.</td></tr><tr><td>Yönlü kimyasal kayıtlar ve tekil fiziksel elektriksel çiftler.</td><td>Bütün kimyasal işaretleri pozitif almak; elektriksel bağda simetrik difüzyon.</td><td><TermText text="İletici, reseptör, bağlantıya özgü işaret ve ölçülmüş akım/iletkenlik." /></td></tr><tr><td>Ham seri EM kesiti ağırlıkları.</td><td>Normalizasyon ve boyutsuz kimyasal/elektriksel çarpanlar.</td><td><TermText text="Ayrı bir sinaps sayısı veya ölçülmüş işlevsel güç." /></td></tr><tr><td>Seçilmiş alt ağın iç bağlantıları ve dışarıda kalan kayıt sayıları.</td><td>Zaman sabiti, hesap adımı, uyaran, sıfır başlangıç ve yalıtılmış sınır.</td><td>Bu model için içe aktarılmış gerilim, kalsiyum ve davranış ölçümleri.</td></tr></tbody></table>
-      <p class="assumptions-paragraph"><TermText :text="assumptionCopy.composite" /></p>
+      <p class="assumptions-eyebrow">{{ m.dataEyebrow }}</p><h2 id="assumptions-data-title">{{ m.dataTitle }}</h2><p class="assumptions-paragraph"><TermText :text="copy.raw" /></p><p class="assumptions-paragraph"><TermText :text="copy.identity" /></p>
+      <div data-testid="assumptions-load-status" :data-state="loadState" class="data-load-state"><p role="status" aria-live="polite" aria-atomic="true">{{ loadMessage?.() }}</p><div v-if="dataError" :role="DEMO ? 'status' : 'alert'" class="assumptions-error"><p>{{ dataError() }}</p><button v-if="!DEMO" type="button" @click="loadData">{{ m.retry }}</button></div></div>
+      <div v-if="data" data-testid="assumptions-source-summary" :data-neuron-count="data.neurons.length" :data-chemical-count="data.chemicalEdges.length" :data-gap-count="data.gapEdges.length" :data-self-loop-count="sourceSelfLoops" :data-synapse-count="'not-provided'" class="source-counts"><div><span>{{ m.selectedCells }}</span><strong>{{ data.neurons.length }}</strong></div><div><span>{{ m.chemicalRecords }}</span><strong>{{ data.chemicalEdges.length }}</strong></div><div><span>{{ m.physicalPairs }}</span><strong>{{ data.gapEdges.length }}</strong></div><p>{{ m.selfLoopsLead(sourceSelfLoops) }}<TermText :text="m.selfLoopsRest(sourceSelfLoops)" /></p><p>{{ m.rawUnit }}</p></div>
+      <table data-testid="assumptions-evidence-table" class="evidence-table"><caption>{{ m.evidenceCaption }}</caption><thead><tr><th scope="col">{{ m.evidenceReported }}</th><th scope="col">{{ m.evidenceAdded }}</th><th scope="col">{{ m.evidenceAbsent }}</th></tr></thead><tbody><tr><td>{{ m.evidence.cellsReported }}</td><td>{{ m.evidence.cellsAdded }}</td><td>{{ m.evidence.cellsAbsent }}</td></tr><tr><td>{{ m.evidence.recordsReported }}</td><td>{{ m.evidence.recordsAdded }}</td><td><TermText :text="m.evidence.recordsAbsent" /></td></tr><tr><td>{{ m.evidence.weightsReported }}</td><td>{{ m.evidence.weightsAdded }}</td><td><TermText :text="m.evidence.weightsAbsent" /></td></tr><tr><td>{{ m.evidence.boundaryReported }}</td><td>{{ m.evidence.boundaryAdded }}</td><td>{{ m.evidence.boundaryAbsent }}</td></tr></tbody></table>
+      <p class="assumptions-paragraph"><TermText :text="copy.composite" /></p>
     </section>
 
     <section id="assumptions-model" tabindex="-1" aria-labelledby="assumptions-model-title" class="assumptions-section">
-      <p class="assumptions-eyebrow">02 / SEÇİLEN DİNAMİK</p><h2 id="assumptions-model-title">Ağırlık ve zaman nereden geliyor?</h2><p class="assumptions-paragraph"><TermText :text="assumptionCopy.signs" /></p><p class="assumptions-paragraph"><TermText :text="assumptionCopy.gap" /></p><p class="assumptions-paragraph"><TermText :text="assumptionCopy.normalization" /></p>
-      <div class="normalization-formulas"><h3>Mevcut modelin kullandığı normalizasyon</h3><p>Kimyasal katsayı: ham ağırlık / hedefe gelen altgraf toplamı × kimyasal çarpan.</p><code>{{ chemicalNormalizationFormula }}</code><p>Elektriksel katsayı: ham ağırlık / iki uçtaki altgraf toplamlarından büyüğü × elektriksel çarpan.</p><code>{{ gapNormalizationFormula }}</code><p>Paydalar en az 1 alınır. Katsayılar model içindir; fizyolojik birim taşımaz.</p></div>
-      <p class="assumptions-paragraph"><TermText :text="assumptionCopy.dynamics" /></p><p class="assumptions-paragraph"><TermText :text="assumptionCopy.boundary" /></p>
-      <div v-if="data" data-testid="assumptions-external-boundary" class="omitted-boundary"><h3>Bu alt ağın dışında kalan bağlantı kayıtları</h3><p><span data-testid="assumptions-omitted-incoming" :data-count="data.selection.omittedExternal.chemicalIncomingCount"><TermText :text="data.selection.omittedExternal.chemicalIncomingCount" /> kimyasal giriş</span> · <span data-testid="assumptions-omitted-outgoing" :data-count="data.selection.omittedExternal.chemicalOutgoingCount"><TermText :text="data.selection.omittedExternal.chemicalOutgoingCount" /> kimyasal çıkış</span> · <span data-testid="assumptions-omitted-gaps" :data-count="data.selection.omittedExternal.gapCount"><TermText :text="data.selection.omittedExternal.gapCount" /> elektriksel çift</span></p><p>Bunlar veri alt kümesinin dışındadır; biyolojide yok oldukları anlamına gelmez.</p></div>
+      <p class="assumptions-eyebrow">{{ m.modelEyebrow }}</p><h2 id="assumptions-model-title">{{ m.modelTitle }}</h2><p class="assumptions-paragraph"><TermText :text="copy.signs" /></p><p class="assumptions-paragraph"><TermText :text="copy.gap" /></p><p class="assumptions-paragraph"><TermText :text="copy.normalization" /></p>
+      <div class="normalization-formulas"><h3>{{ m.formulasTitle }}</h3><p>{{ m.chemicalFormula }}</p><code>{{ chemicalNormalizationFormula }}</code><p>{{ m.gapFormula }}</p><code>{{ gapNormalizationFormula }}</code><p>{{ m.formulasNote }}</p></div>
+      <p class="assumptions-paragraph"><TermText :text="copy.dynamics" /></p><p class="assumptions-paragraph"><TermText :text="copy.boundary" /></p>
+      <div v-if="data" data-testid="assumptions-external-boundary" class="omitted-boundary"><h3>{{ m.omittedTitle }}</h3><p><span data-testid="assumptions-omitted-incoming" :data-count="data.selection.omittedExternal.chemicalIncomingCount">{{ m.omittedIncoming(data.selection.omittedExternal.chemicalIncomingCount) }}</span> · <span data-testid="assumptions-omitted-outgoing" :data-count="data.selection.omittedExternal.chemicalOutgoingCount">{{ m.omittedOutgoing(data.selection.omittedExternal.chemicalOutgoingCount) }}</span> · <span data-testid="assumptions-omitted-gaps" :data-count="data.selection.omittedExternal.gapCount">{{ m.omittedGaps(data.selection.omittedExternal.gapCount) }}</span></p><p>{{ m.omittedNote }}</p></div>
     </section>
 
     <section id="assumptions-experiment" tabindex="-1" aria-labelledby="assumptions-experiment-title" class="assumptions-section">
-      <p class="assumptions-eyebrow">03 / TEK DEĞİŞKENLİ KARŞILAŞTIRMA</p><h2 id="assumptions-experiment-title">Anatomi aynı, varsayım farklı</h2><p class="assumptions-paragraph"><TermText :text="assumptionCopy.experiment" /></p>
-      <div class="assumptions-workspace"><div class="assumptions-controls"><h3>Yeni çalıştırmanın ayarları</h3><label for="assumptions-variable">Değiştirilecek model varsayımı</label><select id="assumptions-variable" v-model="variable"><option v-for="option in assumptionVariables" :key="option.id" :value="option.id">{{ option.label }}</option></select><div class="comparison-control"><label for="assumptions-comparison-value">{{ chosenVariable.label }} — karşılaştırma değeri <output for="assumptions-comparison-value">{{ parameter(comparisonValue, variable) }}</output></label><input :key="variable" id="assumptions-comparison-value" v-model.number="comparisonValue" type="range" :min="chosenVariable.min" :max="chosenVariable.max" :step="chosenVariable.step" :aria-valuetext="parameter(comparisonValue, variable)" /><p>Temel değer: <TermText :text="parameter(chosenVariable.baseline, variable)" />. Kapsam: <TermText :text="chosenVariable.scope" />.</p></div><p class="chosen-explanation"><TermText :text="chosenVariable.explanation" /></p><div class="fixed-conditions" data-testid="assumptions-fixed-conditions"><strong>Sabit deney koşulları</strong><p>Uyaran hedefi AVER; okunan hücre AVAR.</p><p>AVER darbesi: 100–300 model ms; genlik 0,8.</p><p>Kayıt: 700 model ms; hesap adımı: 1 model ms; bütün başlangıçlar 0.</p><p>Seçilmemiş çarpanlar ve zaman sabiti temel değerlerinde kalır. Bu ayarlar ölçülmüş fizyoloji değildir.</p></div><button type="button" class="assumptions-primary run-button" :disabled="!data || loadState !== 'ready'" aria-controls="assumptions-result-region" @click="runExperiment">{{ snapshot ? 'Yeniden çalıştır' : 'Deneyi çalıştır' }} <span aria-hidden="true">→</span></button><p data-testid="assumptions-run-status" role="status" aria-live="polite" aria-atomic="true" class="run-status">{{ runMessage }}</p><p v-if="runError" class="assumptions-error" role="alert">{{ runError }}</p><p v-if="!data" class="wait-for-data">Hesap, doğrulanmış yerel veri yüklendiğinde açılır.</p></div>
-        <div id="assumptions-result-region" role="region" aria-label="Varsayım karşılaştırmasının hesaplanan sonucu" class="assumptions-observation"><h3>Bu kaydın sonucu</h3><div v-if="!snapshot" class="not-run"><p>Sonuç henüz hesaplanmadı.</p><p>Bir varsayım seçip “Deneyi çalıştır” düğmesine bas. Bu sayfada tahmin girmek gerekmez.</p></div>
-          <div v-else data-testid="assumptions-result" :data-run-number="snapshot.runNumber" :data-stale="isStale" class="assumptions-result"><div class="record-heading"><span>Koşul kaydı #{{ snapshot.runNumber }}</span><span>{{ isStale ? 'Önceki ayarların sonucu' : 'Geçerli ayarların sonucu' }}</span></div><p v-if="isStale" data-testid="assumptions-stale" class="stale-warning" role="status">Ayar değişti. Aşağıdaki eğriler, sayılar ve model ağırlıkları önceki çalıştırmaya ait. Yeni ayar için yeniden çalıştır.</p>
-            <div data-testid="assumptions-run-settings" :data-variable="snapshot.controlledVariable.variable" :data-baseline-value="snapshot.controlledVariable.baselineValue" :data-comparison-value="snapshot.controlledVariable.comparisonValue" :data-scope="snapshot.controlledVariable.scope" :data-baseline-chemical-gain="snapshot.baseline.parameters.chemicalGain" :data-comparison-chemical-gain="snapshot.comparison.parameters.chemicalGain" :data-baseline-gap-gain="snapshot.baseline.parameters.gapGain" :data-comparison-gap-gain="snapshot.comparison.parameters.gapGain" :data-baseline-tau="snapshot.baseline.config.tauMs" :data-comparison-tau="snapshot.comparison.config.tauMs" :data-baseline-tau-override-count="Object.keys(snapshot.baseline.config.tauOverrides ?? {}).length" :data-comparison-tau-override-count="Object.keys(snapshot.comparison.config.tauOverrides ?? {}).length" :data-stimulus-target="snapshot.fixed.stimulusTarget" :data-output-id="snapshot.fixed.outputId" :data-amplitude="snapshot.fixed.amplitude" :data-onset-ms="snapshot.fixed.onsetMs" :data-stimulus-duration-ms="snapshot.fixed.stimulusDurationMs" :data-duration-ms="snapshot.fixed.durationMs" :data-dt-ms="snapshot.fixed.dtMs" :data-baseline-edge-count="snapshot.baseline.circuit.connections.length" :data-comparison-edge-count="snapshot.comparison.circuit.connections.length" class="record-settings"><strong>Bu kayıtta:</strong><p><TermText :text="scopeText(snapshot)" />.</p><p>Kimyasal çarpan: <TermText :text="withComma(String(snapshot.baseline.parameters.chemicalGain))" /> → <TermText :text="withComma(String(snapshot.comparison.parameters.chemicalGain))" />; elektriksel çarpan: <TermText :text="withComma(String(snapshot.baseline.parameters.gapGain))" /> → <TermText :text="withComma(String(snapshot.comparison.parameters.gapGain))" />.</p><p>Bütün hücrelerde τ: <TermText :text="snapshot.baseline.config.tauMs" /> → <TermText :text="snapshot.comparison.config.tauMs" /> model ms.</p><p>Her iki koşulda <TermText :text="snapshot.anatomyCounts.neurons" /> hücre, <TermText :text="snapshot.anatomyCounts.chemicalEdges" /> kimyasal kayıt (<TermText :text="snapshot.anatomyCounts.chemicalSelfLoops" /> öz döngü) ve <TermText :text="snapshot.anatomyCounts.physicalGapPairs" /> fiziksel elektriksel çift korunuyor.</p></div>
-            <div class="assumptions-chart-scale"><label for="assumptions-focus-scale"><input id="assumptions-focus-scale" v-model="responseScale" type="checkbox" /> Yanıta göre dikey ölçek</label><output data-testid="assumptions-axis-limit" :data-value="yMax">Dikey eksen 0–{{ format(yMax) }}; iki koşul aynı ölçek</output></div>
-            <AssumptionTracePlot :times-ms="snapshot.baseline.result.timesMs" :baseline="snapshot.baseline.result.activity.AVAR!" :comparison="snapshot.comparison.result.activity.AVAR!" :baseline-label="snapshot.baseline.label" :comparison-label="snapshot.comparison.label" :y-max="yMax" :response-scale="responseScale" :onset-ms="snapshot.fixed.onsetMs" :stimulus-duration-ms="snapshot.fixed.stimulusDurationMs" />
-            <table class="metrics-table"><caption>AVAR için hesaplanan ölçütler · yalnız bu kayıt aralığı</caption><thead><tr><th scope="col">Ölçüt</th><th scope="col">Temel</th><th scope="col">Değişiklik</th></tr></thead><tbody><tr><th scope="row">Kayıt içindeki tepe aktivite</th><td data-testid="assumptions-baseline-peak" :data-value="snapshot.baseline.metrics.peak">{{ format(snapshot.baseline.metrics.peak) }}</td><td data-testid="assumptions-comparison-peak" :data-value="snapshot.comparison.metrics.peak">{{ format(snapshot.comparison.metrics.peak) }}</td></tr><tr><th scope="row">Kayıttaki tepe zamanı</th><td data-testid="assumptions-baseline-peak-time" :data-value="snapshot.baseline.metrics.peakTimeMs ?? 'null'"><TermText :text="timeText(snapshot.baseline.metrics.peakTimeMs)" /></td><td data-testid="assumptions-comparison-peak-time" :data-value="snapshot.comparison.metrics.peakTimeMs ?? 'null'"><TermText :text="timeText(snapshot.comparison.metrics.peakTimeMs)" /></td></tr><tr><th scope="row">Son örnekte aktivite (700 ms)</th><td data-testid="assumptions-baseline-end" :data-value="snapshot.baseline.metrics.endValue">{{ format(snapshot.baseline.metrics.endValue) }}</td><td data-testid="assumptions-comparison-end" :data-value="snapshot.comparison.metrics.endValue">{{ format(snapshot.comparison.metrics.endValue) }}</td></tr></tbody></table>
-            <dl class="delta-metrics"><div><dt>AVAR tepe farkı (değişiklik − temel)</dt><dd data-testid="assumptions-peak-difference" :data-value="snapshot.delta.peak"><TermText :text="signed(snapshot.delta.peak)" /></dd></div><div><dt>AVAR son değer farkı (değişiklik − temel)</dt><dd data-testid="assumptions-end-difference" :data-value="snapshot.delta.endValue"><TermText :text="signed(snapshot.delta.endValue)" /></dd></div><div><dt>Bütün <TermText :text="snapshot.anatomyCounts.neurons" /> hücre ve tüm zaman örnekleri: en büyük mutlak iz farkı</dt><dd data-testid="assumptions-max-trace-difference" :data-value="snapshot.delta.maxAbsTraceDifference">{{ format(snapshot.delta.maxAbsTraceDifference) }}</dd></div></dl>
-            <p v-if="windowEndMaximum" data-testid="assumptions-window-end-maximum" class="window-note">Koşullardan en az birinin en yüksek değeri kayıt sonundaki <TermText :text="snapshot.fixed.durationMs" /> model ms örneğinde. Kayıt sonrası bir tepe veya kararlı durum belirlenmedi.</p><p v-if="snapshot.baseline.metrics.peakTimeMs === null || snapshot.comparison.metrics.peakTimeMs === null" class="window-note">“—”, ilgili koşulun tüm izinin sıfır kaldığını ve pozitif tepe zamanı olmadığını gösterir; sıfır gecikme değildir.</p><p class="metric-note">Tepe zamanı, pozitif en büyük değerin ilk kayıt örneğidir. Biyolojik tepki başlangıcı veya iletim gecikmesi değildir. Son değer kararlı durum tahmini değildir. Küçük değerler bilimsel gösterimle yazılabilir; sıfıra yuvarlanmaz.</p>
-            <div class="result-meaning"><p class="assumptions-eyebrow">SONUCU KOŞULLARIYLA OKU</p><p data-testid="assumptions-explanation"><TermText :text="resultExplanation" /></p></div>
+      <p class="assumptions-eyebrow">{{ m.experimentEyebrow }}</p><h2 id="assumptions-experiment-title">{{ m.experimentTitle }}</h2><p class="assumptions-paragraph"><TermText :text="copy.experiment" /></p>
+      <div class="assumptions-workspace"><div class="assumptions-controls"><h3>{{ m.settingsTitle }}</h3><label for="assumptions-variable">{{ m.variableLabel }}</label><select id="assumptions-variable" v-model="variable"><option v-for="option in variables" :key="option.id" :value="option.id">{{ option.label }}</option></select><div class="comparison-control"><label for="assumptions-comparison-value">{{ m.comparisonValue(chosenVariable.label) }} <output for="assumptions-comparison-value">{{ parameter(comparisonValue, variable) }}</output></label><input :key="variable" id="assumptions-comparison-value" v-model.number="comparisonValue" type="range" :min="chosenVariable.min" :max="chosenVariable.max" :step="chosenVariable.step" :aria-valuetext="parameter(comparisonValue, variable)" /><p>{{ m.baselineValueLead }}<TermText :text="parameter(chosenVariable.baseline, variable)" />{{ m.scopeLead }}<TermText :text="chosenVariable.scope" />.</p></div><p class="chosen-explanation"><TermText :text="chosenVariable.explanation" /></p><div class="fixed-conditions" data-testid="assumptions-fixed-conditions"><strong>{{ m.fixedTitle }}</strong><p>{{ m.fixedRoles }}</p><p>{{ m.fixedPulse }}</p><p>{{ m.fixedRecording }}</p><p>{{ m.fixedNote }}</p></div><button type="button" class="assumptions-primary run-button" :disabled="!data || loadState !== 'ready'" aria-controls="assumptions-result-region" @click="runExperiment">{{ snapshot ? m.runAgain : m.run }} <span aria-hidden="true">→</span></button><p data-testid="assumptions-run-status" role="status" aria-live="polite" aria-atomic="true" class="run-status">{{ runMessage?.() }}</p><p v-if="runError" class="assumptions-error" role="alert">{{ runError() }}</p><p v-if="!data" class="wait-for-data">{{ m.waitForData }}</p></div>
+        <div id="assumptions-result-region" role="region" :aria-label="m.resultRegion" class="assumptions-observation"><h3>{{ m.resultTitle }}</h3><div v-if="!snapshot" class="not-run"><p>{{ m.notRun }}</p><p>{{ m.notRunHint }}</p></div>
+          <div v-else data-testid="assumptions-result" :data-run-number="snapshot.runNumber" :data-stale="isStale" class="assumptions-result"><div class="record-heading"><span>{{ m.recordNumber(snapshot.runNumber) }}</span><span>{{ isStale ? m.resultOfPrevious : m.resultOfCurrent }}</span></div><p v-if="isStale" data-testid="assumptions-stale" class="stale-warning" role="status">{{ m.stale }}</p>
+            <div data-testid="assumptions-run-settings" :data-variable="snapshot.controlledVariable.variable" :data-baseline-value="snapshot.controlledVariable.baselineValue" :data-comparison-value="snapshot.controlledVariable.comparisonValue" :data-scope="snapshot.controlledVariable.scope" :data-baseline-chemical-gain="snapshot.baseline.parameters.chemicalGain" :data-comparison-chemical-gain="snapshot.comparison.parameters.chemicalGain" :data-baseline-gap-gain="snapshot.baseline.parameters.gapGain" :data-comparison-gap-gain="snapshot.comparison.parameters.gapGain" :data-baseline-tau="snapshot.baseline.config.tauMs" :data-comparison-tau="snapshot.comparison.config.tauMs" :data-baseline-tau-override-count="Object.keys(snapshot.baseline.config.tauOverrides ?? {}).length" :data-comparison-tau-override-count="Object.keys(snapshot.comparison.config.tauOverrides ?? {}).length" :data-stimulus-target="snapshot.fixed.stimulusTarget" :data-output-id="snapshot.fixed.outputId" :data-amplitude="snapshot.fixed.amplitude" :data-onset-ms="snapshot.fixed.onsetMs" :data-stimulus-duration-ms="snapshot.fixed.stimulusDurationMs" :data-duration-ms="snapshot.fixed.durationMs" :data-dt-ms="snapshot.fixed.dtMs" :data-baseline-edge-count="snapshot.baseline.circuit.connections.length" :data-comparison-edge-count="snapshot.comparison.circuit.connections.length" class="record-settings"><strong>{{ m.inThisRecord }}</strong><p><TermText :text="scopeText(snapshot)" />.</p><p>{{ m.recordGains(withComma(String(snapshot.baseline.parameters.chemicalGain)), withComma(String(snapshot.comparison.parameters.chemicalGain)), withComma(String(snapshot.baseline.parameters.gapGain)), withComma(String(snapshot.comparison.parameters.gapGain))) }}</p><p>{{ m.recordTau(snapshot.baseline.config.tauMs, snapshot.comparison.config.tauMs) }}</p><p>{{ m.recordAnatomy(snapshot.anatomyCounts.neurons, snapshot.anatomyCounts.chemicalEdges, snapshot.anatomyCounts.chemicalSelfLoops, snapshot.anatomyCounts.physicalGapPairs) }}</p></div>
+            <div class="assumptions-chart-scale"><label for="assumptions-focus-scale"><input id="assumptions-focus-scale" v-model="responseScale" type="checkbox" /> {{ m.responseScale }}</label><output data-testid="assumptions-axis-limit" :data-value="yMax">{{ m.axisLimit(format(yMax)) }}</output></div>
+            <AssumptionTracePlot :times-ms="snapshot.baseline.result.timesMs" :baseline="snapshot.baseline.result.activity.AVAR!" :comparison="snapshot.comparison.result.activity.AVAR!" :baseline-label="conditionLabel(snapshot, 'baseline')" :comparison-label="conditionLabel(snapshot, 'comparison')" :y-max="yMax" :response-scale="responseScale" :onset-ms="snapshot.fixed.onsetMs" :stimulus-duration-ms="snapshot.fixed.stimulusDurationMs" />
+            <table class="metrics-table"><caption>{{ m.metricsCaption }}</caption><thead><tr><th scope="col">{{ m.metric }}</th><th scope="col">{{ m.baseline }}</th><th scope="col">{{ m.change }}</th></tr></thead><tbody><tr><th scope="row">{{ m.peakActivity }}</th><td data-testid="assumptions-baseline-peak" :data-value="snapshot.baseline.metrics.peak">{{ format(snapshot.baseline.metrics.peak) }}</td><td data-testid="assumptions-comparison-peak" :data-value="snapshot.comparison.metrics.peak">{{ format(snapshot.comparison.metrics.peak) }}</td></tr><tr><th scope="row">{{ m.peakTime }}</th><td data-testid="assumptions-baseline-peak-time" :data-value="snapshot.baseline.metrics.peakTimeMs ?? 'null'"><TermText :text="timeText(snapshot.baseline.metrics.peakTimeMs)" /></td><td data-testid="assumptions-comparison-peak-time" :data-value="snapshot.comparison.metrics.peakTimeMs ?? 'null'"><TermText :text="timeText(snapshot.comparison.metrics.peakTimeMs)" /></td></tr><tr><th scope="row">{{ m.endActivity }}</th><td data-testid="assumptions-baseline-end" :data-value="snapshot.baseline.metrics.endValue">{{ format(snapshot.baseline.metrics.endValue) }}</td><td data-testid="assumptions-comparison-end" :data-value="snapshot.comparison.metrics.endValue">{{ format(snapshot.comparison.metrics.endValue) }}</td></tr></tbody></table>
+            <dl class="delta-metrics"><div><dt>{{ m.peakDifference }}</dt><dd data-testid="assumptions-peak-difference" :data-value="snapshot.delta.peak"><TermText :text="signed(snapshot.delta.peak)" /></dd></div><div><dt>{{ m.endDifference }}</dt><dd data-testid="assumptions-end-difference" :data-value="snapshot.delta.endValue"><TermText :text="signed(snapshot.delta.endValue)" /></dd></div><div><dt>{{ m.maxTraceDifference(snapshot.anatomyCounts.neurons) }}</dt><dd data-testid="assumptions-max-trace-difference" :data-value="snapshot.delta.maxAbsTraceDifference">{{ format(snapshot.delta.maxAbsTraceDifference) }}</dd></div></dl>
+            <p v-if="windowEndMaximum" data-testid="assumptions-window-end-maximum" class="window-note">{{ m.windowEndMaximum(snapshot.fixed.durationMs) }}</p><p v-if="snapshot.baseline.metrics.peakTimeMs === null || snapshot.comparison.metrics.peakTimeMs === null" class="window-note">{{ m.noPeakTime }}</p><p class="metric-note">{{ m.metricNote }}</p>
+            <div class="result-meaning"><p class="assumptions-eyebrow">{{ m.readWithConditions }}</p><p data-testid="assumptions-explanation"><TermText :text="resultExplanation" /></p></div>
           </div>
         </div>
       </div>
-      <div v-if="snapshot" data-testid="assumptions-source-examples" class="source-examples"><h3>Aynı ham kayıt, farklı model ağırlığı</h3><p>Bu örnekler kaydedilmiş iki koşuldan okunur. Sürgünün yeni değerleri eski ağırlıkları güncellemez. Kazanç sıfır olsa da ham bağlantı kayıtları korunur.</p><div class="example-grid"><article v-for="example in examples" :key="example.id" :data-testid="`assumptions-example-${example.kind}`" :data-edge-id="example.id" :data-kind="example.kind" :data-from="example.from" :data-to="example.to" :data-raw-weight="example.rawWeight" :data-baseline-weight="example.baselineWeight" :data-comparison-weight="example.comparisonWeight" :data-baseline-denominator="example.baselineDenominator" :data-comparison-denominator="example.comparisonDenominator" :data-first-total="example.firstTotal" :data-second-total="example.secondTotal" v-bind="sourceAttributes(example.sourceRef, example.reciprocalSourceRef)" class="example-card"><h4><TermText :text="example.label" /></h4><dl><div><dt>Ham anatomik ağırlık</dt><dd><TermText :text="example.rawWeight" /> EM kesiti</dd></div><div><dt>Kaynak tablo hücresi</dt><dd><TermText :text="sourceText(example.sourceRef)" /></dd></div><div v-if="example.reciprocalSourceRef"><dt>Karşılıklı tablo hücresi</dt><dd><TermText :text="sourceText(example.reciprocalSourceRef)" /></dd></div><div><dt>Altgraf içindeki <TermText :text="example.kind === 'chemical' ? 'AVAR’a gelen ham toplam' : 'uçlara değen ham toplamlar'" /></dt><dd><TermText :text="example.kind === 'chemical' ? `AVAR: ${example.firstTotal}` : `AVAR: ${example.firstTotal}; AVER: ${example.secondTotal}`" /></dd></div><div><dt>Normalizasyon paydası · temel / değişiklik</dt><dd><TermText :text="example.baselineDenominator" /> / <TermText :text="example.comparisonDenominator" /></dd></div><div><dt>Temel model ağırlığı · boyutsuz</dt><dd :data-testid="`assumptions-example-${example.kind}-baseline-weight`" :data-value="example.baselineWeight"><TermText :text="example.baselineWeight === undefined ? 'Bu kayıtta yok' : format(example.baselineWeight, 8)" /></dd></div><div><dt>Değiştirilmiş model ağırlığı · boyutsuz</dt><dd :data-testid="`assumptions-example-${example.kind}-comparison-weight`" :data-value="example.comparisonWeight"><TermText :text="example.comparisonWeight === undefined ? 'Bu kayıtta yok' : format(example.comparisonWeight, 8)" /></dd></div></dl></article></div><p>Altgraf toplamları yalnız seçilmiş hücrelerin iç bağlantılarıdır. Ham ağırlıklar ölçülmüş işlevsel güç değildir; normalize ağırlıklar biyolojik iletkenlik değildir.</p></div>
+      <div v-if="snapshot" data-testid="assumptions-source-examples" class="source-examples"><h3>{{ m.examplesTitle }}</h3><p>{{ m.examplesLead }}</p><div class="example-grid"><article v-for="example in examples" :key="example.id" :data-testid="`assumptions-example-${example.kind}`" :data-edge-id="example.id" :data-kind="example.kind" :data-from="example.from" :data-to="example.to" :data-raw-weight="example.rawWeight" :data-baseline-weight="example.baselineWeight" :data-comparison-weight="example.comparisonWeight" :data-baseline-denominator="example.baselineDenominator" :data-comparison-denominator="example.comparisonDenominator" :data-first-total="example.firstTotal" :data-second-total="example.secondTotal" v-bind="sourceAttributes(example.sourceRef, example.reciprocalSourceRef)" class="example-card"><h4><TermText :text="example.label" /></h4><dl><div><dt>{{ m.rawWeight }}</dt><dd>{{ m.emSections(example.rawWeight) }}</dd></div><div><dt>{{ m.sourceCell }}</dt><dd><TermText :text="sourceText(example.sourceRef)" /></dd></div><div v-if="example.reciprocalSourceRef"><dt>{{ m.reciprocalCell }}</dt><dd><TermText :text="sourceText(example.reciprocalSourceRef)" /></dd></div><div><dt>{{ m.subgraphLead }}<TermText :text="example.kind === 'chemical' ? m.incomingTotal : m.incidentTotals" /></dt><dd><TermText :text="example.kind === 'chemical' ? `AVAR: ${example.firstTotal}` : `AVAR: ${example.firstTotal}; AVER: ${example.secondTotal}`" /></dd></div><div><dt>{{ m.denominator }}</dt><dd><TermText :text="example.baselineDenominator" /> / <TermText :text="example.comparisonDenominator" /></dd></div><div><dt>{{ m.baselineWeight }}</dt><dd :data-testid="`assumptions-example-${example.kind}-baseline-weight`" :data-value="example.baselineWeight"><TermText :text="example.baselineWeight === undefined ? m.notInRecord : format(example.baselineWeight, 8)" /></dd></div><div><dt>{{ m.changedWeight }}</dt><dd :data-testid="`assumptions-example-${example.kind}-comparison-weight`" :data-value="example.comparisonWeight"><TermText :text="example.comparisonWeight === undefined ? m.notInRecord : format(example.comparisonWeight, 8)" /></dd></div></dl></article></div><p>{{ m.examplesNote }}</p></div>
     </section>
 
     <section id="assumptions-sweep" tabindex="-1" aria-labelledby="assumptions-sweep-title" class="assumptions-section" data-testid="assumptions-sweep">
-      <p class="assumptions-eyebrow">03B / EŞİK TARAMASI</p><h2 id="assumptions-sweep-title">Kimyasal çarpan 1’i geçerken ne olur?</h2><p class="assumptions-paragraph"><TermText :text="assumptionCopy.sweep" /></p>
+      <p class="assumptions-eyebrow">{{ m.sweepEyebrow }}</p><h2 id="assumptions-sweep-title">{{ m.sweepTitle }}</h2><p class="assumptions-paragraph"><TermText :text="copy.sweep" /></p>
       <div class="assumptions-workspace">
         <div class="assumptions-controls">
-          <h3>Taramanın ayarları</h3>
-          <div class="fixed-conditions no-rule" data-testid="sweep-fixed-conditions"><strong>Sabit tarama koşulları</strong><p>Kimyasal çarpan: {{ decimal(sweepGrid[0]!, 1) }}–{{ decimal(sweepGrid.at(-1)!, 1) }} arası {{ sweepGrid.length }} değer, 0,1’lik adımlarla.</p><p>Elektriksel çarpan 0,2; bütün hücrelerde τ = 30 model ms.</p><p>AVER darbesi: 100–300 model ms; genlik 0,8. Okunan hücre AVAR.</p><p>Kayıt: 700 model ms; hesap adımı: 1 model ms; bütün başlangıçlar 0. Bu ayarlar ölçülmüş fizyoloji değildir.</p></div>
-          <div class="comparison-control"><label for="sweep-prediction">{{ sweepPrediction.prompt }}</label><select id="sweep-prediction" v-model="sweepDraft"><option value="">Tahmin eklemeden devam et</option><option v-for="option in sweepPrediction.options" :key="option.id" :value="option.id">{{ option.label }}</option></select><p>{{ sweepPrediction.hint }}</p></div>
-          <button type="button" class="assumptions-primary run-button" data-testid="sweep-run" :disabled="!data || loadState !== 'ready'" aria-controls="assumptions-sweep-result" @click="runSweep">{{ sweep ? 'Taramayı yeniden çalıştır' : 'Taramayı çalıştır' }} <span aria-hidden="true">→</span></button>
-          <p data-testid="sweep-status" role="status" aria-live="polite" aria-atomic="true" class="run-status">{{ sweepMessage }}</p>
-          <p v-if="sweepError" data-testid="sweep-error" class="assumptions-error" role="alert">{{ sweepError }}</p>
-          <p v-if="!data" class="wait-for-data">Tarama, doğrulanmış yerel veri yüklendiğinde açılır.</p>
+          <h3>{{ m.sweepSettingsTitle }}</h3>
+          <div class="fixed-conditions no-rule" data-testid="sweep-fixed-conditions"><strong>{{ m.sweepFixedTitle }}</strong><p>{{ m.sweepFixedGrid(decimal(sweepGrid[0]!, 1), decimal(sweepGrid.at(-1)!, 1), sweepGrid.length) }}</p><p>{{ m.sweepFixedOthers }}</p><p>{{ m.sweepFixedPulse }}</p><p>{{ m.sweepFixedRecording }}</p></div>
+          <div class="comparison-control"><label for="sweep-prediction">{{ prediction.prompt }}</label><select id="sweep-prediction" v-model="sweepDraft"><option value="">{{ m.noPrediction }}</option><option v-for="option in prediction.options" :key="option.id" :value="option.id">{{ option.label }}</option></select><p>{{ prediction.hint }}</p></div>
+          <button type="button" class="assumptions-primary run-button" data-testid="sweep-run" :disabled="!data || loadState !== 'ready'" aria-controls="assumptions-sweep-result" @click="runSweep">{{ sweep ? m.runSweepAgain : m.runSweep }} <span aria-hidden="true">→</span></button>
+          <p data-testid="sweep-status" role="status" aria-live="polite" aria-atomic="true" class="run-status">{{ sweepMessage?.() }}</p>
+          <p v-if="sweepError" data-testid="sweep-error" class="assumptions-error" role="alert">{{ sweepError() }}</p>
+          <p v-if="!data" class="wait-for-data">{{ m.sweepWaitForData }}</p>
         </div>
-        <div id="assumptions-sweep-result" role="region" aria-label="Eşik taramasının hesaplanan sonucu" class="assumptions-observation">
-          <h3>Bu taramanın sonucu</h3>
-          <div v-if="!sweep" class="not-run"><p>Tarama henüz hesaplanmadı.</p><p>“Taramayı çalıştır” düğmesine bas. Bu bölümde tahmin girmek gerekmez.</p></div>
+        <div id="assumptions-sweep-result" role="region" :aria-label="m.sweepRegion" class="assumptions-observation">
+          <h3>{{ m.sweepResultTitle }}</h3>
+          <div v-if="!sweep" class="not-run"><p>{{ m.sweepNotRun }}</p><p>{{ m.sweepNotRunHint }}</p></div>
           <div v-else data-testid="sweep-result" :data-run-number="sweepRun" :data-completed="sweep.completed" :data-failed="sweep.failed" :data-gap-gain="sweep.fixed.gapGain" :data-tau-ms="sweep.fixed.tauMs" :data-duration-ms="sweep.fixed.durationMs" class="assumptions-result">
-            <div class="record-heading"><span>Tarama kaydı #{{ sweepRun }}</span><span>{{ sweep.points.length }} çarpanın {{ sweep.completed }}’i hesaplandı</span></div>
-            <p v-if="sweep.failed" data-testid="sweep-failed-note" class="assumptions-error" role="alert">{{ sweep.failed }} çarpan için hesap tamamlanamadı. Bunlar tabloda “hesaplanamadı” olarak yazılır, grafikte × ile işaretlenir ve çizgi onlara köprü kurmaz. Kalan noktalar hesaplanan gerçek sonuçlardır.</p>
+            <div class="record-heading"><span>{{ m.sweepRecord(sweepRun) }}</span><span>{{ m.sweepCompleted(sweep.points.length, sweep.completed) }}</span></div>
+            <p v-if="sweep.failed" data-testid="sweep-failed-note" class="assumptions-error" role="alert">{{ m.sweepSomeFailed(sweep.failed) }}</p>
             <ThresholdSweepPlot :points="sweep.points" :threshold-gain="thresholdGain" />
-            <table class="sweep-table" data-testid="sweep-table"><caption>AVAR için çarpana göre hesaplanan ölçütler · her satır ayrı bir hesap</caption><thead><tr><th scope="col">Kimyasal çarpan</th><th scope="col">Tepe aktivite</th><th scope="col">Tepe zamanı · model ms</th><th scope="col">Son değer (700 ms)</th></tr></thead>
-              <tbody><tr v-for="point in sweep.points" :key="point.gain" data-testid="sweep-row" :data-gain="point.gain" :data-regime="regime(point.gain).id" :data-ok="point.ok" :data-peak="point.ok ? point.peak : undefined" :data-peak-time="point.ok ? (point.peakTimeMs ?? 'null') : undefined" :data-end="point.ok ? point.endValue : undefined"><th scope="row">{{ decimal(point.gain, 1) }}<span class="regime">{{ regime(point.gain).text }}</span></th><template v-if="point.ok"><td>{{ format(point.peak, 4) }}</td><td>{{ point.peakTimeMs ?? '—' }}</td><td>{{ format(point.endValue, 4) }}</td></template><td v-else colspan="3" class="failed-cell">hesaplanamadı</td></tr></tbody></table>
-            <dl v-if="crossing" class="delta-metrics" data-testid="sweep-crossing" :data-below-gain="crossing.below.gain" :data-above-gain="crossing.above.gain" :data-below-end="crossing.below.endValue" :data-above-end="crossing.above.endValue" :data-trend="crossing.trend"><div><dt>Eşiğin altındaki en yakın hesap: çarpan {{ decimal(crossing.below.gain, 1) }} · son değer</dt><dd>{{ format(crossing.below.endValue, 4) }}</dd></div><div><dt>Eşiğin üstündeki en yakın hesap: çarpan {{ decimal(crossing.above.gain, 1) }} · son değer</dt><dd>{{ format(crossing.above.endValue, 4) }}</dd></div></dl>
-            <p v-if="sweepWindowEnd.length" data-testid="sweep-window-end" class="window-note">Çarpan {{ sweepWindowEnd.map(gain => decimal(gain, 1)).join(' · ') }} olan {{ sweepWindowEnd.length }} hesapta en yüksek değer kayıt sonundaki {{ sweep.fixed.durationMs }} model ms örneğinde; bu satırlarda tepe ile son değer aynıdır. Kayıt sonrası bir tepe veya kararlı durum belirlenmedi.</p>
-            <p v-if="sweepNeverPositive" class="window-note">“—”, ilgili çarpanda tüm izin sıfır kaldığını ve pozitif tepe zamanı olmadığını gösterir; sıfır gecikme değildir.</p>
-            <p class="metric-note"><TermText :text="assumptionCopy.sweepWindow" /></p>
-            <p v-if="sweepDraftChanged" data-testid="sweep-prediction-changed" class="window-note" role="status">Tahmin seçimin değişti; bu kayıttaki tahmin korunuyor. Yeni seçimin bir sonraki taramada kaydedilir.</p>
-            <div class="result-meaning"><p class="assumptions-eyebrow">SONUCU KOŞULLARIYLA OKU</p><p data-testid="sweep-feedback"><TermText :text="sweepFeedback" /></p></div>
+            <table class="sweep-table" data-testid="sweep-table"><caption>{{ m.sweepCaption }}</caption><thead><tr><th scope="col">{{ m.sweepGain }}</th><th scope="col">{{ m.sweepPeak }}</th><th scope="col">{{ m.sweepPeakTime }}</th><th scope="col">{{ m.sweepEnd }}</th></tr></thead>
+              <tbody><tr v-for="point in sweep.points" :key="point.gain" data-testid="sweep-row" :data-gain="point.gain" :data-regime="regime(point.gain).id" :data-ok="point.ok" :data-peak="point.ok ? point.peak : undefined" :data-peak-time="point.ok ? (point.peakTimeMs ?? 'null') : undefined" :data-end="point.ok ? point.endValue : undefined"><th scope="row">{{ decimal(point.gain, 1) }}<span class="regime">{{ regime(point.gain).text }}</span></th><template v-if="point.ok"><td>{{ format(point.peak, 4) }}</td><td>{{ point.peakTimeMs ?? '—' }}</td><td>{{ format(point.endValue, 4) }}</td></template><td v-else colspan="3" class="failed-cell">{{ m.notComputed }}</td></tr></tbody></table>
+            <dl v-if="crossing" class="delta-metrics" data-testid="sweep-crossing" :data-below-gain="crossing.below.gain" :data-above-gain="crossing.above.gain" :data-below-end="crossing.below.endValue" :data-above-end="crossing.above.endValue" :data-trend="crossing.trend"><div><dt>{{ m.nearestBelow(decimal(crossing.below.gain, 1)) }}</dt><dd>{{ format(crossing.below.endValue, 4) }}</dd></div><div><dt>{{ m.nearestAbove(decimal(crossing.above.gain, 1)) }}</dt><dd>{{ format(crossing.above.endValue, 4) }}</dd></div></dl>
+            <p v-if="sweepWindowEnd.length" data-testid="sweep-window-end" class="window-note">{{ m.sweepWindowEnd(sweepWindowEnd.map(gain => decimal(gain, 1)).join(' · '), sweepWindowEnd.length, sweep.fixed.durationMs) }}</p>
+            <p v-if="sweepNeverPositive" class="window-note">{{ m.sweepNoPeakTime }}</p>
+            <p class="metric-note"><TermText :text="copy.sweepWindow" /></p>
+            <p v-if="sweepDraftChanged" data-testid="sweep-prediction-changed" class="window-note" role="status">{{ m.predictionChanged }}</p>
+            <div class="result-meaning"><p class="assumptions-eyebrow">{{ m.readWithConditions }}</p><p data-testid="sweep-feedback"><TermText :text="sweepFeedback" /></p></div>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="assumptions-validation" tabindex="-1" aria-labelledby="assumptions-validation-title" class="assumptions-section"><p class="assumptions-eyebrow">04 / DOĞRULAMAYI AYIR</p><h2 id="assumptions-validation-title">Sayısal tutarlılık ve hayvanla karşılaştırma</h2><p class="assumptions-paragraph"><TermText :text="assumptionCopy.validation" /></p><p class="assumptions-paragraph"><TermText :text="assumptionCopy.physiology" /></p><p class="assumptions-paragraph"><TermText :text="assumptionCopy.questions" /></p><div class="validation-distinction"><div><h3>Sayısal kontrol</h3><p>Seçilen denklemi yeterince doğru çözüyor muyuz? Adım boyutu, sınırlar ve tekrar edilebilir hesap incelenir.</p></div><div><h3>Biyolojik doğrulama</h3><p>Bağımsız ölçülmüş yanıtı, aynı koşul ve doğru nicelikle açıklıyor muyuz? Bir grafiğin görünmesi bunu tamamlamaz.</p></div></div></section>
-    <section id="assumptions-provenance" tabindex="-1" aria-labelledby="assumptions-provenance-title" data-testid="assumptions-provenance" :data-license-status="data?.dataset.license.status" :data-source-unit="data?.dataset.anatomicalWeightUnit" class="assumptions-section"><p class="assumptions-eyebrow">KAYNAĞI İZLE</p><h2 id="assumptions-provenance-title">Dosya, sürüm ve araştırma kaynakları</h2><p class="assumptions-paragraph"><TermText :text="assumptionCopy.local" /></p><dl v-if="data" class="provenance-facts"><div><dt>Yerel veri</dt><dd><TermText :text="data.dataset.title" /></dd></div><div><dt>Sürüm</dt><dd><TermText :text="data.dataset.version" /></dd></div><div data-testid="assumptions-subset-selection" :data-algorithm="data.selection.algorithm" :data-seeds="data.selection.seeds.join(',')" :data-limit="data.selection.limit"><dt>Altgraf seçimi</dt><dd>Başlangıç hücreleri: <TermText :text="data.selection.seeds.join(', ')" />. Hücre sınırı: <TermText :text="data.selection.limit" />.<code>{{ data.selection.algorithm }}</code></dd></div><div><dt>Kaynakta kayıtlı ham birim</dt><dd><TermText :text="data.dataset.anatomicalWeightUnit" /></dd></div><div><dt>Kayıt yönü</dt><dd><TermText :text="data.dataset.orientation" /></dd></div><div><dt>Dosya lisansı</dt><dd>Doğrulanmadı · yalnız yerel kullanım <code>{{ data.dataset.license.status }}</code></dd></div></dl><details v-if="data" class="source-files"><summary>Kaynak dosyalarının kimliğini gör</summary><div v-for="source in data.dataset.sources" :key="source.sha256"><a :href="source.url">{{ source.name }}</a><p>Veri kaydındaki edinim zamanı: <TermText :text="source.downloadedAtUtc" /></p><p>SHA-256: <code>{{ source.sha256 }}</code></p></div></details><ul class="primary-sources"><li v-for="source in assumptionSources" :key="source.url"><a :href="source.url">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul><p class="source-purpose">Bu araştırmalar anatomi, fizyoloji ve doğrulama ayrımını destekler; seçtiğimiz çarpanları ve zaman sabitlerini ölçülmüş değerler olarak doğrulamaz.</p></section>
-    <div class="assumptions-next"><a :href="withBase('/ogren/devreyi-okumak')">Devreyi okumak dersine dön <span aria-hidden="true">←</span></a><a :href="BASE" class="assumptions-primary">Devre deneyine geç <span aria-hidden="true">→</span></a></div>
+    <section id="assumptions-validation" tabindex="-1" aria-labelledby="assumptions-validation-title" class="assumptions-section"><p class="assumptions-eyebrow">{{ m.validationEyebrow }}</p><h2 id="assumptions-validation-title">{{ m.validationTitle }}</h2><p class="assumptions-paragraph"><TermText :text="copy.validation" /></p><p class="assumptions-paragraph"><TermText :text="copy.physiology" /></p><p class="assumptions-paragraph"><TermText :text="copy.questions" /></p><div class="validation-distinction"><div><h3>{{ m.numericalTitle }}</h3><p>{{ m.numericalText }}</p></div><div><h3>{{ m.biologicalTitle }}</h3><p>{{ m.biologicalText }}</p></div></div></section>
+    <section id="assumptions-provenance" tabindex="-1" aria-labelledby="assumptions-provenance-title" data-testid="assumptions-provenance" :data-license-status="data?.dataset.license.status" :data-source-unit="data?.dataset.anatomicalWeightUnit" class="assumptions-section"><p class="assumptions-eyebrow">{{ m.provenanceEyebrow }}</p><h2 id="assumptions-provenance-title">{{ m.provenanceTitle }}</h2><p class="assumptions-paragraph"><TermText :text="copy.local" /></p><dl v-if="data" class="provenance-facts"><div><dt>{{ m.localData }}</dt><dd><TermText :text="data.dataset.title" /></dd></div><div><dt>{{ m.version }}</dt><dd><TermText :text="data.dataset.version" /></dd></div><div data-testid="assumptions-subset-selection" :data-algorithm="data.selection.algorithm" :data-seeds="data.selection.seeds.join(',')" :data-limit="data.selection.limit"><dt>{{ m.subgraphSelection }}</dt><dd>{{ m.seedsLead }}<TermText :text="data.selection.seeds.join(', ')" />{{ m.cellLimit(data.selection.limit) }}<code>{{ data.selection.algorithm }}</code></dd></div><div><dt>{{ m.sourceUnit }}</dt><dd><TermText :text="data.dataset.anatomicalWeightUnit" /></dd></div><div><dt>{{ m.orientation }}</dt><dd><TermText :text="data.dataset.orientation" /></dd></div><div><dt>{{ m.fileLicence }}</dt><dd>{{ m.licenceUnverified }} <code>{{ data.dataset.license.status }}</code></dd></div></dl><details v-if="data" class="source-files"><summary>{{ m.sourceFiles }}</summary><div v-for="source in data.dataset.sources" :key="source.sha256"><a :href="source.url">{{ source.name }}</a><p>{{ m.acquiredLead }}<TermText :text="source.downloadedAtUtc" /></p><p>SHA-256: <code>{{ source.sha256 }}</code></p></div></details><ul class="primary-sources"><li v-for="source in sources" :key="source.url"><a :href="source.url">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul><p class="source-purpose">{{ m.sourcePurpose }}</p></section>
+    <div class="assumptions-next"><a :href="withBase('/ogren/devreyi-okumak')">{{ m.backToReading }} <span aria-hidden="true">←</span></a><a :href="BASE" class="assumptions-primary">{{ m.toExperiment }} <span aria-hidden="true">→</span></a></div>
   </main>
 </template>
 

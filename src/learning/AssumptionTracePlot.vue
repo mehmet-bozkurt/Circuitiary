@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { decimal } from '../format'
+import { useMessages } from '../i18n'
+import { messages } from './AssumptionTracePlot.messages'
 import { TICK_FRACTIONS, bandWidth, plotX, plotY, tracePath, useChartWidth } from './plotBox'
 
 const props = defineProps<{
@@ -14,6 +16,7 @@ const props = defineProps<{
   onsetMs: number
   stimulusDurationMs: number
 }>()
+const m = useMessages(messages)
 const chart = ref<SVGSVGElement | null>(null)
 const width = useChartWidth(chart, { initial: 600 })
 const height = 250
@@ -29,18 +32,18 @@ const decimals = computed(() => axisMax.value < .1 ? 4 : axisMax.value < 1 ? 3 :
 
 <template>
   <figure class="assumption-trace">
-    <figcaption>AVAR’ın iki hesaplanan yanıtı</figcaption>
-    <div class="assumption-trace-legend"><span><i></i>{{ baselineLabel }}</span><span><i class="comparison-line"></i>{{ comparisonLabel }}</span><span><b></b>AVER darbesi açık</span></div>
-    <svg ref="chart" data-testid="assumptions-result-plot" :data-y-max="axisMax" :data-scale-mode="responseScale ? 'response' : 'unit'" role="img" :aria-label="`AVAR’ın iki koşuldaki boyutsuz model aktivitesi. Ortak dikey eksen 0–${decimal(axisMax, decimals)}; yatay eksen model zamanı, milisaniye. Temel koşul düz, değişiklik kesikli çizgi.`" :viewBox="`0 0 ${width} ${height}`">
+    <figcaption>{{ m.caption }}</figcaption>
+    <div class="assumption-trace-legend"><span><i></i>{{ baselineLabel }}</span><span><i class="comparison-line"></i>{{ comparisonLabel }}</span><span><b></b>{{ m.pulseOn }}</span></div>
+    <svg ref="chart" data-testid="assumptions-result-plot" :data-y-max="axisMax" :data-scale-mode="responseScale ? 'response' : 'unit'" role="img" :aria-label="m.label(decimal(axisMax, decimals))" :viewBox="`0 0 ${width} ${height}`">
       <rect data-testid="assumptions-pulse-band" :x="x(onsetMs)" :y="pad.top" :width="bandWidth(x, onsetMs, stimulusDurationMs, maxTime)" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity=".17" />
       <g v-for="fraction in TICK_FRACTIONS" :key="fraction"><line :x1="pad.left" :x2="width - pad.right" :y1="y(axisMax * fraction)" :y2="y(axisMax * fraction)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="fraction ? '3 5' : undefined" /><text data-axis="y" :data-value="axisMax * fraction" :x="pad.left - 8" :y="y(axisMax * fraction) + 3" text-anchor="end">{{ decimal(axisMax * fraction, decimals) }}</text></g>
-      <text :x="pad.left" y="12">Boyutsuz AVAR aktivitesi</text>
+      <text :x="pad.left" y="12">{{ m.yAxis }}</text>
       <g v-for="fraction in TICK_FRACTIONS" :key="fraction"><text data-axis="x" :data-value="maxTime * fraction" :x="x(maxTime * fraction)" :y="height - pad.bottom + 17" text-anchor="middle">{{ Math.round(maxTime * fraction) }}</text></g>
-      <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 5" text-anchor="middle">Model zamanı · ms</text>
+      <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 5" text-anchor="middle">{{ m.xAxis }}</text>
       <path data-assumption-trace="baseline" :d="baselinePath" fill="none" stroke="var(--theme-trace-neutral, #7b806d)" stroke-width="3" stroke-linejoin="round" />
       <path data-assumption-trace="comparison" :d="comparisonPath" fill="none" stroke="var(--theme-trace-green, #3a7652)" stroke-width="3" stroke-dasharray="8 5" stroke-linejoin="round" />
     </svg>
-    <p>Çizgiler aynı dikey ölçeği kullanır; aktivite değerleri ayrı ayrı 1’e normalleştirilmez. Ölçeği değiştirmek hesaplanan değerleri değiştirmez.</p>
+    <p>{{ m.note }}</p>
   </figure>
 </template>
 

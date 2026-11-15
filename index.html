@@ -18,6 +18,14 @@
         document.documentElement.dataset.theme = dark ? 'dark' : 'light'
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#121d19' : '#f5f4ed')
       })()
+      // The page language before the first paint (src/i18n.ts decides the same way): ?lang= first, then the saved choice, else Turkish.
+      ;(() => {
+        try {
+          const asked = new URLSearchParams(location.search).get('lang')
+          const lang = asked === 'en' || asked === 'tr' ? asked : localStorage.getItem('circuitiary-locale')
+          if (lang === 'en') document.documentElement.lang = 'en'
+        } catch { /* Storage is optional. */ }
+      })()
     </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />

@@ -2,13 +2,15 @@
 import TermText from './TermText.vue'
 import { computed, onMounted, reactive } from 'vue'
 import GuidedTracePlot from '../learning/GuidedTracePlot.vue'
-import { guidedPrinciples, guidedSteps } from '../learning/guidedContent'
+import { guidedPrinciples, guidedPrinciplesEn, guidedSteps, guidedStepsEn } from '../learning/guidedContent'
 import type { GuidedStepId } from '../learning/guidedContent'
-import { lessonSources } from '../learning/lessonContent'
-import { runGuidedExperiment } from '../learning/guidedExperiments'
+import { lessonSources, lessonSourcesEn } from '../learning/lessonContent'
+import { GUIDED_REPORTING_LEVEL, guidedConditionLabel, runGuidedExperiment } from '../learning/guidedExperiments'
 import type { GuidedRunSnapshot } from '../learning/guidedExperiments'
 import { decimal } from '../format'
+import { L, useMessages } from '../i18n'
 import { BASE, withBase } from '../siteBase'
+import { messages } from './GuidedExperimentsPage.messages'
 
 const emit = defineEmits<{ ready: [] }>()
 onMounted(() => emit('ready'))
@@ -22,18 +24,27 @@ interface ExperimentState {
   recordedPrediction: string
   recordedConnectionId: 'I3-O1' | 'I4-O1'
   recordedTauMs: number
-  error: string
-  statusMessage: string
+  // Kept as functions so a recorded line follows a later language change.
+  error: (() => string) | null
+  statusMessage: (() => string) | null
 }
-const newState = (): ExperimentState => ({ prediction: '', connectionId: 'I3-O1', tauMs: 90, runNumber: 0, snapshot: null, recordedPrediction: '', recordedConnectionId: 'I3-O1', recordedTauMs: 90, error: '', statusMessage: '' })
+const m = useMessages(messages)
+const steps = computed(() => L(guidedSteps, guidedStepsEn))
+const principles = computed(() => L(guidedPrinciples, guidedPrinciplesEn))
+const sources = computed(() => L(lessonSources, lessonSourcesEn))
+const newState = (): ExperimentState => ({ prediction: '', connectionId: 'I3-O1', tauMs: 90, runNumber: 0, snapshot: null, recordedPrediction: '', recordedConnectionId: 'I3-O1', recordedTauMs: 90, error: null, statusMessage: null })
 const biologicalReadings = ['receptors', 'inhibition', 'action'] as const
 const experiments = reactive<Record<GuidedStepId, ExperimentState>>({ stimulus: newState(), connection: newState(), tau: newState() })
 const completedCount = computed(() => guidedSteps.filter(step => experiments[step.id].snapshot !== null).length)
 const format = (value: number, digits = 3) => decimal(value, digits)
 const signed = (value: number) => `${value > 0 ? '+' : ''}${format(value)}`
 const metricTime = (value: number | null) => value === null ? '—' : `${format(value, 0)} ms`
-const edgeLabel = (id: string) => id === 'I4-O1' ? 'I4→O1 (baskılayıcı, −0,3)' : 'I3→O1 (uyarıcı, +1)'
-const predictionText = (id: GuidedStepId, prediction: string) => guidedSteps.find(step => step.id === id)?.predictionOptions.find(option => option.id === prediction)?.label ?? 'Tahmin eklenmedi'
+// The two stimulus amplitudes of the first experiment and the reporting level, as the page prints them.
+const lowStimulus = () => decimal(0.4, 2)
+const highStimulus = () => decimal(0.8, 2)
+const reportingLevel = () => decimal(GUIDED_REPORTING_LEVEL, 2)
+const edgeLabel = (id: string) => id === 'I4-O1' ? m.value.inhibitoryEdge : m.value.excitatoryEdge
+const predictionText = (id: GuidedStepId, prediction: string) => steps.value.find(step => step.id === id)?.predictionOptions.find(option => option.id === prediction)?.label ?? m.value.noPrediction
 function stale(id: GuidedStepId): boolean {
   const state = experiments[id]
   return state.snapshot !== null && (id === 'connection' ? state.connectionId !== state.recordedConnectionId : id === 'tau' ? state.tauMs !== state.recordedTauMs : false)
@@ -52,15 +63,15 @@ function runExperiment(id: GuidedStepId) {
     state.recordedPrediction = state.prediction
     state.recordedConnectionId = state.connectionId
     state.recordedTauMs = state.tauMs
-    state.error = ''
-    state.statusMessage = `Koşul kaydı #${snapshot.runNumber} hazır. İki koşulun grafiği ve hesaplanan O1 ölçütleri sonuç bölümünde.`
+    state.error = null
+    state.statusMessage = () => m.value.recordReady(snapshot.runNumber)
   } catch {
-    state.error = 'Bu ayarlarla hesap tamamlanamadı. Ayarları kontrol edip yeniden çalıştır.'
+    state.error = () => m.value.runFailed
   }
 }
 function resetExperiment(id: GuidedStepId) {
   Object.assign(experiments[id], newState())
-  experiments[id].statusMessage = 'Bu deney sıfırlandı. Ayarlar başlangıca döndü; önceki sonuç ve tahmin kaydı temizlendi.'
+  experiments[id].statusMessage = () => m.value.resetDone
 }
 function resetAll() { guidedSteps.forEach(step => resetExperiment(step.id)) }
 function peakTrend(snapshot: GuidedRunSnapshot): 'increase' | 'decrease' | 'similar' {
@@ -76,85 +87,86 @@ function resultExplanation(id: GuidedStepId): string {
   const state = experiments[id]
   const snapshot = state.snapshot
   if (!snapshot) return ''
+  const text = m.value
   const trend = peakTrend(snapshot)
-  const observation = trend === 'increase' ? `O1’in tepe değeri ${format(snapshot.delta.peak)} arttı.` : trend === 'decrease' ? `O1’in tepe değeri ${format(-snapshot.delta.peak)} azaldı.` : 'İki koşulda O1’in tepe değeri aynı veya sayısal olarak çok yakın.'
-  if (id === 'stimulus') return `${observation} Bu kayıt yalnız 0,40 ve 0,80 uyaranlarının karşılaştırmasıdır. Tepe zamanını ve 0,10 düzeyine ulaşma zamanını ayrı oku: sabit bir düzeye daha erken ulaşmak, sinyalin biyolojik iletim hızının arttığını göstermez. Bu karşılaştırmada hiçbir hücre 0–1 üst sınırına ulaşmaz; bu yüzden devre orantılı davranır ve bütün hücrelerin eğrisi tam iki katına çıkar. Baskılayıcı kol da aynı oranda büyüdüğü için tepe zamanı değişmez. Uyaran üst sınıra çarpacak kadar büyük olsaydı bu orantı bozulurdu.`
+  const observation = trend === 'increase' ? text.peakRose(format(snapshot.delta.peak)) : trend === 'decrease' ? text.peakFell(format(-snapshot.delta.peak)) : text.peakSame
+  if (id === 'stimulus') return text.stimulusExplanation(observation, lowStimulus(), highStimulus(), reportingLevel())
   if (id === 'connection') {
     const reason = state.recordedConnectionId === 'I4-O1'
-      ? 'Baskılayıcı I4→O1 katkısı kaldırıldı. I3’ün uyarıcı girdisine karşı koyan negatif katkı artık eklenmiyor; I4 hücresi ise etkin kalıyor.'
+      ? text.inhibitoryRemoved
       : snapshot.comparison.metrics.peak === 0
-        ? 'Uyarıcı I3→O1 katkısı kaldırıldı. Kalan I4→O1 girdisi negatif; 0–1 sınırlaması bunu 0 hedef aktivitesine çeviriyor. O1 sıfırdan başladığı için bu koşulda sıfır kalıyor. I3 ve O1 hücreleri kapatılmadı.'
-        : 'Uyarıcı I3→O1 katkısı kaldırıldı; I3 ve O1 hücreleri kapatılmadı. Sonucu kalan girdiler ve 0–1 sınırlaması belirliyor.'
-    return `${observation} ${reason} Diğer bağlantılar korunuyor. Bu özel devrenin sonucu, her bağlantı kaldırma deneyine genellenmez.`
+        ? text.excitatoryRemovedZero
+        : text.excitatoryRemoved
+    return text.connectionExplanation(observation, reason)
   }
-  return `${observation} Bu kayıtta yalnız O1’in τ değeri 30’dan ${state.recordedTauMs} model ms’ye değişti. Diğer yedi hücre 30 ms’de kaldı. Tepe zamanı, 0,10 düzeyine ulaşma gecikmesi ve uyaran sonrasındaki düşüş aynı şeyi ölçmez; eğriyle birlikte karşılaştır.`
+  return text.tauExplanation(observation, state.recordedTauMs, reportingLevel())
 }
 function predictionExplanation(id: GuidedStepId): string {
   const state = experiments[id]
   if (!state.snapshot) return ''
-  if (!state.recordedPrediction) return 'Bu koşul kaydına tahmin eklenmedi. Sonuç yine tam olarak hesaplandı; şimdi gözlemini kendi cümlenle anlatabilirsin.'
-  if (state.recordedPrediction === 'unsure') return '“Emin değilim” seçeneğiyle çalıştırdın. Şimdi sayısal farkı ve eğriyi kullanarak bir açıklama kurabilirsin.'
-  if (state.recordedPrediction === 'similar' && peakTrend(state.snapshot) !== 'similar' && peakIsNear(state.snapshot)) return 'Kaydettiğin “yakın” tahmini bu koşulla örtüşüyor: tepe değişimi temel tepenin %5’inden küçük. Küçük de olsa değişimin yönünü eğride ve tabloda oku.'
-  return state.recordedPrediction === peakTrend(state.snapshot) ? 'Kaydettiğin tahmin bu koşuldaki tepe değişimiyle örtüşüyor. Nedenini devrenin girdileri üzerinden anlatmayı dene.' : 'Tepe değişimi kaydettiğin tahminden farklı. Hangi varsayımını değiştireceğini düşün; yeni ayarlarla tekrar karşılaştırabilirsin.'
+  if (!state.recordedPrediction) return m.value.feedbackNone
+  if (state.recordedPrediction === 'unsure') return m.value.feedbackUnsure
+  if (state.recordedPrediction === 'similar' && peakTrend(state.snapshot) !== 'similar' && peakIsNear(state.snapshot)) return m.value.feedbackNear
+  return state.recordedPrediction === peakTrend(state.snapshot) ? m.value.feedbackMatch : m.value.feedbackDiffers
 }
 const endValue = (snapshot: GuidedRunSnapshot, condition: 'baseline' | 'comparison') => snapshot[condition].result.activity.O1?.at(-1) ?? 0
 </script>
 
 <template>
   <main id="guided-experiments" tabindex="-1" class="guided-page">
-    <header class="guided-intro"><div><p class="guided-eyebrow">CIRCUITIARY / ÖĞRENME NOTLARI / 02</p><h1 id="guided-title" tabindex="-1">Rehberli deneyler</h1><p class="guided-summary">Bir şeyi değiştir. Önce tahmin et, sonra çalıştır. Sonucu bir sayı ve bir gerekçeyle anlat.</p><p class="guided-meta">Üç bağımsız deney · Yaklaşık 15–25 dakika · Sekiz hücreli öğretici devre</p></div><button type="button" class="guided-reset" @click="resetAll">Rehberli deneyleri sıfırla</button></header>
+    <header class="guided-intro"><div><p class="guided-eyebrow">{{ m.eyebrow }}</p><h1 id="guided-title" tabindex="-1">{{ m.title }}</h1><p class="guided-summary">{{ m.summary }}</p><p class="guided-meta">{{ m.meta }}</p></div><button type="button" class="guided-reset" @click="resetAll">{{ m.resetAll }}</button></header>
 
-    <div class="guided-boundary"><strong>Model üzerinde kontrollü bir karşılaştırma</strong><p>Bu sayfa, mevcut sekiz hücreli örnek devrenin aynı simülasyon motorunu kullanır. Gerçek hayvan verisi değildir. Her çalıştırmada temel koşul ile tek değişiklik içeren koşul yeniden hesaplanır; ana devre deneyindeki ayarların değişmez. Aktivite boyutsuzdur, ms modelin zaman ölçeğidir.</p></div>
-    <nav class="guided-navigation" aria-label="Rehberli deney adımları"><a v-for="(step, index) in guidedSteps" :key="step.id" :href="`#guided-${step.id}`"><span>{{ String(index + 1).padStart(2, '0') }}</span>{{ step.short }}<small>{{ stale(step.id) ? 'Yeni ayar bekliyor' : experiments[step.id].snapshot ? 'Kayıt var' : 'Henüz çalışmadı' }}</small></a></nav>
-    <div class="guided-progress"><span data-testid="guided-progress">{{ completedCount }}/3 deney çalıştırıldı</span><a :href="withBase('/ogren/norondan-devreye')">Önce nörondan devreye dersini oku <span aria-hidden="true">↗</span></a></div>
+    <div class="guided-boundary"><strong>{{ m.boundaryTitle }}</strong><p>{{ m.boundary }}</p></div>
+    <nav class="guided-navigation" :aria-label="m.stepsNavigation"><a v-for="(step, index) in steps" :key="step.id" :href="`#guided-${step.id}`"><span>{{ String(index + 1).padStart(2, '0') }}</span>{{ step.short }}<small>{{ stale(step.id) ? m.stepStale : experiments[step.id].snapshot ? m.stepRecorded : m.stepNotRun }}</small></a></nav>
+    <div class="guided-progress"><span data-testid="guided-progress">{{ m.progress(completedCount) }}</span><a :href="withBase('/ogren/norondan-devreye')">{{ m.readLessonFirst }} <span aria-hidden="true">↗</span></a></div>
 
-    <section v-for="(step, index) in guidedSteps" :id="`guided-${step.id}`" :key="step.id" :data-experiment-id="step.id" :aria-labelledby="`guided-${step.id}-title`" class="guided-experiment">
-      <div class="experiment-heading"><p class="guided-eyebrow">DENEY {{ String(index + 1).padStart(2, '0') }} / 03</p><h2 :id="`guided-${step.id}-title`"><TermText :text="step.title" /></h2><p class="experiment-question"><TermText :text="step.question" /></p><p class="experiment-introduction"><TermText :text="step.introduction" /></p></div>
+    <section v-for="(step, index) in steps" :id="`guided-${step.id}`" :key="step.id" :data-experiment-id="step.id" :aria-labelledby="`guided-${step.id}-title`" class="guided-experiment">
+      <div class="experiment-heading"><p class="guided-eyebrow">{{ m.experimentKicker(String(index + 1).padStart(2, '0')) }}</p><h2 :id="`guided-${step.id}-title`"><TermText :text="step.title" /></h2><p class="experiment-question"><TermText :text="step.question" /></p><p class="experiment-introduction"><TermText :text="step.introduction" /></p></div>
       <div class="experiment-workspace">
         <div class="experiment-plan">
-          <h3>1. Koşulları karşılaştır</h3>
-          <dl class="controlled-conditions"><div><dt>Değişen</dt><dd><TermText :text="step.changed" /></dd></div><div><dt>Sabit tutulan</dt><dd><TermText :text="step.held" /></dd></div></dl>
-          <table class="conditions-table"><caption>Yeni çalıştırma için koşullar</caption><thead><tr><th scope="col">Değişken</th><th scope="col">Temel</th><th scope="col">Değişiklik</th></tr></thead><tbody><tr v-if="step.id === 'stimulus'"><th scope="row">S1 uyaranı</th><td>0,40</td><td>0,80</td></tr><tr v-else-if="step.id === 'connection'"><th scope="row"><TermText :text="experiments.connection.connectionId === 'I4-O1' ? 'I4→O1' : 'I3→O1'" /></th><td>Bağlantı açık</td><td>Katkısı kaldırılır</td></tr><tr v-else><th scope="row">O1’in τ değeri</th><td>30 ms</td><td><TermText :text="experiments.tau.tauMs" /> ms</td></tr></tbody></table>
-          <div v-if="step.id === 'connection'" class="draft-control"><label for="guided-connection-edge">Kaldırılacak bağlantı</label><select id="guided-connection-edge" v-model="experiments.connection.connectionId"><option value="I3-O1">I3→O1 · uyarıcı (+1)</option><option value="I4-O1">I4→O1 · baskılayıcı (−0,3)</option></select></div>
-          <div v-if="step.id === 'tau'" class="draft-control"><label for="guided-tau-value">O1’in yeni zaman sabiti <output for="guided-tau-value">{{ experiments.tau.tauMs }} ms</output></label><input id="guided-tau-value" v-model.number="experiments.tau.tauMs" type="range" min="40" max="180" step="10" /><p>Diğer yedi hücrede τ = 30 ms. Uyaran ve bağlantılar aynı.</p></div>
-          <h3>2. İstersen tahmin ekle</h3>
-          <div class="draft-control"><label :for="`guided-${step.id}-prediction`">{{ step.predictionPrompt }}</label><select :id="`guided-${step.id}-prediction`" v-model="experiments[step.id].prediction"><option value="">Tahmin eklemeden devam et</option><option v-for="option in step.predictionOptions" :key="option.id" :value="option.id">{{ option.label }}</option></select><p>Tahmin isteğe bağlıdır; “emin değilim” de bir başlangıçtır.</p></div>
-          <div class="run-actions"><button type="button" class="run-button" :aria-controls="`guided-result-region-${step.id}`" @click="runExperiment(step.id)">{{ experiments[step.id].snapshot ? 'Yeniden çalıştır' : 'Deneyi çalıştır' }} <span aria-hidden="true">→</span></button><button type="button" class="case-reset" @click="resetExperiment(step.id)">Bu deneyi sıfırla</button></div>
-          <p :data-testid="`guided-status-${step.id}`" class="guided-status" role="status" aria-live="polite" aria-atomic="true">{{ experiments[step.id].statusMessage }}</p>
-          <p v-if="experiments[step.id].error" class="guided-error" role="alert">{{ experiments[step.id].error }}</p>
+          <h3>{{ m.compareHeading }}</h3>
+          <dl class="controlled-conditions"><div><dt>{{ m.changed }}</dt><dd><TermText :text="step.changed" /></dd></div><div><dt>{{ m.held }}</dt><dd><TermText :text="step.held" /></dd></div></dl>
+          <table class="conditions-table"><caption>{{ m.conditionsCaption }}</caption><thead><tr><th scope="col">{{ m.variable }}</th><th scope="col">{{ m.baseline }}</th><th scope="col">{{ m.change }}</th></tr></thead><tbody><tr v-if="step.id === 'stimulus'"><th scope="row">{{ m.stimulusRow }}</th><td>{{ lowStimulus() }}</td><td>{{ highStimulus() }}</td></tr><tr v-else-if="step.id === 'connection'"><th scope="row"><TermText :text="experiments.connection.connectionId === 'I4-O1' ? 'I4→O1' : 'I3→O1'" /></th><td>{{ m.connectionOn }}</td><td>{{ m.contributionRemoved }}</td></tr><tr v-else><th scope="row">{{ m.tauRow }}</th><td>30 ms</td><td><TermText :text="experiments.tau.tauMs" /> ms</td></tr></tbody></table>
+          <div v-if="step.id === 'connection'" class="draft-control"><label for="guided-connection-edge">{{ m.connectionToRemove }}</label><select id="guided-connection-edge" v-model="experiments.connection.connectionId"><option value="I3-O1">{{ m.excitatoryOption }}</option><option value="I4-O1">{{ m.inhibitoryOption }}</option></select></div>
+          <div v-if="step.id === 'tau'" class="draft-control"><label for="guided-tau-value">{{ m.newTau }} <output for="guided-tau-value">{{ experiments.tau.tauMs }} ms</output></label><input id="guided-tau-value" v-model.number="experiments.tau.tauMs" type="range" min="40" max="180" step="10" /><p>{{ m.tauNote }}</p></div>
+          <h3>{{ m.predictionHeading }}</h3>
+          <div class="draft-control"><label :for="`guided-${step.id}-prediction`">{{ step.predictionPrompt }}</label><select :id="`guided-${step.id}-prediction`" v-model="experiments[step.id].prediction"><option value="">{{ m.noPredictionOption }}</option><option v-for="option in step.predictionOptions" :key="option.id" :value="option.id">{{ option.label }}</option></select><p>{{ m.predictionNote }}</p></div>
+          <div class="run-actions"><button type="button" class="run-button" :aria-controls="`guided-result-region-${step.id}`" @click="runExperiment(step.id)">{{ experiments[step.id].snapshot ? m.runAgain : m.run }} <span aria-hidden="true">→</span></button><button type="button" class="case-reset" @click="resetExperiment(step.id)">{{ m.resetOne }}</button></div>
+          <p :data-testid="`guided-status-${step.id}`" class="guided-status" role="status" aria-live="polite" aria-atomic="true">{{ experiments[step.id].statusMessage?.() }}</p>
+          <p v-if="experiments[step.id].error" class="guided-error" role="alert">{{ experiments[step.id].error?.() }}</p>
           <p class="experiment-boundary"><TermText :text="step.boundary" /></p>
         </div>
 
         <div class="experiment-observation">
-          <h3>3. Sonucu oku</h3>
-          <div :id="`guided-result-region-${step.id}`" role="region" :aria-label="`${step.short}: hesaplanan sonuç`">
-          <div v-if="!experiments[step.id].snapshot" class="not-run"><span aria-hidden="true">↗</span><p>Sonuç henüz hesaplanmadı.</p><p>Koşulları seçip “Deneyi çalıştır” düğmesine bas. Tahmin vermeden de çalıştırabilirsin.</p></div>
+          <h3>{{ m.readHeading }}</h3>
+          <div :id="`guided-result-region-${step.id}`" role="region" :aria-label="m.resultRegion(step.short)">
+          <div v-if="!experiments[step.id].snapshot" class="not-run"><span aria-hidden="true">↗</span><p>{{ m.notRun }}</p><p>{{ m.notRunHelp }}</p></div>
           <div v-else :data-testid="`guided-result-${step.id}`" :data-run-number="experiments[step.id].snapshot!.runNumber" :data-stale="stale(step.id)" class="run-result">
-            <div class="record-heading"><p>Koşul kaydı #<TermText :text="experiments[step.id].snapshot!.runNumber" /></p><span>{{ stale(step.id) ? 'Önceki ayarların sonucu' : 'Geçerli ayarların sonucu' }}</span></div>
-            <p v-if="stale(step.id)" :data-testid="`guided-stale-${step.id}`" class="stale-warning" role="status">Ayar değişti. Aşağıdaki sayılar ve eğriler önceki çalıştırmaya ait. Yeni ayarların sonucunu görmek için yeniden çalıştır.</p>
-            <div :data-testid="`guided-run-settings-${step.id}`" :data-baseline-amplitude="experiments[step.id].snapshot!.baseline.result.settings.stimulus.amplitude" :data-comparison-amplitude="experiments[step.id].snapshot!.comparison.result.settings.stimulus.amplitude" :data-baseline-o1-tau="experiments[step.id].snapshot!.baseline.result.settings.tauOverrides?.O1 ?? experiments[step.id].snapshot!.baseline.result.settings.tauMs" :data-comparison-o1-tau="experiments[step.id].snapshot!.comparison.result.settings.tauOverrides?.O1 ?? experiments[step.id].snapshot!.comparison.result.settings.tauMs" :data-silenced-connection="experiments[step.id].snapshot!.comparison.result.settings.silencedConnectionId ?? ''" class="record-settings"><strong>Bu kayıtta karşılaştırılan:</strong><p v-if="step.id === 'stimulus'">S1 uyaranı 0,40 → 0,80.</p><p v-else-if="step.id === 'connection'"><TermText :text="edgeLabel(experiments[step.id].recordedConnectionId)" /> açık → katkısı kaldırılmış.</p><p v-else>Yalnız O1’in τ değeri: 30 → <TermText :text="experiments[step.id].recordedTauMs" /> model ms.</p><p>Uyaran 100–300 ms arasında açık; deney 700 ms, hesap adımı 1 ms. Başlangıç aktivitesi bütün hücrelerde 0.</p><p :data-testid="`guided-recorded-prediction-${step.id}`">Kaydedilen tahmin: <TermText :text="predictionText(step.id, experiments[step.id].recordedPrediction)" /></p></div>
-            <p v-if="predictionChanged(step.id)" class="prediction-note">Tahmin seçimin değişti; bu kayıttaki tahmin korunuyor. Yeni seçimin bir sonraki çalıştırmada kaydedilir.</p>
-            <GuidedTracePlot :times-ms="experiments[step.id].snapshot!.baseline.result.timesMs" :baseline="experiments[step.id].snapshot!.baseline.result.activity.O1!" :changed="experiments[step.id].snapshot!.comparison.result.activity.O1!" :baseline-label="experiments[step.id].snapshot!.baseline.label" :changed-label="experiments[step.id].snapshot!.comparison.label" :onset-ms="experiments[step.id].snapshot!.baseline.result.settings.stimulus.onsetMs" :stimulus-duration-ms="experiments[step.id].snapshot!.baseline.result.settings.stimulus.durationMs" />
-            <table class="metrics-table"><caption>O1 için hesaplanan ölçütler · bu koşul kaydı</caption><thead><tr><th scope="col">Ölçüt</th><th scope="col">Temel</th><th scope="col">Değişiklik</th></tr></thead><tbody>
-              <tr><th scope="row">Tepe aktivite</th><td :data-testid="`guided-${step.id}-baseline-peak`" :data-value="experiments[step.id].snapshot!.baseline.metrics.peak">{{ format(experiments[step.id].snapshot!.baseline.metrics.peak) }}</td><td :data-testid="`guided-${step.id}-comparison-peak`" :data-value="experiments[step.id].snapshot!.comparison.metrics.peak">{{ format(experiments[step.id].snapshot!.comparison.metrics.peak) }}</td></tr>
-              <tr><th scope="row">Tepe zamanı</th><td :data-testid="`guided-${step.id}-baseline-peak-time`" :data-value="experiments[step.id].snapshot!.baseline.metrics.peakTimeMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.baseline.metrics.peakTimeMs)" /></td><td :data-testid="`guided-${step.id}-comparison-peak-time`" :data-value="experiments[step.id].snapshot!.comparison.metrics.peakTimeMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.comparison.metrics.peakTimeMs)" /></td></tr>
-              <tr><th scope="row">0,10 düzeyine ulaşma zamanı</th><td :data-testid="`guided-${step.id}-baseline-response-time`" :data-value="experiments[step.id].snapshot!.baseline.metrics.responseTimeMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.baseline.metrics.responseTimeMs)" /></td><td :data-testid="`guided-${step.id}-comparison-response-time`" :data-value="experiments[step.id].snapshot!.comparison.metrics.responseTimeMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.comparison.metrics.responseTimeMs)" /></td></tr>
-              <tr><th scope="row">0,10 düzeyine ulaşma gecikmesi</th><td :data-testid="`guided-${step.id}-baseline-response-delay`" :data-value="experiments[step.id].snapshot!.baseline.metrics.responseDelayMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.baseline.metrics.responseDelayMs)" /></td><td :data-testid="`guided-${step.id}-comparison-response-delay`" :data-value="experiments[step.id].snapshot!.comparison.metrics.responseDelayMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.comparison.metrics.responseDelayMs)" /></td></tr>
-              <tr><th scope="row">700 ms’de aktivite</th><td :data-testid="`guided-${step.id}-baseline-end`" :data-value="endValue(experiments[step.id].snapshot!, 'baseline')">{{ format(endValue(experiments[step.id].snapshot!, 'baseline')) }}</td><td :data-testid="`guided-${step.id}-comparison-end`" :data-value="endValue(experiments[step.id].snapshot!, 'comparison')">{{ format(endValue(experiments[step.id].snapshot!, 'comparison')) }}</td></tr>
+            <div class="record-heading"><p>{{ m.recordNumber }}<TermText :text="experiments[step.id].snapshot!.runNumber" /></p><span>{{ stale(step.id) ? m.staleResult : m.currentResult }}</span></div>
+            <p v-if="stale(step.id)" :data-testid="`guided-stale-${step.id}`" class="stale-warning" role="status">{{ m.staleWarning }}</p>
+            <div :data-testid="`guided-run-settings-${step.id}`" :data-baseline-amplitude="experiments[step.id].snapshot!.baseline.result.settings.stimulus.amplitude" :data-comparison-amplitude="experiments[step.id].snapshot!.comparison.result.settings.stimulus.amplitude" :data-baseline-o1-tau="experiments[step.id].snapshot!.baseline.result.settings.tauOverrides?.O1 ?? experiments[step.id].snapshot!.baseline.result.settings.tauMs" :data-comparison-o1-tau="experiments[step.id].snapshot!.comparison.result.settings.tauOverrides?.O1 ?? experiments[step.id].snapshot!.comparison.result.settings.tauMs" :data-silenced-connection="experiments[step.id].snapshot!.comparison.result.settings.silencedConnectionId ?? ''" class="record-settings"><strong>{{ m.comparedInRecord }}</strong><p v-if="step.id === 'stimulus'">{{ m.stimulusCompared(lowStimulus(), highStimulus()) }}</p><p v-else-if="step.id === 'connection'"><TermText :text="edgeLabel(experiments[step.id].recordedConnectionId)" />{{ m.edgeComparedAfter }}</p><p v-else>{{ m.tauComparedBefore }}<TermText :text="experiments[step.id].recordedTauMs" />{{ m.tauComparedAfter }}</p><p>{{ m.runConditions }}</p><p :data-testid="`guided-recorded-prediction-${step.id}`">{{ m.recordedPrediction }}<TermText :text="predictionText(step.id, experiments[step.id].recordedPrediction)" /></p></div>
+            <p v-if="predictionChanged(step.id)" class="prediction-note">{{ m.predictionChanged }}</p>
+            <GuidedTracePlot :times-ms="experiments[step.id].snapshot!.baseline.result.timesMs" :baseline="experiments[step.id].snapshot!.baseline.result.activity.O1!" :changed="experiments[step.id].snapshot!.comparison.result.activity.O1!" :baseline-label="guidedConditionLabel(experiments[step.id].snapshot!, 'baseline')" :changed-label="guidedConditionLabel(experiments[step.id].snapshot!, 'comparison')" :onset-ms="experiments[step.id].snapshot!.baseline.result.settings.stimulus.onsetMs" :stimulus-duration-ms="experiments[step.id].snapshot!.baseline.result.settings.stimulus.durationMs" />
+            <table class="metrics-table"><caption>{{ m.metricsCaption }}</caption><thead><tr><th scope="col">{{ m.metric }}</th><th scope="col">{{ m.baseline }}</th><th scope="col">{{ m.change }}</th></tr></thead><tbody>
+              <tr><th scope="row">{{ m.peakActivity }}</th><td :data-testid="`guided-${step.id}-baseline-peak`" :data-value="experiments[step.id].snapshot!.baseline.metrics.peak">{{ format(experiments[step.id].snapshot!.baseline.metrics.peak) }}</td><td :data-testid="`guided-${step.id}-comparison-peak`" :data-value="experiments[step.id].snapshot!.comparison.metrics.peak">{{ format(experiments[step.id].snapshot!.comparison.metrics.peak) }}</td></tr>
+              <tr><th scope="row">{{ m.peakTime }}</th><td :data-testid="`guided-${step.id}-baseline-peak-time`" :data-value="experiments[step.id].snapshot!.baseline.metrics.peakTimeMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.baseline.metrics.peakTimeMs)" /></td><td :data-testid="`guided-${step.id}-comparison-peak-time`" :data-value="experiments[step.id].snapshot!.comparison.metrics.peakTimeMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.comparison.metrics.peakTimeMs)" /></td></tr>
+              <tr><th scope="row">{{ m.responseTime(reportingLevel()) }}</th><td :data-testid="`guided-${step.id}-baseline-response-time`" :data-value="experiments[step.id].snapshot!.baseline.metrics.responseTimeMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.baseline.metrics.responseTimeMs)" /></td><td :data-testid="`guided-${step.id}-comparison-response-time`" :data-value="experiments[step.id].snapshot!.comparison.metrics.responseTimeMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.comparison.metrics.responseTimeMs)" /></td></tr>
+              <tr><th scope="row">{{ m.responseDelay(reportingLevel()) }}</th><td :data-testid="`guided-${step.id}-baseline-response-delay`" :data-value="experiments[step.id].snapshot!.baseline.metrics.responseDelayMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.baseline.metrics.responseDelayMs)" /></td><td :data-testid="`guided-${step.id}-comparison-response-delay`" :data-value="experiments[step.id].snapshot!.comparison.metrics.responseDelayMs ?? 'null'"><TermText :text="metricTime(experiments[step.id].snapshot!.comparison.metrics.responseDelayMs)" /></td></tr>
+              <tr><th scope="row">{{ m.endActivity }}</th><td :data-testid="`guided-${step.id}-baseline-end`" :data-value="endValue(experiments[step.id].snapshot!, 'baseline')">{{ format(endValue(experiments[step.id].snapshot!, 'baseline')) }}</td><td :data-testid="`guided-${step.id}-comparison-end`" :data-value="endValue(experiments[step.id].snapshot!, 'comparison')">{{ format(endValue(experiments[step.id].snapshot!, 'comparison')) }}</td></tr>
             </tbody></table>
-            <p class="reporting-note"><strong>0,10 bir raporlama düzeyidir;</strong> biyolojik ateşleme eşiği değildir. Gecikme, bu düzeye ilk ulaşma zamanından uyaranın başlangıcını (100 ms) çıkarır. “—”, ilgili ölçütün oluşmadığını gösterir; sıfır gecikme anlamına gelmez.</p>
-            <p v-if="experiments[step.id].snapshot!.comparison.metrics.peakTimeMs === null" :data-testid="`guided-no-peak-${step.id}`" class="no-response">Değiştirilmiş koşulda tepe oluşmadı: O1 aktivitesi sıfır kaldı.</p>
-            <p v-if="experiments[step.id].snapshot!.comparison.metrics.responseTimeMs === null" :data-testid="`guided-no-response-${step.id}`" class="no-response">Değiştirilmiş koşulda O1, 0,10 raporlama düzeyine ulaşmadı.</p>
-            <div class="result-meaning"><p class="guided-eyebrow">BU SAYILAR NE SÖYLÜYOR?</p><p :data-testid="`guided-explanation-${step.id}`"><TermText :text="resultExplanation(step.id)" /></p><p :data-testid="`guided-prediction-feedback-${step.id}`"><TermText :text="predictionExplanation(step.id)" /></p><p class="peak-difference">Tepe farkı (değişiklik − temel): <output :data-testid="`guided-peak-difference-${step.id}`" :data-value="experiments[step.id].snapshot!.delta.peak">{{ signed(experiments[step.id].snapshot!.delta.peak) }}</output></p></div>
-            <p class="observe-prompt"><strong>Kendi cümlenle:</strong> <TermText :text="step.observe" /></p>
+            <p class="reporting-note"><strong>{{ m.reportingLevel(reportingLevel()) }}</strong>{{ m.reportingNote }}</p>
+            <p v-if="experiments[step.id].snapshot!.comparison.metrics.peakTimeMs === null" :data-testid="`guided-no-peak-${step.id}`" class="no-response">{{ m.noPeak }}</p>
+            <p v-if="experiments[step.id].snapshot!.comparison.metrics.responseTimeMs === null" :data-testid="`guided-no-response-${step.id}`" class="no-response">{{ m.noResponse(reportingLevel()) }}</p>
+            <div class="result-meaning"><p class="guided-eyebrow">{{ m.meaningKicker }}</p><p :data-testid="`guided-explanation-${step.id}`"><TermText :text="resultExplanation(step.id)" /></p><p :data-testid="`guided-prediction-feedback-${step.id}`"><TermText :text="predictionExplanation(step.id)" /></p><p class="peak-difference">{{ m.peakDifference }} <output :data-testid="`guided-peak-difference-${step.id}`" :data-value="experiments[step.id].snapshot!.delta.peak">{{ signed(experiments[step.id].snapshot!.delta.peak) }}</output></p></div>
+            <p class="observe-prompt"><strong>{{ m.ownWords }}</strong> <TermText :text="step.observe" /></p>
           </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="guided-assumptions" aria-labelledby="guided-assumptions-title" class="guided-assumptions"><div><p class="guided-eyebrow">DENEYİ OKUMA ALIŞKANLIĞI</p><h2 id="guided-assumptions-title">Sonuç kadar koşulları da sakla.</h2><p>Bu üç karşılaştırma, yalnız belirtilen devrenin ve dinamiğin sonuçlarıdır. Hücrelerin davranışını, bir hayvanın bedenini veya zihnini doğrulamaz.</p></div><div><ol><li v-for="principle in guidedPrinciples" :key="principle"><TermText :text="principle" /></li></ol><details><summary>Kullanılan dinamik ve kaynak</summary><p>Mevcut öğretici model: τᵢ dxᵢ/dt = −xᵢ + clip(Σⱼ Wᵢⱼ xⱼ + Iᵢ(t), 0, 1). Bu örnek devrede elektriksel bağ yoktur. İşaretler ve ağırlıklar elle seçilmiştir; fizyolojik ölçüm değildir. Hesap önceki adımdaki bütün hücre değerlerini kullanır.</p><p>İlk derste <a :href="withBase('/ogren/norondan-devreye#lesson-circuit')">anatomik harita, dinamik model ve biyolojik doğrulama arasındaki ayrımı</a> ve <a :href="withBase('/ogren/norondan-devreye#lesson-sources')">kurumsal okumalar ile özgün araştırmaları</a> bulabilirsin.</p></details><div class="guided-readings"><p><strong>Biyolojik kavramlar için okuma:</strong><TermText text=" Bu kaynaklar reseptörleri, uyarıcı/baskılayıcı yanıtları ve sinyalleri açıklar. Buradaki sayısal model parametrelerinin ölçüldüğü veya doğrulandığı kaynaklar olarak kullanılmaz." /></p><ul><li v-for="sourceId in biologicalReadings" :key="sourceId"><a :href="lessonSources[sourceId].url">{{ lessonSources[sourceId].title }}</a></li></ul></div></div></section>
-    <div class="guided-next"><a :href="withBase('/ogren/norondan-devreye')">Nörondan devreye dersine dön <span aria-hidden="true">←</span></a><a :href="BASE" class="experiment-link">Devre deneyine geç <span aria-hidden="true">→</span></a></div>
+    <section id="guided-assumptions" aria-labelledby="guided-assumptions-title" class="guided-assumptions"><div><p class="guided-eyebrow">{{ m.habitKicker }}</p><h2 id="guided-assumptions-title">{{ m.habitTitle }}</h2><p>{{ m.habitText }}</p></div><div><ol><li v-for="principle in principles" :key="principle"><TermText :text="principle" /></li></ol><details><summary>{{ m.dynamicsSummary }}</summary><p>{{ m.dynamics }}</p><p>{{ m.firstLesson.before }}<a :href="withBase('/ogren/norondan-devreye#lesson-circuit')">{{ m.firstLesson.distinctionLink }}</a>{{ m.firstLesson.between }}<a :href="withBase('/ogren/norondan-devreye#lesson-sources')">{{ m.firstLesson.sourcesLink }}</a>{{ m.firstLesson.after }}</p></details><div class="guided-readings"><p><strong>{{ m.readingsTitle }}</strong><TermText :text="m.readingsNote" /></p><ul><li v-for="sourceId in biologicalReadings" :key="sourceId"><a :href="sources[sourceId].url">{{ sources[sourceId].title }}</a></li></ul></div></div></section>
+    <div class="guided-next"><a :href="withBase('/ogren/norondan-devreye')">{{ m.backToLesson }} <span aria-hidden="true">←</span></a><a :href="BASE" class="experiment-link">{{ m.toExperiment }} <span aria-hidden="true">→</span></a></div>
   </main>
 </template>
 

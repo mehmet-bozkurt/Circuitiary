@@ -77,6 +77,12 @@ const states: Record<string, Array<{ name: string; enter: (page: Page) => Promis
       await page.getByRole('button', { name: 'Bağlantıyı kopyala', exact: true }).click()
       await expect(page.getByTestId('share-status')).not.toBeEmpty()
     } },
+    // A pinned curve with a setting changed afterwards: the fourth trace, its legend entry and the comparison summary.
+    { name: 'pinned curve and a changed setting', enter: async page => {
+      await page.getByTestId('pin-curve').click()
+      await page.locator('#amplitude').fill('0.5')
+      await expect(page.getByTestId('pin-changes')).toBeVisible()
+    } },
   ],
   '/ogren/norondan-devreye': [
     { name: 'initial', enter: async () => {} },

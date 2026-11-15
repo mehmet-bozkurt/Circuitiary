@@ -3,7 +3,7 @@ import { simulate } from '../model/simulation'
 import type { ReadonlyRealConnectome } from '../model/types'
 import { outputMetrics } from './assumptionExperiments'
 
-/** Chemical multiplier at which the incoming model weights of every cell sum to exactly 1. A property of the row-normalised model, not of biology. */
+/** Chemical multiplier at which the incoming model weights of every cell sum to exactly 1. A property of the row-normalized model, not of biology. */
 export const thresholdGain = 1
 
 /** 0,2 to 1,6 in 15 steps of 0,1, built from tenths so every value (including 1) is the exact decimal literal. */

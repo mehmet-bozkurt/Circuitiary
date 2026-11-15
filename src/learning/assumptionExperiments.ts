@@ -3,11 +3,13 @@ import {
   realDefaultConfig, realDefaultReadout,
 } from '../model/realConnectome'
 import { withComma } from '../format'
+import { pick } from '../i18n'
 import { simulate } from '../model/simulation'
 import type {
   Circuit, DeepReadonly, ReadonlyRealConnectome, RealModelParameters,
   SimulationConfig, SimulationResult,
 } from '../model/types'
+import { messages } from './assumptionExperiments.messages'
 
 export type AssumptionVariable = 'chemical-gain' | 'gap-gain' | 'time-constant'
 
@@ -27,6 +29,7 @@ export interface AssumptionOutputMetrics {
 }
 
 export interface AssumptionCondition {
+  /** Turkish record text, the same whatever the interface language; show it with conditionLabel(). */
   label: string
   parameters: RealModelParameters
   circuit: Circuit
@@ -64,10 +67,31 @@ interface AssumptionRunRecord {
     /** Maximum absolute sample difference across every selected cell and time. */
     maxAbsTraceDifference: number
   }
+  /** Turkish record text, the same whatever the interface language; show it with runAssumptions(). */
   assumptions: string[]
 }
 
 export type AssumptionRunSnapshot = DeepReadonly<AssumptionRunRecord>
+
+type RunText = (typeof messages)['tr']
+/** The record itself is written in Turkish with a decimal comma, so the same inputs always give the same record. */
+const recordText = messages.tr
+const recordNumber = (value: number) => String(value).replace('.', ',')
+const comparisonLabel = (text: RunText, variable: AssumptionVariable, value: number, numberText: (value: number) => string) =>
+  variable === 'chemical-gain' ? text.chemicalLabel(numberText(value)) : variable === 'gap-gain' ? text.gapLabel(numberText(value)) : text.tauLabel(value)
+
+/** A condition's label in the interface language, built from the record's values when it is shown. */
+export function conditionLabel(run: AssumptionRunSnapshot, condition: 'baseline' | 'comparison'): string {
+  const text = pick(messages)
+  return condition === 'baseline' ? text.baselineLabel
+    : comparisonLabel(text, run.controlledVariable.variable, run.controlledVariable.comparisonValue, value => withComma(String(value)))
+}
+
+/** The assumptions a record rests on, in the interface language. */
+export function runAssumptions(run: AssumptionRunSnapshot): string[] {
+  const { title, version, anatomicalWeightUnit } = run.sourceData.dataset
+  return pick(messages).assumptions(title, version, anatomicalWeightUnit)
+}
 
 function freezeTree<T>(value: T): DeepReadonly<T> {
   if (value !== null && typeof value === 'object') {
@@ -142,22 +166,18 @@ export function runAssumptionExperiment(
   const comparisonValue = options.comparisonValue
   let baselineValue: number
   let scope: AssumptionRunRecord['controlledVariable']['scope']
-  let comparisonLabel: string
   if (variable === 'chemical-gain') {
     baselineValue = baselineParameters.chemicalGain
     comparisonParameters.chemicalGain = comparisonValue
     scope = 'chemical-edges'
-    comparisonLabel = `Kimyasal model ölçeği ${withComma(String(comparisonValue))}`
   } else if (variable === 'gap-gain') {
     baselineValue = baselineParameters.gapGain
     comparisonParameters.gapGain = comparisonValue
     scope = 'physical-gap-pairs'
-    comparisonLabel = `Gap model ölçeği ${withComma(String(comparisonValue))}`
   } else {
     baselineValue = baselineConfig.tauMs
     comparisonConfig.tauMs = comparisonValue
     scope = 'all-neurons'
-    comparisonLabel = `Bütün hücrelerde zaman sabiti ${comparisonValue} model ms`
   }
   const baselineCircuit = buildRealCircuit(sourceData, baselineParameters)
   const comparisonCircuit = buildRealCircuit(sourceData, comparisonParameters)
@@ -178,30 +198,13 @@ export function runAssumptionExperiment(
       stimulusDurationMs: baselineConfig.stimulus.durationMs, durationMs: baselineConfig.durationMs, dtMs: baselineConfig.dtMs,
     },
     controlledVariable: { variable, baselineValue, comparisonValue, unit: variable === 'time-constant' ? 'ms' as const : 'dimensionless' as const, scope },
-    baseline: { label: 'Temel varsayımlar', parameters: baselineParameters, circuit: baselineCircuit, config: baselineConfig, result: baselineResult, metrics: baselineMetrics },
-    comparison: { label: comparisonLabel, parameters: comparisonParameters, circuit: comparisonCircuit, config: comparisonConfig, result: comparisonResult, metrics: comparisonMetrics },
+    baseline: { label: recordText.baselineLabel, parameters: baselineParameters, circuit: baselineCircuit, config: baselineConfig, result: baselineResult, metrics: baselineMetrics },
+    comparison: { label: comparisonLabel(recordText, variable, comparisonValue, recordNumber), parameters: comparisonParameters, circuit: comparisonCircuit, config: comparisonConfig, result: comparisonResult, metrics: comparisonMetrics },
     delta: {
       peak: comparisonMetrics.peak - baselineMetrics.peak,
       endValue: comparisonMetrics.endValue - baselineMetrics.endValue,
       maxAbsTraceDifference: maximumTraceDifference(sourceData, baselineResult, comparisonResult),
     },
-    assumptions: [
-      `${sourceData.dataset.title} (${sourceData.dataset.version}) anatomisi ve kaynak referansları iki koşulda aynıdır.`,
-      `Ham ağırlık birimi: ${sourceData.dataset.anatomicalWeightUnit}. Ham kayıtlar sinaps sayısı, ölçülmüş iletim gücü veya model ağırlığı değildir.`,
-      'Bu içe aktarılmış anatomi verisinde kimyasal işaretler yok; bu model bütün kimyasal etkileri pozitif varsayar. Verici, reseptör veya baskılayıcı etki ölçümü aktarılmamıştır.',
-      'Normalize kimyasal ağırlıklar ve gap katsayıları boyutsuz model varsayımlarıdır; EM kayıtlarından seçilmiş bir normalizasyonla üretilir, ölçülmüş fizyolojik güç değildir.',
-      'Gap çifti tek fiziksel kayıt olarak tutulur ve g·(komşu−hücre) terimiyle iki yönde eşit katsayı kullanır. Doğrultucu fizyoloji veya çiftlere özgü işlev ölçümü burada modellenmez.',
-      'Seçilmiş alt ağ dışında kalan kimyasal girdiler sıfır kabul edilir; dış gap bağlantıları çıkarılmıştır. Dış hücreleri sıfıra bağlayan bir gap sınırı uygulanmaz.',
-      'Kimyasal öz bağlantılar korunur; kaynak gap köşegen kayıtları yalnız metadatadır ve fiziksel gap olarak simüle edilmez.',
-      'Her iki koşulda başlangıç aktiviteleri sıfır, AVER darbesi [100,300) model ms, genlik 0,8; kayıt 700 model ms ve Euler adımı 1 model ms’dir.',
-      'AVER uyaran hedefi, AVAR gözlenen hücre olarak seçilmiştir. Bu deney rolleri ölçülmüş duyusal veya motor işlev ataması değildir.',
-      'Aktivite 0–1 aralığında boyutsuz sürekli model değeridir; zar gerilimi, kalsiyum, olay sayısı veya ateşleme hızı değildir. Zaman sabitleri fizyolojik ölçümlere kalibre edilmemiştir.',
-      'Bütün hücreler aynı önceki adımı okuyarak güncellenir; kimyasal toplam 0–1 hedef aralığına sınırlanır, gap yayılımı bu sınırlamanın dışındadır.',
-      'Yalnız controlledVariable ile belirtilen varsayım değişir. Zaman sabiti deneyinde değişiklik seçilmiş bütün hücrelere uygulanır; tek hücreye özgü bir override yoktur.',
-      'Sıfır model ölçeği anatomik kayıtları silmez; yalnız ilgili model katkılarını sıfırlar. Diğer bağlantı türü hâlâ etkin olabilir.',
-      'Tepe zamanı kaydedilen pozitif en büyük değerin ilk örneğidir; eşik geçişi, akson iletim gecikmesi veya biyolojik tepki başlangıcı değildir. Sıfır kalan çıktının tepe zamanı yoktur.',
-      'Son değer yalnız kayıt penceresinin son örneğidir; kalıcı veya kararlı durum iddiası değildir. En büyük mutlak iz farkı bütün seçilmiş hücre ve zaman örnekleri üzerinde hesaplanır.',
-      'Sonuçlar bu sabit modelin varsayımlara duyarlılığını gösterir; hayvan davranışı, kalsiyum ölçümü, beden veya biyolojik beyin emülasyonu doğrulanmış değildir.',
-    ],
+    assumptions: recordText.assumptions(sourceData.dataset.title, sourceData.dataset.version, sourceData.dataset.anatomicalWeightUnit),
   })
 }

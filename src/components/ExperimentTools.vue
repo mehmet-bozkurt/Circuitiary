@@ -2,6 +2,10 @@
 import { nextTick, ref } from 'vue'
 import { downloadFile } from '../exportData'
 import type { ExportFile } from '../exportData'
+import { useMessages } from '../i18n'
+import { messages } from './ExperimentTools.messages'
+
+const m = useMessages(messages)
 
 // The experiment page owns the state; this panel only copies a link and hands files to the browser.
 const props = defineProps<{
@@ -15,11 +19,12 @@ const props = defineProps<{
 }>()
 
 const field = ref<HTMLInputElement>()
-const status = ref('')
+// Kept as a function, so the line follows a later change of language.
+const status = ref<(() => string) | null>(null)
 
 // The same sentence twice would not be announced again, so the line is cleared first.
-async function announce(text: string) {
-  status.value = ''
+async function announce(text: () => string) {
+  status.value = null
   await nextTick()
   status.value = text
 }
@@ -27,7 +32,7 @@ async function announce(text: string) {
 async function copyLink() {
   try {
     await navigator.clipboard.writeText(props.url)
-    await announce('Bağlantı panoya kopyalandı.')
+    await announce(() => m.value.copied)
     return
   } catch { /* No clipboard permission, or an insecure address: select the field and try the old route. */ }
   const input = field.value
@@ -36,19 +41,19 @@ async function copyLink() {
     input.select()
     input.setSelectionRange(0, props.url.length)
     try {
-      if (document.execCommand('copy')) { await announce('Bağlantı panoya kopyalandı.'); return }
+      if (document.execCommand('copy')) { await announce(() => m.value.copied); return }
     } catch { /* Selected text is still there for a manual copy. */ }
   }
-  await announce('Bağlantı otomatik kopyalanamadı. Kutuda seçili duruyor; elle kopyalayabilirsin.')
+  await announce(() => m.value.copyFailed)
 }
 
 async function save(make: () => ExportFile, kind: string) {
   try {
     const file = make()
     downloadFile(file)
-    await announce(`${kind} dosyası hazırlandı, indirme başladı: ${file.name}`)
+    await announce(() => m.value.fileReady(kind, file.name))
   } catch {
-    await announce(`${kind} dosyası oluşturulamadı.`)
+    await announce(() => m.value.fileFailed(kind))
   }
 }
 </script>
@@ -57,29 +62,29 @@ async function save(make: () => ExportFile, kind: string) {
   <div class="experiment-tools">
     <p class="link-notice" role="status" data-testid="share-notice">{{ notice }}</p>
     <div class="tools-heading">
-      <span class="eyebrow">PAYLAŞ VE DIŞA AKTAR</span>
-      <h2>Deneyi taşı.</h2>
+      <span class="eyebrow">{{ m.kicker }}</span>
+      <h2>{{ m.heading }}</h2>
     </div>
     <div class="tools-grid">
       <div class="tool-card">
-        <h3>Ayarları bağlantı olarak paylaş</h3>
-        <p>Bağlantı deneyin ayarlarını taşır: devre, koşul, uyaran, zaman sabitleri, seçili hücreler ve bağlantı. Sonuçları taşımaz; sayılar bağlantıyı açan kişinin tarayıcısında aynı modelle yeniden hesaplanır.</p>
-        <label class="field-label" for="share-url">Paylaşım bağlantısı</label>
+        <h3>{{ m.shareTitle }}</h3>
+        <p>{{ m.shareBody }}</p>
+        <label class="field-label" for="share-url">{{ m.shareLabel }}</label>
         <input id="share-url" ref="field" class="share-url" type="text" readonly :value="url" data-testid="share-url" spellcheck="false" autocomplete="off" @focus="($event.target as HTMLInputElement).select()">
-        <button type="button" class="tool-button primary" @click="copyLink">Bağlantıyı kopyala</button>
-        <p class="tool-note">Oynatma konumu ve oynatma durumu taşınmaz; bağlantı duraklatılmış, varsayılan anda açılır. Gerçek veri bağlantısı yalnız yerel veri bulunan bir bilgisayarda açılır; veri yoksa sekiz hücreli örneğe dönülür.</p>
+        <button type="button" class="tool-button primary" @click="copyLink">{{ m.copy }}</button>
+        <p class="tool-note">{{ m.shareNote }}</p>
       </div>
       <div class="tool-card">
-        <h3>Sonuçları dışa aktar</h3>
-        <p>Dosyalar tarayıcıda oluşturulur; hiçbir yere gönderilmez. Ondalık ayracı nokta, kodlama UTF-8'dir.</p>
+        <h3>{{ m.exportTitle }}</h3>
+        <p>{{ m.exportBody }}</p>
         <div class="tool-buttons">
-          <button type="button" class="tool-button" @click="save(csvFile, 'CSV')"><strong>CSV indir</strong><span>{{ conditionLabel }} koşulu · zaman ve her hücre bir sütun</span></button>
-          <button type="button" class="tool-button" @click="save(jsonFile, 'JSON')"><strong>JSON indir</strong><span>{{ outputCell }} hücresi · üç koşul · ayarlar</span></button>
+          <button type="button" class="tool-button" @click="save(csvFile, 'CSV')"><strong>{{ m.csv }}</strong><span>{{ m.csvHint(conditionLabel) }}</span></button>
+          <button type="button" class="tool-button" @click="save(jsonFile, 'JSON')"><strong>{{ m.json }}</strong><span>{{ m.jsonHint(outputCell) }}</span></button>
         </div>
-        <p class="tool-note">Model çıktısıdır; ölçüm değildir. Etkinlik boyutsuzdur ve 0 ile 1 arasındadır.</p>
+        <p class="tool-note">{{ m.exportNote }}</p>
       </div>
     </div>
-    <p class="tools-status" role="status" data-testid="share-status">{{ status }}</p>
+    <p class="tools-status" role="status" data-testid="share-status">{{ status?.() }}</p>
   </div>
 </template>
 

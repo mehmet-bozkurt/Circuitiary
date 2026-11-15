@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { locale } from '../i18n'
 import {
   buildRealCircuit, defaultRealModelParameters, parseRealConnectome, realDefaultConfig,
 } from '../model/realConnectome'
 import { simulate } from '../model/simulation'
 import type { Circuit, RealConnectome, SimulationConfig, SimulationResult } from '../model/types'
-import { runAssumptionExperiment, type AssumptionRunOptions, type AssumptionVariable } from './assumptionExperiments'
+import { conditionLabel, runAssumptionExperiment, runAssumptions, type AssumptionRunOptions, type AssumptionVariable } from './assumptionExperiments'
 
 const stats = () => ({ chemicalIncomingCount: 0, chemicalOutgoingCount: 0, gapCount: 0,
   chemicalIncomingWeight: 0, chemicalOutgoingWeight: 0, gapWeight: 0 })
@@ -229,6 +230,57 @@ describe('comparison labels use the Turkish decimal comma', () => {
     expect(labelOf({ variable: 'chemical-gain', comparisonValue: 0 })).toBe('Kimyasal model ölçeği 0')
     expect(labelOf({ variable: 'gap-gain', comparisonValue: .5 })).toBe('Gap model ölçeği 0,5')
     expect(labelOf({ variable: 'time-constant', comparisonValue: 90 })).toBe('Bütün hücrelerde zaman sabiti 90 model ms')
+  })
+})
+
+describe('record text follows the interface language when it is shown', () => {
+  afterEach(() => { locale.value = 'tr' })
+  const run = (options: AssumptionRunOptions) => runAssumptionExperiment(parseRealConnectome(fixture()), 1, options)
+
+  it('gives the record\'s own text in Turkish', () => {
+    for (const options of [{ variable: 'chemical-gain' as const, comparisonValue: 1.2 }, { variable: 'gap-gain' as const, comparisonValue: .5 }, { variable: 'time-constant' as const, comparisonValue: 90 }]) {
+      const record = run(options)
+      expect(conditionLabel(record, 'baseline')).toBe(record.baseline.label)
+      expect(conditionLabel(record, 'comparison')).toBe(record.comparison.label)
+      expect(runAssumptions(record)).toEqual(record.assumptions)
+    }
+  })
+
+  it('gives English labels and assumptions after a switch, from the same record', () => {
+    const chemical = run({ variable: 'chemical-gain', comparisonValue: 1.2 })
+    const gap = run({ variable: 'gap-gain', comparisonValue: .5 })
+    const tau = run({ variable: 'time-constant', comparisonValue: 90 })
+    locale.value = 'en'
+    expect(conditionLabel(chemical, 'baseline')).toBe('Baseline assumptions')
+    expect(conditionLabel(chemical, 'comparison')).toBe('Chemical model scale 1.2')
+    expect(conditionLabel(gap, 'comparison')).toBe('Gap model scale 0.5')
+    expect(conditionLabel(tau, 'comparison')).toBe('Time constant in all cells 90 model ms')
+    const english = runAssumptions(chemical)
+    expect(english).toHaveLength(chemical.assumptions.length)
+    expect(english[0]).toBe('The anatomy and source references of Invented anatomy fixture (1) are the same in both conditions.')
+    expect(english.join(' ')).toContain('not calibrated to physiological measurements')
+    expect(english.join(' ')).toContain('has not been validated')
+    expect(english.join(' ')).not.toMatch(/[ğşıİçöüĞŞÇÖÜ]/)
+    locale.value = 'tr'
+    expect(conditionLabel(chemical, 'comparison')).toBe('Kimyasal model ölçeği 1,2')
+  })
+
+  it('computes the same numbers and writes the same record text whatever the interface language', () => {
+    const options: AssumptionRunOptions = { variable: 'chemical-gain', comparisonValue: 1.2 }
+    const turkish = run(options)
+    locale.value = 'en'
+    const english = run(options)
+    // The circuits inside a record carry the builder's own connection notes, which are not compared here.
+    for (const condition of ['baseline', 'comparison'] as const) {
+      expect(english[condition].label).toBe(turkish[condition].label)
+      expect(english[condition].result).toEqual(turkish[condition].result)
+      expect(english[condition].metrics).toEqual(turkish[condition].metrics)
+      expect(english[condition].circuit.connections.map(edge => edge.weight)).toEqual(turkish[condition].circuit.connections.map(edge => edge.weight))
+    }
+    expect(english.comparison.label).toBe('Kimyasal model ölçeği 1,2')
+    expect(english.assumptions).toEqual(turkish.assumptions)
+    expect(english.delta).toEqual(turkish.delta)
+    expect(english.controlledVariable).toEqual(turkish.controlledVariable)
   })
 })
 

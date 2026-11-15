@@ -1,7 +1,7 @@
 {
   "name": "circuitiary",
   "version": "0.1.0",
-  "description": "Interactive teaching notebook for small neuron circuits: parameterised rate model, 2D/3D views, lessons and a circuit builder (Turkish UI); optional C. elegans connectome subgraph from locally imported data · Sinir devrelerini kurarak öğrenmek için etkileşimli deney defteri",
+  "description": "Interactive teaching notebook for small neuron circuits: parameterised rate model, 2D/3D views, lessons and a circuit builder (Turkish and English UI); optional C. elegans connectome subgraph from locally imported data · Sinir devrelerini kurarak öğrenmek için etkileşimli deney defteri",
   "keywords": [
     "neuroscience",
     "connectome",

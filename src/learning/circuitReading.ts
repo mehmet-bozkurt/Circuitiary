@@ -32,9 +32,9 @@ export interface NeighborSummary {
   readonly neuron: DeepReadonly<AnatomicalNeuron>
   readonly incomingChemical: readonly ReadingHop[]
   readonly outgoingChemical: readonly ReadingHop[]
-  /** One hop from this neuron to each physical gap neighbour. */
+  /** One hop from this neuron to each physical gap neighbor. */
   readonly gaps: readonly ReadingHop[]
-  /** Chemical diagonals are excluded from both neighbour lists and route searches. */
+  /** Chemical diagonals are excluded from both neighbor lists and route searches. */
   readonly selfLoops: readonly ReadingHop[]
   readonly omittedExternal: DeepReadonly<ConnectomeSelection['omittedByNeuron'][number]>
   /** Source gap diagonals remain metadata; they are not physical gap edges. */

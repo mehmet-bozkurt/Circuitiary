@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { DEFAULT_LOCALE, locale } from '../i18n'
 import {
   buildRealCircuit, chemicalNormalizationFormula, defaultRealModelParameters,
   gapNormalizationFormula, parseRealConnectome, realDefaultConfig, realDefaultReadout,
@@ -244,5 +245,49 @@ describe('runtime anatomical schema rejection', () => {
     const cyclic = fixture()
     cyclic.extra = cyclic
     for (const value of [missing, cyclic, null, 'text', new Date()]) expect(() => parseRealConnectome(value)).toThrow()
+  })
+})
+
+describe('text of the built circuit by interface language', () => {
+  afterEach(() => { locale.value = DEFAULT_LOCALE })
+  const turkishLetters = /[ğşıİçöüĞŞÇÖÜ]/
+
+  it('writes Turkish by default, with the caveats unchanged', () => {
+    const circuit = buildRealCircuit(parseRealConnectome(fixture()))
+    expect(circuit.name).toBe('C. elegans — anatomiden varsayımsal devre modeli')
+    expect(circuit.provenance).toContain('Kimyasal işaret bilinmiyor ve pozitif varsayılıyor.')
+    expect(circuit.neurons[0]!.description).toContain('giriş veya çıkış görevi atanmamıştır')
+    expect(circuit.connections.find((edge) => edge.kind === 'chemical')!.note).toContain('İşaret bilinmiyor; pozitif etki varsayıldı.')
+    expect(circuit.connections.find((edge) => edge.kind === 'gap')!.note).toContain('g boyutsuz varsayımdır.')
+  })
+
+  it('writes English when the circuit is built in English, keeping every caveat, id and number', () => {
+    const validated = parseRealConnectome(fixture())
+    const turkish = buildRealCircuit(validated)
+    locale.value = 'en'
+    const english = buildRealCircuit(validated)
+    expect(english.name).toBe('C. elegans — assumed circuit model built from anatomy')
+    expect(english.provenance).toContain(`${validated.dataset.title} (${validated.dataset.version})`)
+    expect(english.provenance).toContain('The chemical sign is unknown and assumed positive.')
+    expect(english.provenance).toContain('are not measured biology')
+    expect(english.neurons[0]!.description).toContain('no input or output role has been assigned')
+    expect(english.neurons[0]!.description).toContain('assumed model values')
+    const chemical = english.connections.find((edge) => edge.kind === 'chemical')!
+    expect(chemical.note).toContain(`raw weight ${chemical.rawWeight}.`)
+    expect(chemical.note).toContain('The sign is unknown; a positive effect was assumed.')
+    expect(chemical.note).toContain('not a measured strength')
+    const gap = english.connections.find((edge) => edge.kind === 'gap')!
+    expect(gap.note).toContain(`raw weight ${gap.rawWeight}.`)
+    expect(gap.note).toContain('g is a dimensionless assumption')
+    for (const text of [english.name, english.provenance, ...english.neurons.map((neuron) => neuron.description), ...english.connections.map((edge) => edge.note)]) {
+      expect(text).not.toMatch(turkishLetters)
+    }
+    // Only the text differs: ids, order, weights, positions and the model metadata are the same.
+    const withoutText = (circuit: typeof turkish) => ({
+      id: circuit.id, realData: circuit.realData,
+      neurons: circuit.neurons.map(({ description: _description, ...rest }) => rest),
+      connections: circuit.connections.map(({ note: _note, ...rest }) => rest),
+    })
+    expect(withoutText(english)).toEqual(withoutText(turkish))
   })
 })

@@ -2,7 +2,10 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { Core, EdgeSingular } from 'cytoscape'
 import type { Circuit } from '../model/types'
+import { useMessages } from '../i18n'
+import { messages } from './CircuitGraph.messages'
 
+const m = useMessages(messages)
 const props = withDefaults(defineProps<{
   circuit: Circuit
   activity: Record<string, number>
@@ -177,16 +180,16 @@ onBeforeUnmount(() => { disposed = true; observer?.disconnect(); graph?.destroy(
 </script>
 
 <template>
-  <div v-if="isRealCircuit" class="graph-tools" role="group" aria-label="Grafik yakınlaştırma">
-    <button type="button" :disabled="!graphReady" @click="fitGraph">Tüm hücreleri sığdır</button>
+  <div v-if="isRealCircuit" class="graph-tools" role="group" :aria-label="m.zoomGroup">
+    <button type="button" :disabled="!graphReady" @click="fitGraph">{{ m.fitAll }}</button>
     <div class="graph-zoom-buttons">
-      <button type="button" :disabled="!graphReady" aria-label="Grafiği uzaklaştır" @click="changeZoom(1 / 1.25)">−</button>
-      <button type="button" :disabled="!graphReady" aria-label="Grafiği yakınlaştır" @click="changeZoom(1.25)">+</button>
+      <button type="button" :disabled="!graphReady" :aria-label="m.zoomOut" @click="changeZoom(1 / 1.25)">−</button>
+      <button type="button" :disabled="!graphReady" :aria-label="m.zoomIn" @click="changeZoom(1.25)">+</button>
     </div>
   </div>
   <div v-if="loadError" class="graph-error" role="alert">
-    <p>2D bağlantı haritası yüklenemedi. İnternet bağlantını denetleyip yeniden dene; sorun sürerse sayfayı yenile.</p>
-    <button type="button" @click="startGraph">Yeniden dene</button>
+    <p>{{ m.loadError }}</p>
+    <button type="button" @click="startGraph">{{ m.retry }}</button>
   </div>
   <div ref="container" class="circuit-canvas" :class="{ 'real-circuit-canvas': isRealCircuit }" :hidden="loadError" aria-hidden="true"></div>
 </template>

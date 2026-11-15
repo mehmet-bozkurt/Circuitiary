@@ -1,12 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { reactive } from 'vue'
+import { DEFAULT_LOCALE, locale } from '../i18n'
 import { simulate } from '../model/simulation'
 import type { Circuit, SimulationConfig } from '../model/types'
 import {
-  CELL_IDS, LIMITS, REPORT_LEVEL, blankDraft, buildEngineCircuit, buildEngineConfig, cellIds, cloneDraft, describeRun,
-  draftKey, explainEngineError, hasExcitatoryLoop, linkLabel, presetById, presets, runDraft, summarizeCells, validateDraft,
-  type BuilderDraft, type BuilderLink, type BuilderRun, type CellId, type LinkType,
+  CELL_IDS, LIMITS, LINK_TYPE_LABELS, LINK_TYPE_LABELSEn, REPORT_LEVEL, blankDraft, buildEngineCircuit, buildEngineConfig, cellIds, cloneDraft, describeRun,
+  draftKey, engineErrorKind, engineErrorText, explainEngineError, hasExcitatoryLoop, linkLabel, linkTypeLabel, presetById, presets, presetsEn, runDraft, runFacts,
+  summarizeCells, validateDraft,
+  type BuilderDraft, type BuilderLink, type BuilderRun, type CellId, type EngineErrorKind, type LinkType,
 } from './circuitBuilder'
+
+afterEach(() => { locale.value = DEFAULT_LOCALE })
 
 const link = (id: string, source: CellId, target: CellId, type: LinkType, strength: number): BuilderLink => ({ id, source, target, type, strength })
 const draftOf = (cellCount: number, links: BuilderLink[], stimulus: Partial<BuilderDraft['stimulus']> = {}): BuilderDraft =>
@@ -109,7 +113,7 @@ describe('engine circuit', () => {
     expect(cell(fromB, 'A').peak).toBeGreaterThan(0.1)
     expect(cell(fromA, 'B').peak).toBeCloseTo(cell(fromB, 'A').peak, 12)
     expect(cell(fromA, 'A').peak).toBeCloseTo(cell(fromB, 'B').peak, 12)
-    // A gap only shares activity: the stimulated cell loses some, the neighbour stays below it.
+    // A gap only shares activity: the stimulated cell loses some, the neighbor stays below it.
     expect(cell(fromA, 'B').peak).toBeLessThan(cell(fromA, 'A').peak)
     expect(cell(fromA, 'A').peak).toBeLessThan(run(draftOf(2, [])).cells[0]!.peak)
   })
@@ -521,5 +525,185 @@ describe('presets', () => {
         expect(at(above, id, 400)).toBeGreaterThan(at(base, id, 400) - 1e-9)
       }
     })
+  })
+})
+
+describe('languages', () => {
+  const turkishLetters = /[ğĞşŞıİçÇöÖüÜ]/
+  /** A decimal comma between digits: Turkish number text that must not appear in English. */
+  const decimalComma = /\d,\d/
+  const english = (text: string) => {
+    expect(text.trim().length).toBeGreaterThan(0)
+    expect(text).not.toMatch(turkishLetters)
+    expect(text).not.toMatch(decimalComma)
+  }
+  const inEnglish = <T>(read: () => T): T => {
+    locale.value = 'en'
+    try { return read() } finally { locale.value = 'tr' }
+  }
+  const everyProblem = () => [
+    ...validateDraft(draftOf(7, [])),
+    ...validateDraft(draftOf(3, [link('1', 'A', 'A', 'gap', 3), link('2', 'A', 'B', 'gap', 0.5), link('3', 'B', 'A', 'gap', 0.5), link('4', 'C', 'D', 'excitatory', 0.5), link('5', 'A', 'B', 'excitatory', 9), link('6', 'A', 'B', 'excitatory', 1)], { target: 'F', amplitude: 3, onsetMs: -1, durationMs: 0 })),
+    ...validateDraft(draftOf(6, cellIds(6).flatMap(source => cellIds(6).filter(target => target !== source).map(target => link(`${source}${target}`, source, target, 'excitatory', 0.5))).slice(0, 13))),
+  ]
+
+  it('gives every example an English twin with the same ids, order and circuit', () => {
+    expect(presetsEn).toHaveLength(presets.length)
+    expect(presetsEn.map(preset => preset.id)).toEqual(presets.map(preset => preset.id))
+    presets.forEach((preset, index) => {
+      const twin = presetsEn[index]!
+      expect(Object.keys(twin)).toEqual(Object.keys(preset))
+      // The cells, connections, weights and stimulus exist once: both languages hold the same object.
+      expect(twin.draft).toBe(preset.draft)
+      for (const key of ['title', 'teaches', 'look', 'tryThis', 'boundary'] as const) {
+        english(twin[key])
+        expect(twin[key], `${preset.id}.${key}`).not.toBe(preset[key])
+      }
+      for (const key of ['teaches', 'look', 'tryThis', 'boundary'] as const) expect(twin[key].length).toBeGreaterThan(40)
+    })
+    expect(new Set(presetsEn.map(preset => preset.title)).size).toBe(presetsEn.length)
+  })
+
+  it('keeps every number and caveat of an example in its English text', () => {
+    const numbers = (text: string) => (text.match(/\d+(?:[.,]\d+)?/g) ?? []).map(value => Number(value.replace(',', '.'))).sort((a, b) => a - b)
+    presets.forEach((preset, index) => {
+      for (const key of ['teaches', 'look', 'tryThis', 'boundary'] as const) expect(numbers(presetsEn[index]![key]), `${preset.id}.${key}`).toEqual(numbers(preset[key]))
+    })
+    expect(presetsEn.find(preset => preset.id === 'chain')!.boundary).toContain('not a real signal conduction time')
+    expect(presetsEn.find(preset => preset.id === 'excitation-inhibition')!.boundary).toContain('cannot be inferred from the neurotransmitter alone')
+    expect(presetsEn.find(preset => preset.id === 'mutual-inhibition')!.boundary).toContain('cannot be inferred from this simple model')
+    const loop = presetsEn.find(preset => preset.id === 'loop')!
+    expect(loop.look).toContain('sum to exactly 1; 1 is a threshold')
+    expect(loop.boundary).toContain('holds only for the recorded 700 model ms')
+    expect(loop.boundary).toContain('not a biological finding')
+  })
+
+  it('names the connection types in both languages with the same keys', () => {
+    expect(Object.keys(LINK_TYPE_LABELSEn)).toEqual(Object.keys(LINK_TYPE_LABELS))
+    for (const type of Object.keys(LINK_TYPE_LABELS) as LinkType[]) {
+      expect(linkTypeLabel(type)).toBe(LINK_TYPE_LABELS[type])
+      expect(inEnglish(() => linkTypeLabel(type))).toBe(LINK_TYPE_LABELSEn[type])
+      english(LINK_TYPE_LABELSEn[type])
+    }
+  })
+
+  it('returns the example and the connection label of the current language', () => {
+    expect(presetById('loop')).toBe(presets[3])
+    expect(inEnglish(() => presetById('loop'))).toBe(presetsEn[3])
+    expect(inEnglish(() => presetById('loop').title)).toBe('Self-sustaining loop')
+    expect(inEnglish(() => linkLabel(link('a', 'A', 'B', 'excitatory', 1)))).toBe('A → B excitatory')
+    expect(inEnglish(() => linkLabel(link('a', 'C', 'A', 'inhibitory', 1)))).toBe('C → A inhibitory')
+    expect(inEnglish(() => linkLabel(link('a', 'C', 'A', 'gap', 1)))).toBe('A ↔ C electrical')
+    expect(linkLabel(link('a', 'C', 'A', 'gap', 1))).toBe('A ↔ C elektriksel')
+  })
+
+  it('writes every validation problem in English with decimal points, and the same codes in both languages', () => {
+    const turkish = everyProblem()
+    const codesSeen = new Set(turkish.map(problem => problem.code))
+    for (const code of ['cell-count', 'too-many-links', 'unknown-cell', 'self-gap', 'duplicate-chemical', 'duplicate-gap', 'strength', 'stimulus-target', 'amplitude', 'onset', 'pulse']) expect(codesSeen, code).toContain(code)
+    locale.value = 'en'
+    const englishProblems = everyProblem()
+    expect(englishProblems.map(problem => [problem.code, problem.linkId])).toEqual(turkish.map(problem => [problem.code, problem.linkId]))
+    for (const problem of englishProblems) english(problem.message)
+    expect(validateDraft(draftOf(3, [], { amplitude: 2 }))[0]!.message).toBe('The stimulus amplitude must be between 0 and 1.')
+    expect(validateDraft(draftOf(3, [link('1', 'A', 'B', 'excitatory', 9)]))[0]!.message).toBe('Connection 1: the strength must be in the range 0.05–2.')
+    const duplicate = validateDraft(draftOf(3, [link('1', 'A', 'C', 'excitatory', 0.5), link('2', 'A', 'B', 'excitatory', 0.5), link('3', 'A', 'B', 'excitatory', 0.7)]))[0]!.message
+    expect(duplicate).toContain('Connection 3')
+    expect(duplicate).toContain('(Connection 2)')
+  })
+
+  it('lets a problem list that was kept follow a later language change', () => {
+    const kept = everyProblem()
+    const turkish = kept.map(problem => problem.message)
+    for (const message of turkish) expect(message).toMatch(turkishLetters)
+    locale.value = 'en'
+    for (const problem of kept) english(problem.message)
+    locale.value = 'tr'
+    expect(kept.map(problem => problem.message)).toEqual(turkish)
+
+    const failed = runDraft(blankDraft(), () => { throw new Error('Connection drive overflowed; reduce model weights.') })
+    expect(failed.ok).toBe(false)
+    if (failed.ok) return
+    expect(failed.problems[0]!.message).toBe('Bağlantı güçleri çok büyük; hesap taştı. Güçleri azalt.')
+    locale.value = 'en'
+    expect(failed.problems[0]!.message).toBe('The connection strengths are too large; the calculation overflowed. Reduce the strengths.')
+    // Vue state wraps the list in a proxy; the sentence still follows the language.
+    expect(reactive(failed.problems)[0]!.message).toBe(failed.problems[0]!.message)
+  })
+
+  it('maps every engine rejection to a kind with one sentence per language', () => {
+    const kinds: Array<[string, EngineErrorKind]> = [
+      ['dtMs must not exceed tau / (1 + active incident gap conductance) = 5 for A.', 'unstable'],
+      ['Connection drive overflowed; reduce model weights.', 'overflow'],
+      ['A physical gap must be stored only once.', 'gap-once'],
+      ['Physical gap conductance must be non-negative.', 'gap-invalid'],
+      ['Connection L1 refers to an unknown neuron.', 'unknown-cell'],
+      ['Stimulus target is an unknown neuron.', 'unknown-cell'],
+      ['Stimulus amplitude must be in [0, 1].', 'amplitude'],
+      ['Stimulus onset and duration must be non-negative.', 'timing'],
+      ['Weight for L1 must be finite.', 'weight'],
+      ['Simulation exceeds the 100000-step limit.', 'other'],
+    ]
+    for (const [message, kind] of kinds) expect(engineErrorKind(new Error(message)), message).toBe(kind)
+    expect(engineErrorKind('plain string')).toBe('other')
+    const all = [...new Set(kinds.map(([, kind]) => kind))]
+    expect(all).toHaveLength(9)
+    const turkish = all.map(engineErrorText)
+    const translated = inEnglish(() => all.map(engineErrorText))
+    expect(new Set(turkish).size).toBe(all.length)
+    expect(new Set(translated).size).toBe(all.length)
+    turkish.forEach(text => expect(text).toMatch(turkishLetters))
+    translated.forEach(english)
+    for (const [message, kind] of kinds) {
+      expect(explainEngineError(new Error(message))).toBe(engineErrorText(kind))
+      expect(inEnglish(() => explainEngineError(new Error(message)))).toBe(inEnglish(() => engineErrorText(kind)))
+    }
+    expect(inEnglish(() => explainEngineError(undefined))).toMatch(/^The calculation could not be completed with these settings/)
+  })
+
+  it('describes a run in English, and writes a recorded run again in the current language', () => {
+    const result = run(draftOf(4, [link('1', 'A', 'B', 'excitatory', 0.9)]))
+    expect(runFacts(result)).toEqual(result.facts)
+    locale.value = 'en'
+    const facts = runFacts(result)
+    expect(facts).toHaveLength(result.facts.length)
+    facts.forEach(english)
+    expect(facts[0]).toBe('The highest peak is in cell A: 0.799.')
+    expect(facts[1]).toBe('Cells C and D did not respond at all: the peak stayed at 0. There may be no excitatory path carrying activity to them, or inhibition may have held the activity at 0.')
+    expect(facts[2]).toBe('The stimulus ended at 300 ms; at 700 ms the activity of all cells has fallen below the 0.10 level.')
+    expect(describeRun(result.draft, result.cells, 700)).toEqual(facts)
+    const single = runFacts(run(draftOf(3, [link('1', 'A', 'B', 'excitatory', 0.9)])))
+    expect(single[1]).toMatch(/^Cell C did not respond at all: .* carrying activity to it, or/)
+    locale.value = 'tr'
+    // The record itself keeps the sentences of the moment of the run; the numbers are the same in both languages.
+    expect(runFacts(result)).toEqual(result.facts)
+    expect(inEnglish(() => run(draftOf(4, [link('1', 'A', 'B', 'excitatory', 0.9)]))).cells).toEqual(result.cells)
+  })
+
+  it('keeps the hedge about a feedback loop in English: a possible cause, named only when there is a loop', () => {
+    const chain = (strength: number): BuilderLink[] => ['A', 'B', 'C', 'D', 'E'].map((source, index) => link(String(index), source as CellId, 'BCDEF'[index] as CellId, 'excitatory', strength))
+    const stim = { onsetMs: 500, durationMs: 50, amplitude: 1 }
+    const noLoop = run(draftOf(6, chain(2), stim))
+    const withLoop = run(draftOf(6, [...chain(2), link('x', 'F', 'A', 'excitatory', 2)], stim))
+    const looped = run(presetById('loop').draft)
+    locale.value = 'en'
+    expect(runFacts(noLoop).at(-1)).toContain('is still at or above the 0.10 level')
+    expect(runFacts(noLoop).at(-1)).toContain('The circuit has no excitatory feedback loop; the remaining activity comes from the delay')
+    expect(runFacts(noLoop).at(-1)).not.toContain('sustaining')
+    expect(runFacts(withLoop).at(-1)).toContain('The circuit has an excitatory feedback loop; it may be sustaining the activity.')
+    expect(runFacts(looped).at(-1)).toContain('the activity of cells A, B and C is still at or above the 0.10 level')
+    runFacts(looped).forEach(english)
+  })
+
+  it('labels the engine circuit in the current language without changing what is computed', () => {
+    const draft = draftOf(3, [link('a', 'A', 'B', 'excitatory', 0.6), link('b', 'C', 'B', 'inhibitory', 0.4), link('g', 'A', 'C', 'gap', 0.5)])
+    const turkish = buildEngineCircuit(draft)
+    const translated = inEnglish(() => buildEngineCircuit(draft))
+    expect(turkish.neurons[0]!.label).toBe('Hücre A')
+    expect(translated.neurons[0]!.label).toBe('Cell A')
+    for (const value of [translated.name, translated.provenance, ...translated.neurons.map(neuron => neuron.description), ...translated.connections.map(connection => connection.note)]) english(value)
+    expect(translated.provenance).toContain('not a real circuit, a measurement or a prediction')
+    const structure = (circuit: Circuit) => [circuit.id, circuit.neurons.map(neuron => [neuron.id, neuron.position]), circuit.connections.map(c => [c.id, c.source, c.target, c.weight, c.kind])]
+    expect(structure(translated)).toEqual(structure(turkish))
   })
 })

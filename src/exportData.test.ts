@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import pkg from '../package.json'
-import { buildCsv, buildExportRecord, csvCell, csvFile, EXPORT_NOTE, jsonFile, plainNumber, stringifyRecord } from './exportData'
+import { buildCsv, buildExportRecord, csvCell, csvFile, EXPORT_NOTE, EXPORT_NOTEEn, jsonFile, plainNumber, stringifyRecord } from './exportData'
+import { locale } from './i18n'
 import type { JsonExportArgs } from './exportData'
 import { defaultConfig, illustrativeCircuit } from './model/circuit'
 import { simulate } from './model/simulation'
@@ -161,5 +162,64 @@ describe('stringifyRecord', () => {
     expect(text).toContain('"a": [1,2.5,-3,1e-7]')
     expect(text).toContain('"b": [\n')
     expect(JSON.parse(text)).toEqual({ a: [1, 2.5, -3, 1e-7], b: ['x', 'y'], c: [], d: [[1, 2]] })
+  })
+})
+
+describe('exports in English', () => {
+  afterEach(() => { locale.value = 'tr' })
+
+  const dataset = {
+    id: 'test-dataset', title: 'Test', version: 'v1', doi: '10.0000/test',
+    sources: [{ name: 'file.xlsx', url: 'https://example.org/file.xlsx', sha256: 'abc', downloadedAtUtc: '2020-01-01T00:00:00Z' }],
+    license: { status: 'unverified-local-only', note: 'note' },
+  } as unknown as DeepReadonly<ConnectomeDataset>
+  const realArgs: JsonExportArgs = { ...args, mode: 'real', dataset }
+  /** The record with every string replaced by its type, so only structure and numbers are compared. */
+  const shape = (value: unknown): unknown => typeof value === 'string' ? 'string'
+    : Array.isArray(value) ? value.map(shape)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, shape(item)])) : value
+
+  it('translates the notes inside the JSON file and nothing else', () => {
+    const turkish = buildExportRecord(realArgs) as Record<string, any>
+    locale.value = 'en'
+    const english = buildExportRecord(realArgs) as Record<string, any>
+    expect(english.note).toBe(EXPORT_NOTEEn)
+    expect(english.note).toBe('Model output; not a measurement')
+    expect(english.scope).toContain('Cook2019')
+    expect(english.scope).toContain('not validated behavior')
+    expect(english.scope).toContain('Local use only')
+    expect((buildExportRecord(args) as Record<string, any>).scope).toContain('not biological data')
+    expect(english.output.unit).toBe('dimensionless activity, between 0 and 1')
+    expect(Object.values(english.output.conditions as Record<string, { label: string }>).map(item => item.label)).toEqual(['Reference', 'Connection silenced', 'Time constant changed'])
+    expect(english.source.statement).toContain('local use only')
+    for (const text of [english.note, english.scope, english.output.unit, english.source.statement]) expect(text).not.toMatch(/[ğĞşŞıİçÇöÖüÜ]/)
+
+    expect(Object.keys(english)).toEqual(Object.keys(turkish))
+    expect(shape(english)).toEqual(shape(turkish))
+    expect(english.output).toEqual({ ...turkish.output, unit: english.output.unit, conditions: Object.fromEntries(Object.entries(turkish.output.conditions as Record<string, object>).map(([id, item]) => [id, { ...item, label: english.output.conditions[id].label }])) })
+    expect(english.settings).toEqual(turkish.settings)
+    expect(english.source.dataset).toEqual(turkish.source.dataset)
+  })
+
+  it('keeps file names, CSV text and number formats the same in both languages', () => {
+    const csvArgs = { mode: 'illustrative', circuit: illustrativeCircuit, result: results.silenced } as const
+    const turkish = { csv: csvFile({ ...csvArgs, condition: 'silenced' }), tau: csvFile({ ...csvArgs, condition: 'tau' }), json: jsonFile(args) }
+    locale.value = 'en'
+    expect(csvFile({ ...csvArgs, condition: 'silenced' })).toEqual(turkish.csv)
+    expect(csvFile({ ...csvArgs, condition: 'silenced' }).name).toBe('circuitiary-sekiz-hucreli-baglanti-susturuldu.csv')
+    expect(csvFile({ ...csvArgs, condition: 'tau' }).name).toBe('circuitiary-sekiz-hucreli-zaman-sabiti-degisti.csv')
+    expect(csvFile({ ...csvArgs, condition: 'tau' })).toEqual(turkish.tau)
+    expect(jsonFile(args).name).toBe(turkish.json.name)
+    expect(jsonFile(args).text).toContain('"note": "Model output; not a measurement"')
+    expect(jsonFile(args).text).toMatch(/"timesMs": \[0,1,2,3,/)
+  })
+
+  it('returns to the unchanged Turkish text', () => {
+    const before = jsonFile(args).text
+    locale.value = 'en'
+    expect(jsonFile(args).text).not.toBe(before)
+    locale.value = 'tr'
+    expect(jsonFile(args).text).toBe(before)
+    expect((buildExportRecord(args) as Record<string, any>).note).toBe(EXPORT_NOTE)
   })
 })

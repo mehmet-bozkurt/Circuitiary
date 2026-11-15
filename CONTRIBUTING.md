@@ -50,18 +50,18 @@ MIT lisansı (bkz. [LICENSE](LICENSE)) yalnızca kod ve özgün metinler içindi
 Her pull request şu beş şeye göre okunur:
 
 1. **Bilimsel dürüstlük.** Biyolojiyle ilgili her ifade için bir kaynak bağlantısı verin (makale/DOI, WormAtlas, OpenWorm belgesi, ders kitabı). Model çıktısını asla ölçüm gibi sunmayın; "parametreli öğretim modeli" çerçevesi korunur. Emin olmadığınız şeyi "bilinmiyor" diye yazın. Ayrıntı: [docs/scientific-scope.md](docs/scientific-scope.md).
-2. **Ondalık virgül.** Öğrenene gösterilen sayılar Türkçe biçimlenir: `src/format.ts` içindeki `decimal` ve `withComma` kullanılır; metne elle `0.5` yazılmaz. Binlik ayırıcı kullanılmaz.
+2. **Sayı biçimi ve iki dil.** Öğrenene gösterilen sayılar `src/format.ts` içindeki `decimal` ve `withComma` ile yazılır (Türkçede ondalık virgül, İngilizcede nokta); metne elle `0.5` yazılmaz, binlik ayırıcı kullanılmaz. Görünen her yeni metin Türkçe ve İngilizce birlikte eklenir; kurallar [docs/i18n.md](docs/i18n.md) içindedir ve tür denetimi eksik çeviriyi yakalar.
 3. **Erişilebilirlik.** WCAG AA kontrastı (açık ve koyu temada), doğru rol ve ad (`role`, `aria-*`), tam klavye kullanımı ve görünür odak. Yalnız renkle bilgi taşımayın; grafikler için tablo karşılığı bulunur.
 4. **Her davranışın testi.** Yeni ya da değişen davranış için Vitest birim testi ekleyin; arayüze dokunuyorsa `tests/` altında bir Playwright senaryosu da ekleyin. Hata düzeltmesi, önce hatayı yakalayan bir testle gelir.
 5. **Veri dosyası yok.** Yukarıdaki bölüme bakın.
 
-Ek olarak: **küçük ve odaklı PR'lar** açın (tek konu, tek amaç), tür denetimi ve testler yerelde geçsin, gereksiz bağımlılık eklemeyin (yeni bağımlılık için önce issue açın), commit ve PR açıklamaları Türkçe ya da İngilizce olabilir. Arayüz dili şimdilik Türkçedir.
+Ek olarak: **küçük ve odaklı PR'lar** açın (tek konu, tek amaç), tür denetimi ve testler yerelde geçsin, gereksiz bağımlılık eklemeyin (yeni bağımlılık için önce issue açın), commit ve PR açıklamaları Türkçe ya da İngilizce olabilir. Arayüz Türkçe açılır; İngilizce ikinci dildir.
 
 ## İlk katkı fikirleri
 
 Aşağıdakiler kodda gerçekten eksik olan, kapsamı küçük işlerdir. Bir issue açıp üstlendiğinizi yazarsanız çakışmayı önleriz.
 
-1. **İngilizce arayüz ve çeviri altyapısı** (`good first issue`, `translation`). Metinler şu an `src/learning/*Content.ts`, `src/terms/glossary.ts` ve bileşenlerin içinde Türkçe yazılıdır. İlk adım küçük olabilir: tek bir sayfanın (örneğin Sözlük) metinlerini bir sözlük nesnesine ayırmak ve dil anahtarının nasıl durması gerektiğini bir issue'da önermek.
+1. **İngilizce çevirinin gözden geçirilmesi** (`good first issue`, `translation`). Arayüzün İngilizcesi `*.messages.ts` dosyalarında ve içerik modüllerindeki `…En` ikizlerinde durur ([docs/i18n.md](docs/i18n.md)). Bir sayfayı İngilizce okuyup akıcı olmayan, Türkçesinden farklı bir şey söyleyen ya da bir sınırı yumuşatan cümleleri düzeltin; anlamı değiştiren düzeltmelerde Türkçe metni esas alın.
 2. **Tür atlasına kaynaklı yeni kayıtlar** (`good first issue`, `atlas`). `src/learning/speciesAtlas.ts` şu an *C. elegans* ve *Drosophila* kayıtlarını içerir. Her yeni kayıt kaynak bağlantıları, sayım birimleri ve veri lisansı durumuyla gelir; sayıları aynı birimde olmayan kayıtlar karşılaştırılmaz.
 3. **Devre kurucuya yeni önayarlar** (`good first issue`, `presets`). `src/learning/circuitBuilder.ts` içindeki `presets` listesine, öğretici bir fikri gösteren yeni bir devre ekleyin (örneğin ileri besleme baskılama ya da çift yönlü gap); ardından `circuitBuilder.test.ts`'e testini yazın.
 4. **Sözlüğe kaynaklı yeni terimler** (`good first issue`, `glossary`). `src/terms/glossary.ts` içindeki maddeler anlam, sözcük kökeni ve kaynak bağlantısı taşır. Yeni terim aynı yapıyı izler; `glossary.test.ts` benzersiz kimlik, anlam, köken ve HTTPS kaynak şartını denetler.

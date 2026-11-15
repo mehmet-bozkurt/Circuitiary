@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { decimal } from '../format'
+import { L, useMessages } from '../i18n'
+import { messages } from './CircuitBuilderPage.messages'
 import { TICK_FRACTIONS, bandWidth, plotX, plotY, tracePath, useChartWidth } from '../learning/plotBox'
 import {
-  CELL_IDS, LIMITS, LINK_TYPE_LABELS, REPORT_LEVEL, blankDraft, cellIds, cloneDraft, draftKey, linkLabel, presetById, presets,
-  runDraft, strengthLimits, validateDraft,
+  CELL_IDS, LIMITS, LINK_TYPE_LABELS, REPORT_LEVEL, blankDraft, cellIds, cloneDraft, draftKey, linkLabel, linkTypeLabel, presetById, presets, presetsEn,
+  runDraft, runFacts, strengthLimits, validateDraft,
   type BuilderLink, type BuilderPreset, type BuilderProblem, type BuilderRun, type CellId, type LinkType,
 } from '../learning/circuitBuilder'
+
+const m = useMessages(messages)
 
 const emit = defineEmits<{ ready: [] }>()
 onMounted(async () => { await nextTick(); emit('ready') })
@@ -16,12 +20,16 @@ const linkTypes = Object.keys(LINK_TYPE_LABELS) as LinkType[]
 let counter = 0
 const newLinkId = () => `n${++counter}`
 
-const status = ref('')
-const loadedPreset = ref<BuilderPreset | null>(null)
+// State holds ids, numbers and functions, never finished sentences, so everything on the page follows a language change.
+const status = ref<(() => string) | null>(null)
+const loadedPresetId = ref<BuilderPreset['id'] | null>(null)
+const loadedPreset = computed(() => loadedPresetId.value === null ? null : presetById(loadedPresetId.value))
+const presetList = computed(() => L(presets, presetsEn))
 let loadedKey = ''
 const recorded = ref<BuilderRun | null>(null)
 const recordedKey = ref('')
 const runNumber = ref(0)
+// A problem writes its sentence when `message` is read (circuitBuilder.ts), so a kept list is not fixed in one language.
 const engineProblems = ref<BuilderProblem[]>([])
 
 const cells = computed(() => cellIds(draft.cellCount))
@@ -40,20 +48,20 @@ function replaceDraft(next: typeof draft) {
 function loadPreset(id: BuilderPreset['id']) {
   const preset = presetById(id)
   replaceDraft(cloneDraft(preset.draft))
-  loadedPreset.value = preset
+  loadedPresetId.value = id
   loadedKey = draftKey(draft)
   recorded.value = null
   engineProblems.value = []
-  status.value = `“${preset.title}” örneği yüklendi. İstersen değiştir, sonra çalıştır.`
+  status.value = () => m.value.statusPresetLoaded(presetById(id).title)
 }
 
 function reset() {
   replaceDraft(blankDraft())
-  loadedPreset.value = null
+  loadedPresetId.value = null
   recorded.value = null
   runNumber.value = 0
   engineProblems.value = []
-  status.value = 'Devre sıfırlandı: 3 hücre, bağlantı yok. Önceki sonuç temizlendi.'
+  status.value = () => m.value.statusReset
 }
 
 function setCellCount(event: Event) {
@@ -65,9 +73,10 @@ function setCellCount(event: Event) {
   draft.links = draft.links.filter(link => kept.has(link.source) && kept.has(link.target))
   if (!kept.has(draft.stimulus.target)) draft.stimulus.target = 'A'
   const dropped = before - draft.links.length
+  const now = cellIds(count)
   status.value = removedCells.length
-    ? `${removedCells.join(', ')} çıkarıldı; ona bağlı ${dropped} bağlantı silindi. Hücre sayısı ${count}.`
-    : `Hücre sayısı ${count} oldu (${cells.value[0]}–${cells.value.at(-1)}).`
+    ? () => m.value.statusCellsRemoved(removedCells, dropped, count)
+    : () => m.value.statusCellCount(count, now[0]!, now.at(-1)!)
 }
 
 function focusSoon(id: string) {
@@ -83,7 +92,9 @@ function addLink() {
   }
   const link: BuilderLink = { id: newLinkId(), source: pair[0], target: pair[1], type: 'excitatory', strength: 0.8 }
   draft.links.push(link)
-  status.value = `Bağlantı ${draft.links.length} eklendi: ${linkLabel(link)}. Kaynağı, hedefi, türü ve gücü seçebilirsin.`
+  // The line keeps describing the connection as it was added, whatever is edited later.
+  const [n, added] = [draft.links.length, { ...link }]
+  status.value = () => m.value.statusLinkAdded(n, linkLabel(added))
   focusSoon(`link-${link.id}-type`)
 }
 
@@ -91,7 +102,8 @@ function removeLink(id: string) {
   const index = draft.links.findIndex(link => link.id === id)
   if (index < 0) return
   const [removed] = draft.links.splice(index, 1)
-  status.value = `Bağlantı ${index + 1} kaldırıldı (${linkLabel(removed!)}). ${draft.links.length} bağlantı kaldı.`
+  const [gone, left] = [{ ...removed! }, draft.links.length]
+  status.value = () => m.value.statusLinkRemoved(index + 1, linkLabel(gone), left)
   const next = draft.links[index] ?? draft.links[index - 1]
   focusSoon(next ? `link-${next.id}-remove` : 'builder-add-link')
 }
@@ -105,21 +117,22 @@ function runCircuit() {
   const outcome = runDraft(draft)
   if (!outcome.ok) {
     engineProblems.value = outcome.problems
-    status.value = 'Hesap tamamlanamadı.'
+    status.value = () => m.value.statusRunFailed
     return
   }
   engineProblems.value = []
   recorded.value = outcome.run
   recordedKey.value = draftKey(draft)
   runNumber.value += 1
-  status.value = `Hesaplandı (kayıt #${runNumber.value}). ${outcome.run.cells.length} hücrenin eğrisi ve tablosu sonuç bölümünde.`
+  const [n, count] = [runNumber.value, outcome.run.cells.length]
+  status.value = () => m.value.statusRunDone(n, count)
 }
 
 const sliderText = (value: number, digits: number) => decimal(value, digits)
-const ms = (value: number | null) => value === null ? '—' : `${decimal(value, 0)} ms`
-const fieldLabel = (link: BuilderLink, side: 'source' | 'target') => link.type === 'gap' ? (side === 'source' ? 'Hücre 1' : 'Hücre 2') : (side === 'source' ? 'Kaynak' : 'Hedef')
+const ms = (value: number | null) => value === null ? '—' : m.value.milliseconds(decimal(value, 0))
+const fieldLabel = (link: BuilderLink, side: 'source' | 'target') => link.type === 'gap' ? (side === 'source' ? m.value.cell1 : m.value.cell2) : (side === 'source' ? m.value.source : m.value.target)
 
-// Chart: one line per cell on a shared 0-1 axis. Colour, dash pattern and the legend letter together identify a cell.
+// Chart: one line per cell on a shared 0-1 axis. Color, dash pattern and the legend letter together identify a cell.
 const traceStyles = [
   { color: 'var(--b-c0)', dash: undefined }, { color: 'var(--b-c1)', dash: '9 5' }, { color: 'var(--b-c2)', dash: '2 4' },
   { color: 'var(--b-c3)', dash: '11 4 2 4' }, { color: 'var(--b-c4)', dash: '16 6' }, { color: 'var(--b-c5)', dash: '1 6' },
@@ -137,90 +150,95 @@ const paths = computed(() => {
   return run ? run.cells.map((cell, index) => ({ id: cell.id, d: tracePath(run.result.activity[cell.id]!, run.result.timesMs, x, y), style: traceStyles[index]! })) : []
 })
 const settings = computed(() => recorded.value?.result.settings.stimulus)
-const chartLabel = computed(() => recorded.value
-  ? `Her hücrenin boyutsuz model aktivitesi, ${recorded.value.cells.map(cell => cell.id).join(', ')}. Dikey eksen 0 ile 1 arası; yatay eksen model zamanı, milisaniye. Sayılar aşağıdaki tabloda.`
-  : '')
+// One message for the whole sentence. The spaces around it keep the paragraph's text exactly as it was when the sentence was written out in the template.
+const recordLine = computed(() => {
+  const [run, stimulus] = [recorded.value, settings.value]
+  return run && stimulus ? ` ${m.value.recordSettings(runNumber.value, run.draft.cellCount, run.draft.links.length, stimulus.target, decimal(stimulus.amplitude, 2), decimal(stimulus.onsetMs, 0), decimal(stimulus.onsetMs + stimulus.durationMs, 0))} ` : ''
+})
+const chartLabel = computed(() => recorded.value ? m.value.chartLabel(recorded.value.cells.map(cell => cell.id)) : '')
+// Written again from the recorded numbers on every render, so the sentences of an earlier run follow the language too.
+const facts = computed(() => recorded.value ? runFacts(recorded.value) : [])
 </script>
 
 <template>
   <main id="circuit-builder" tabindex="-1" class="builder-page">
     <header class="builder-intro">
-      <p class="builder-eyebrow">CIRCUITIARY / ATÖLYE</p>
-      <h1 tabindex="-1">Devre kur</h1>
-      <p class="builder-summary">2–6 hücrelik küçük bir devre kur, bir hücreyi uyar ve her hücrenin ne yaptığını gör. Hazır bir örnekle başlayabilir ya da boş devreden kendin kurabilirsin.</p>
+      <p class="builder-eyebrow">{{ m.eyebrow }}</p>
+      <h1 tabindex="-1">{{ m.title }}</h1>
+      <p class="builder-summary">{{ m.summary }}</p>
     </header>
 
     <div class="builder-boundary" data-testid="builder-boundary">
-      <strong>Bu bir oyuncak model.</strong>
-      <p>Kurduğun devre gerçek bir devre değildir ve sonuç bir tahmin değildir. A–F yalnızca etikettir; bağlantı güçleri ve hücre zaman sabiti (τ = 30 model ms) senin seçtiğin boyutsuz varsayımlardır. Hesap, projenin sürekli etkinlik modelini kullanır: aktivite 0–1 arasında boyutsuz bir değerdir; voltaj, ateşleme hızı, kalsiyum ya da davranış değildir.</p>
+      <strong>{{ m.boundaryTitle }}</strong>
+      <p>{{ m.boundaryText }}</p>
     </div>
 
     <div class="builder-grid">
       <div class="builder-setup">
         <section aria-labelledby="builder-presets-title" class="builder-card">
-          <h2 id="builder-presets-title">Hazır örnekler</h2>
-          <p class="builder-help">Her örnek tek bir şey öğretir. Birini yükle, sonra çalıştır; ardından “Dene” önerisini uygula.</p>
-          <div class="preset-buttons" role="group" aria-label="Hazır örnekler">
-            <button v-for="preset in presets" :key="preset.id" type="button" class="preset-button" :data-preset="preset.id" @click="loadPreset(preset.id)">
+          <h2 id="builder-presets-title">{{ m.presetsTitle }}</h2>
+          <p class="builder-help">{{ m.presetsHelp }}</p>
+          <div class="preset-buttons" role="group" :aria-label="m.presetsTitle">
+            <button v-for="preset in presetList" :key="preset.id" type="button" class="preset-button" :data-preset="preset.id" @click="loadPreset(preset.id)">
               <strong>{{ preset.title }}</strong><span>{{ preset.teaches }}</span>
             </button>
           </div>
           <section v-if="loadedPreset" class="preset-note" aria-labelledby="preset-note-title" data-testid="builder-preset-note" :data-preset="loadedPreset.id">
             <h3 id="preset-note-title">{{ loadedPreset.title }}</h3>
-            <p><strong>Ne öğretiyor?</strong> {{ loadedPreset.teaches }}</p>
-            <p><strong>Neye bak?</strong> {{ loadedPreset.look }}</p>
-            <p><strong>Dene:</strong> {{ loadedPreset.tryThis }}</p>
-            <p><strong>Sınır:</strong> {{ loadedPreset.boundary }}</p>
-            <p v-if="presetEdited" class="builder-help" data-testid="builder-preset-edited">Bu örneği değiştirdin; açıklama yüklenen örnek içindir.</p>
+            <p><strong>{{ m.presetTeaches }}</strong> {{ loadedPreset.teaches }}</p>
+            <p><strong>{{ m.presetLook }}</strong> {{ loadedPreset.look }}</p>
+            <p><strong>{{ m.presetTry }}</strong> {{ loadedPreset.tryThis }}</p>
+            <p><strong>{{ m.presetBoundary }}</strong> {{ loadedPreset.boundary }}</p>
+            <p v-if="presetEdited" class="builder-help" data-testid="builder-preset-edited">{{ m.presetEdited }}</p>
           </section>
         </section>
 
         <section aria-labelledby="builder-cells-title" class="builder-card">
-          <h2 id="builder-cells-title">1. Hücreler ve uyaran</h2>
+          <h2 id="builder-cells-title">{{ m.cellsTitle }}</h2>
           <div class="field-grid">
             <div class="field">
-              <label for="builder-cell-count">Hücre sayısı</label>
+              <label for="builder-cell-count">{{ m.cellCount }}</label>
               <select id="builder-cell-count" :value="draft.cellCount" @change="setCellCount">
-                <option v-for="count in LIMITS.cells.max - LIMITS.cells.min + 1" :key="count" :value="count + LIMITS.cells.min - 1">{{ count + LIMITS.cells.min - 1 }} hücre ({{ CELL_IDS[0] }}–{{ CELL_IDS[count + LIMITS.cells.min - 2] }})</option>
+                <option v-for="count in LIMITS.cells.max - LIMITS.cells.min + 1" :key="count" :value="count + LIMITS.cells.min - 1">{{ m.cellCountOption(count + LIMITS.cells.min - 1, CELL_IDS[0], CELL_IDS[count + LIMITS.cells.min - 2]!) }}</option>
               </select>
             </div>
             <div class="field">
-              <label for="builder-stim-target">Uyarılan hücre</label>
+              <label for="builder-stim-target">{{ m.stimulusTarget }}</label>
               <select id="builder-stim-target" v-model="draft.stimulus.target">
-                <option v-for="id in cells" :key="id" :value="id">Hücre {{ id }}</option>
+                <option v-for="id in cells" :key="id" :value="id">{{ m.cellOption(id) }}</option>
               </select>
             </div>
             <div class="field">
-              <div class="field-head"><label for="builder-amplitude">Uyaran genliği</label><output for="builder-amplitude" data-testid="builder-amplitude-output">{{ sliderText(draft.stimulus.amplitude, 2) }}</output></div>
+              <div class="field-head"><label for="builder-amplitude">{{ m.amplitude }}</label><output for="builder-amplitude" data-testid="builder-amplitude-output">{{ sliderText(draft.stimulus.amplitude, 2) }}</output></div>
               <input id="builder-amplitude" v-model.number="draft.stimulus.amplitude" type="range" :min="LIMITS.amplitude.min" :max="LIMITS.amplitude.max" :step="LIMITS.amplitude.step" :aria-valuetext="sliderText(draft.stimulus.amplitude, 2)" />
             </div>
             <div class="field">
-              <div class="field-head"><label for="builder-onset">Başlangıç</label><output for="builder-onset">{{ ms(draft.stimulus.onsetMs) }}</output></div>
+              <div class="field-head"><label for="builder-onset">{{ m.onset }}</label><output for="builder-onset">{{ ms(draft.stimulus.onsetMs) }}</output></div>
               <input id="builder-onset" v-model.number="draft.stimulus.onsetMs" type="range" :min="LIMITS.onsetMs.min" :max="LIMITS.onsetMs.max" :step="LIMITS.onsetMs.step" :aria-valuetext="ms(draft.stimulus.onsetMs)" />
             </div>
             <div class="field">
-              <div class="field-head"><label for="builder-pulse">Süre</label><output for="builder-pulse">{{ ms(draft.stimulus.durationMs) }}</output></div>
+              <div class="field-head"><label for="builder-pulse">{{ m.pulse }}</label><output for="builder-pulse">{{ ms(draft.stimulus.durationMs) }}</output></div>
               <input id="builder-pulse" v-model.number="draft.stimulus.durationMs" type="range" :min="LIMITS.pulseMs.min" :max="LIMITS.pulseMs.max" :step="LIMITS.pulseMs.step" :aria-valuetext="ms(draft.stimulus.durationMs)" />
             </div>
           </div>
-          <p class="builder-help">Uyaran, seçilen hücreye başlangıçtan itibaren verilen sabit bir darbedir. Kayıt 700 model ms sürer; zaman ölçeği ölçüme kalibre edilmemiştir.</p>
+          <p class="builder-help">{{ m.stimulusHelp }}</p>
         </section>
 
         <section aria-labelledby="builder-links-title" class="builder-card">
-          <h2 id="builder-links-title">2. Bağlantılar</h2>
-          <p class="builder-help">Kimyasal bağlantının yönü vardır; gücü bir hücrenin diğerine etkisinin boyutsuz model ağırlığıdır. Elektriksel (gap) bağlantı iki hücre arasında tek, simetrik bir bağlantıdır: etki iki yönde de aynı katsayıyla işler.</p>
-          <p v-if="!draft.links.length" class="builder-empty" data-testid="builder-no-links">Henüz bağlantı yok. Bu hâlde yalnız uyarılan hücre yanıt verir. Bir örnek yükle ya da “Bağlantı ekle” düğmesine bas.</p>
-          <ul v-else class="link-list" aria-label="Bağlantı listesi">
+          <h2 id="builder-links-title">{{ m.linksTitle }}</h2>
+          <p class="builder-help">{{ m.linksHelp }}</p>
+          <p v-if="!draft.links.length" class="builder-empty" data-testid="builder-no-links">{{ m.noLinks }}</p>
+          <ul v-else class="link-list" :aria-label="m.linkList">
             <li v-for="(link, index) in draft.links" :key="link.id" class="link-row" :class="{ invalid: invalidLinks.has(link.id) }" :data-testid="`builder-link-${index + 1}`" :data-type="link.type">
               <div class="link-head">
-                <p class="link-title"><span :id="`link-${link.id}-title`">Bağlantı {{ index + 1 }}</span> <span class="link-sum">{{ linkLabel(link) }}</span><span v-if="invalidLinks.has(link.id)" class="link-flag"> · Sorun var</span></p>
-                <button :id="`link-${link.id}-remove`" type="button" class="secondary-button" :aria-label="`Kaldır: bağlantı ${index + 1}, ${linkLabel(link)}`" @click="removeLink(link.id)">Kaldır</button>
+                <p class="link-title"><span :id="`link-${link.id}-title`">{{ m.linkTitle(index + 1) }}</span> <span class="link-sum">{{ linkLabel(link) }}</span><span v-if="invalidLinks.has(link.id)" class="link-flag">{{ m.linkFlag }}</span></p>
+                <button :id="`link-${link.id}-remove`" type="button" class="secondary-button" :aria-label="m.removeLabel(index + 1, linkLabel(link))" @click="removeLink(link.id)">{{ m.remove }}</button>
               </div>
               <div class="field-grid">
                 <div class="field">
-                  <label :id="`link-${link.id}-type-label`" :for="`link-${link.id}-type`">Tür</label>
+                  <label :id="`link-${link.id}-type-label`" :for="`link-${link.id}-type`">{{ m.type }}</label>
                   <select :id="`link-${link.id}-type`" :value="link.type" :aria-labelledby="`link-${link.id}-title link-${link.id}-type-label`" @change="setType(link, $event)">
-                    <option v-for="type in linkTypes" :key="type" :value="type">{{ LINK_TYPE_LABELS[type] }}</option>
+                    <option v-for="type in linkTypes" :key="type" :value="type">{{ linkTypeLabel(type) }}</option>
                   </select>
                 </div>
                 <div class="field">
@@ -236,70 +254,70 @@ const chartLabel = computed(() => recorded.value
                   </select>
                 </div>
                 <div class="field field-wide">
-                  <div class="field-head"><label :id="`link-${link.id}-strength-label`" :for="`link-${link.id}-strength`">Güç</label><output :for="`link-${link.id}-strength`" :data-testid="`builder-link-${index + 1}-strength-output`">{{ sliderText(link.strength, 2) }}</output></div>
+                  <div class="field-head"><label :id="`link-${link.id}-strength-label`" :for="`link-${link.id}-strength`">{{ m.strength }}</label><output :for="`link-${link.id}-strength`" :data-testid="`builder-link-${index + 1}-strength-output`">{{ sliderText(link.strength, 2) }}</output></div>
                   <input :id="`link-${link.id}-strength`" v-model.number="link.strength" type="range" :min="strengthLimits(link.type).min" :max="strengthLimits(link.type).max" :step="strengthLimits(link.type).step" :aria-labelledby="`link-${link.id}-title link-${link.id}-strength-label`" :aria-valuetext="sliderText(link.strength, 2)" />
                 </div>
               </div>
-              <p v-if="link.type === 'gap'" class="builder-help">İki yönde aynı etki: bir hücre diğerinin aktivitesine doğru çekilir. Tek kayıt, tek katsayı.</p>
-              <p v-else-if="link.type === 'inhibitory'" class="builder-help">Baskılayıcı: hedefe gelen toplam girdiden {{ sliderText(link.strength, 2) }} × kaynak aktivitesi çıkarılır.</p>
+              <p v-if="link.type === 'gap'" class="builder-help">{{ m.gapHelp }}</p>
+              <p v-else-if="link.type === 'inhibitory'" class="builder-help">{{ m.inhibitoryHelp(sliderText(link.strength, 2)) }}</p>
             </li>
           </ul>
-          <button id="builder-add-link" type="button" class="secondary-button add-button" :disabled="!canAddLink" @click="addLink">Bağlantı ekle</button>
-          <p v-if="!canAddLink" class="builder-help">En fazla {{ LIMITS.links.max }} bağlantı ekleyebilirsin.</p>
+          <button id="builder-add-link" type="button" class="secondary-button add-button" :disabled="!canAddLink" @click="addLink">{{ m.addLink }}</button>
+          <p v-if="!canAddLink" class="builder-help">{{ m.maxLinks(LIMITS.links.max) }}</p>
         </section>
 
         <section aria-labelledby="builder-run-title" class="builder-card">
-          <h2 id="builder-run-title">3. Çalıştır</h2>
+          <h2 id="builder-run-title">{{ m.runTitle }}</h2>
           <div id="builder-validity" class="validity" role="status" aria-live="polite" data-testid="builder-validity" :data-valid="problems.length === 0">
-            <p v-if="!problems.length">Devre geçerli. Çalıştırabilirsin.</p>
+            <p v-if="!problems.length">{{ m.valid }}</p>
             <template v-else>
-              <p>Çalıştır düğmesi şu sorunlar giderilene kadar kapalı:</p>
+              <p>{{ m.invalidIntro }}</p>
               <ul><li v-for="(problem, index) in problems" :key="index" :data-code="problem.code">{{ problem.message }}</li></ul>
             </template>
           </div>
           <div class="builder-actions">
-            <button type="button" class="primary-button" data-testid="builder-run" :disabled="problems.length > 0" aria-describedby="builder-validity" @click="runCircuit">{{ recorded ? 'Yeniden çalıştır' : 'Çalıştır' }}</button>
-            <button type="button" class="secondary-button" data-testid="builder-reset" @click="reset">Sıfırla</button>
+            <button type="button" class="primary-button" data-testid="builder-run" :disabled="problems.length > 0" aria-describedby="builder-validity" @click="runCircuit">{{ recorded ? m.runAgain : m.run }}</button>
+            <button type="button" class="secondary-button" data-testid="builder-reset" @click="reset">{{ m.reset }}</button>
           </div>
-          <p class="builder-status" role="status" aria-live="polite" data-testid="builder-status">{{ status }}</p>
+          <p class="builder-status" role="status" aria-live="polite" data-testid="builder-status">{{ status?.() }}</p>
           <ul v-if="engineProblems.length" class="engine-problems" role="alert"><li v-for="problem in engineProblems" :key="problem.code">{{ problem.message }}</li></ul>
         </section>
       </div>
 
       <section aria-labelledby="builder-result-title" class="builder-card builder-results" tabindex="0">
-        <h2 id="builder-result-title">Sonuç</h2>
+        <h2 id="builder-result-title">{{ m.resultTitle }}</h2>
         <div ref="plotHost">
         <div v-if="!recorded" class="not-run" data-testid="builder-not-run">
-          <p>Sonuç henüz hesaplanmadı.</p>
-          <p>Devreyi kurup “Çalıştır” düğmesine bas. Her hücre için bir eğri ve bir tablo satırı görünecek.</p>
+          <p>{{ m.notRun }}</p>
+          <p>{{ m.notRunHelp }}</p>
         </div>
         <div v-else data-testid="builder-result" :data-run-number="runNumber" :data-stale="stale">
-          <p v-if="stale" class="stale-warning" role="status" data-testid="builder-stale">Ayar değişti. Aşağıdaki eğriler ve sayılar önceki çalıştırmaya ait. Yeni devrenin sonucunu görmek için yeniden çalıştır.</p>
+          <p v-if="stale" class="stale-warning" role="status" data-testid="builder-stale">{{ m.stale }}</p>
           <p class="record-settings" data-testid="builder-run-settings" :data-cells="recorded.draft.cellCount" :data-links="recorded.draft.links.length" :data-target="settings!.target" :data-amplitude="settings!.amplitude" :data-onset="settings!.onsetMs" :data-pulse="settings!.durationMs">
-            Kayıt #{{ runNumber }}: {{ recorded.draft.cellCount }} hücre, {{ recorded.draft.links.length }} bağlantı. {{ settings!.target }} hücresine {{ decimal(settings!.amplitude, 2) }} genlikli darbe, {{ decimal(settings!.onsetMs, 0) }}–{{ decimal(settings!.onsetMs + settings!.durationMs, 0) }} model ms.
+            {{ recordLine }}
           </p>
           <figure class="trace-figure">
-            <figcaption>Her hücrenin zaman içindeki model aktivitesi</figcaption>
-            <ul class="trace-legend" aria-label="Grafik çizgileri">
-              <li v-for="path in paths" :key="path.id"><svg class="swatch" width="30" height="10" viewBox="0 0 30 10" aria-hidden="true"><line x1="0" y1="5" x2="30" y2="5" :stroke="path.style.color" stroke-width="3" :stroke-dasharray="path.style.dash" /></svg>{{ path.id }}<template v-if="path.id === settings!.target"> (uyarılan)</template></li>
-              <li><span class="band-swatch" aria-hidden="true"></span>Uyaran açık</li>
+            <figcaption>{{ m.figureCaption }}</figcaption>
+            <ul class="trace-legend" :aria-label="m.legend">
+              <li v-for="path in paths" :key="path.id"><svg class="swatch" width="30" height="10" viewBox="0 0 30 10" aria-hidden="true"><line x1="0" y1="5" x2="30" y2="5" :stroke="path.style.color" stroke-width="3" :stroke-dasharray="path.style.dash" /></svg>{{ path.id }}<template v-if="path.id === settings!.target">{{ m.legendStimulated }}</template></li>
+              <li><span class="band-swatch" aria-hidden="true"></span>{{ m.legendPulse }}</li>
             </ul>
             <svg data-testid="builder-plot" role="img" :aria-label="chartLabel" :viewBox="`0 0 ${width} ${height}`">
               <rect data-testid="builder-pulse-band" :x="x(settings!.onsetMs)" :y="pad.top" :width="bandWidth(x, settings!.onsetMs, settings!.durationMs, maxTime)" :height="height - pad.top - pad.bottom" class="pulse-band" />
               <g v-for="tick in TICK_FRACTIONS" :key="`y${tick}`"><line :x1="pad.left" :x2="width - pad.right" :y1="y(tick)" :y2="y(tick)" class="grid-line" :stroke-dasharray="tick ? '3 5' : undefined" /><text :x="pad.left - 8" :y="y(tick) + 4" text-anchor="end">{{ decimal(tick, 2) }}</text></g>
-              <g v-for="fraction in TICK_FRACTIONS" :key="`x${fraction}`"><text :x="x(maxTime * fraction)" :y="height - pad.bottom + 18" text-anchor="middle">{{ Math.round(maxTime * fraction) }}</text></g>
-              <text :x="pad.left" y="12">Boyutsuz model aktivitesi</text>
-              <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 6" text-anchor="middle">Model zamanı · ms</text>
+              <g v-for="fraction in TICK_FRACTIONS" :key="`x${fraction}`"><text :x="x(maxTime * fraction)" :y="height - pad.bottom + 18" text-anchor="middle">{{ decimal(Math.round(maxTime * fraction), 0) }}</text></g>
+              <text :x="pad.left" y="12">{{ m.axisActivity }}</text>
+              <text :x="pad.left + (width - pad.left - pad.right) / 2" :y="height - 6" text-anchor="middle">{{ m.axisTime }}</text>
               <path v-for="path in paths" :key="path.id" :data-trace="path.id" :d="path.d" fill="none" :stroke="path.style.color" stroke-width="2.6" stroke-linejoin="round" :stroke-dasharray="path.style.dash" />
             </svg>
-            <p class="plot-note">Bütün çizgiler aynı 0–1 ölçeğini kullanır. Renk, çizgi biçimi ve gösterge harfi birlikte hücreyi belirtir.</p>
+            <p class="plot-note">{{ m.plotNote }}</p>
           </figure>
           <table class="metrics-table" data-testid="builder-table">
-            <caption>Hücre başına hesaplanan ölçütler · bu kayıt</caption>
-            <thead><tr><th scope="col">Hücre</th><th scope="col">Tepe</th><th scope="col">Tepe zamanı</th><th scope="col">{{ decimal(REPORT_LEVEL, 2) }} düzeyine ulaşma</th><th scope="col">{{ decimal(recorded.result.timesMs.at(-1)!, 0) }} ms’de</th></tr></thead>
+            <caption>{{ m.tableCaption }}</caption>
+            <thead><tr><th scope="col">{{ m.columnCell }}</th><th scope="col">{{ m.columnPeak }}</th><th scope="col">{{ m.columnPeakTime }}</th><th scope="col">{{ m.columnReach(decimal(REPORT_LEVEL, 2)) }}</th><th scope="col">{{ m.columnFinal(decimal(recorded.result.timesMs.at(-1)!, 0)) }}</th></tr></thead>
             <tbody>
               <tr v-for="cell in recorded.cells" :key="cell.id" :data-testid="`builder-row-${cell.id}`">
-                <th scope="row">{{ cell.id }}<template v-if="cell.id === settings!.target"> · uyarılan</template></th>
+                <th scope="row">{{ cell.id }}<template v-if="cell.id === settings!.target">{{ m.rowStimulated }}</template></th>
                 <td :data-testid="`builder-peak-${cell.id}`" :data-value="cell.peak">{{ decimal(cell.peak, 3) }}</td>
                 <td :data-testid="`builder-peak-time-${cell.id}`" :data-value="cell.peakTimeMs ?? 'null'">{{ ms(cell.peakTimeMs) }}</td>
                 <td :data-testid="`builder-reach-${cell.id}`" :data-value="cell.reachMs ?? 'null'">{{ ms(cell.reachMs) }}</td>
@@ -307,11 +325,11 @@ const chartLabel = computed(() => recorded.value
               </tr>
             </tbody>
           </table>
-          <p class="plot-note">“—”, ilgili ölçütün oluşmadığını gösterir. {{ decimal(REPORT_LEVEL, 2) }} bir raporlama düzeyidir, biyolojik eşik değildir. Tepe zamanı bir olay başlangıcı ya da iletim gecikmesi değildir; son değer kararlı durum iddiası değildir.</p>
+          <p class="plot-note">{{ m.tableNote(decimal(REPORT_LEVEL, 2)) }}</p>
           <div class="facts" data-testid="builder-facts">
-            <h3>Bu sayılar ne söylüyor?</h3>
-            <ul><li v-for="fact in recorded.facts" :key="fact">{{ fact }}</li></ul>
-            <p>Bunlar yalnız kurduğun oyuncak modelin çıktısıdır. Gerçek bir hücrenin ya da devrenin böyle davrandığını göstermez.</p>
+            <h3>{{ m.factsTitle }}</h3>
+            <ul><li v-for="fact in facts" :key="fact">{{ fact }}</li></ul>
+            <p>{{ m.factsCaveat }}</p>
           </div>
         </div>
         </div>

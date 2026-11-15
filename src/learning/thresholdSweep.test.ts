@@ -131,7 +131,7 @@ describe('end-value change across the threshold', () => {
     expect(crossing.trend).toBe('steep')
   })
 
-  it('skips a failed neighbour and uses the next completed multiplier', () => {
+  it('skips a failed neighbor and uses the next completed multiplier', () => {
     const crossing = thresholdCrossing(sweepOf([done(.8, .0018), { gain: .9, ok: false }, done(1, .04), { gain: 1.1, ok: false }, done(1.2, .9776)]))!
     expect([crossing.below.gain, crossing.above.gain]).toEqual([.8, 1.2])
     expect(crossing.trend).toBe('steep')

@@ -1,4 +1,6 @@
-import { defaultConfig, illustrativeCircuit } from '../model/circuit'
+import { decimal } from '../format'
+import { locale } from '../i18n'
+import { defaultConfig, illustrativeCircuit, illustrativeCircuitEn } from '../model/circuit'
 import { simulate } from '../model/simulation'
 import type { Circuit, DeepReadonly, SimulationConfig, SimulationResult } from '../model/types'
 
@@ -28,6 +30,7 @@ export interface GuidedOutputMetrics {
 }
 
 export interface GuidedCondition {
+  /** Turkish text fixed when the run was recorded; show `guidedConditionLabel()` instead. */
   label: string
   result: SimulationResult
   metrics: GuidedOutputMetrics
@@ -36,6 +39,7 @@ export interface GuidedCondition {
 export interface GuidedControlledVariable {
   kind: 'stimulus-amplitude' | 'connection-effect' | 'time-constant'
   targetId: string
+  /** Turkish text fixed when the run was recorded; show `guidedVariableLabel()` instead. */
   label: string
   baselineValue: number
   comparisonValue: number
@@ -49,6 +53,7 @@ interface GuidedRunRecord {
   runNumber: number
   circuit: Circuit
   controlledVariable: GuidedControlledVariable
+  /** Turkish text fixed when the run was recorded; show `guidedAssumptions()` instead. */
   assumptions: string[]
   baseline: GuidedCondition
   comparison: GuidedCondition
@@ -208,4 +213,43 @@ export function runGuidedExperiment(
       peakDelayMs: timeDifference(comparisonMetrics.peakDelayMs, baselineMetrics.peakDelayMs),
     },
   })
+}
+
+// A recorded run keeps the Turkish text it was created with, so a snapshot is the same
+// whatever the interface language was. The functions below give the same text in the
+// current language, built from the recorded ids and values; call them while rendering.
+
+/** The name of one condition of a recorded run, in the interface language. */
+export function guidedConditionLabel(snapshot: GuidedRunSnapshot, condition: 'baseline' | 'comparison'): string {
+  if (locale.value !== 'en') return snapshot[condition].label
+  const variable = snapshot.controlledVariable
+  const value = condition === 'baseline' ? variable.baselineValue : variable.comparisonValue
+  if (variable.kind === 'stimulus-amplitude') return `${variable.targetId} stimulus ${decimal(value, 2)}`
+  if (variable.kind === 'time-constant') return `O1 time constant ${value} ms`
+  const source = snapshot.circuit.connections.find(edge => edge.id === variable.targetId)?.source ?? variable.targetId
+  return condition === 'baseline' ? `${source} → O1 connection active` : `${source} → O1 model contribution zero`
+}
+
+/** The name of the single setting a recorded run changed, in the interface language. */
+export function guidedVariableLabel(snapshot: GuidedRunSnapshot): string {
+  if (locale.value !== 'en') return snapshot.controlledVariable.label
+  const kind = snapshot.controlledVariable.kind
+  return kind === 'stimulus-amplitude' ? 'Stimulus amplitude' : kind === 'connection-effect' ? 'Model contribution of a single connection' : 'O1 time constant'
+}
+
+/** The assumptions of a recorded run, in the interface language and in the recorded order. */
+export function guidedAssumptions(snapshot: GuidedRunSnapshot): readonly string[] {
+  if (locale.value !== 'en') return snapshot.assumptions
+  return [
+    illustrativeCircuitEn.provenance,
+    'The existing eight-cell example circuit and the existing simulation engine are used; they contain no biological connection data or measured parameters.',
+    'The output is dimensionless continuous model activity in the range 0–1; it is not a membrane voltage, a calcium measurement, a firing rate or an event count.',
+    'Time is model time in ms; the time constants, connection signs and weights were chosen for teaching.',
+    'In both conditions the recording lasts 700 ms, the step is 1 ms, the S1 pulse is [100,300) ms and the initial activities are zero.',
+    'Only the setting named by controlledVariable changes; the other circuit and simulation settings are fixed.',
+    'The 0.10 reporting level is not a biological firing threshold. The first time it is reached is taken from the recorded samples; no interpolation is done.',
+    'Not reaching the level is not given as a delay number. An output that is entirely zero has no peak time; an output that is nonzero but stays below 0.10 can have a peak.',
+    'Setting the model contribution of a connection to zero does not silence the cell and is not an intervention performed in a living animal.',
+    'Reaching the fixed reporting level earlier does not show that the biological conduction speed of the signal increased. The results are only for this model and recording interval.',
+  ]
 }

@@ -79,3 +79,70 @@ export const guidedPrinciples = [
   'Sayıları ve çizgileri aynı koşul kaydından oku; eski sonucu yeni ayarmış gibi yorumlama.',
   'Bir sonuç bu modelin varsayımları altında geçerlidir. Gerçek hayvan için bağımsız doğrulama gerekir.',
 ]
+
+/** English twin of `guidedSteps`: same ids, order and prediction option ids. */
+export const guidedStepsEn: typeof guidedSteps = [
+  {
+    id: 'stimulus',
+    title: 'What does the output do when you increase the stimulus?',
+    short: 'Change the stimulus',
+    question: 'Are input strength and output the same thing?',
+    introduction: 'Change the stimulus given to cell S1 and compare the O1 output. A stronger input affects more than one pathway in this circuit: alongside the excitatory pathways, the inhibitory branch can become active too. Instead of predicting the result from the input number alone, examine the two curves and the computed difference.',
+    changed: 'The amplitude of the stimulus given to S1.',
+    held: 'The circuit, the connection weights, the onset and duration of the stimulus, the time constant and the initial state.',
+    predictionPrompt: 'How might the peak value of O1 change?',
+    predictionOptions: [
+      { id: 'increase', label: 'It may be higher' },
+      { id: 'similar', label: 'It may stay close or the same' },
+      { id: 'decrease', label: 'It may be lower' },
+      { id: 'unsure', label: 'I’m not sure; I’ll compare first' },
+    ],
+    observe: 'Read the peak value and the peak time of O1. Compare the rising part of the curve too. Without assuming “the stimulus doubled, so the output must double too”, describe what the numbers say in this condition.',
+    boundary: 'Activity is a dimensionless model variable in the range 0–1. A higher line does not mean a larger single action potential or a more intelligent animal.',
+  },
+  {
+    id: 'connection',
+    title: 'What changes when you remove a connection?',
+    short: 'Remove the connection',
+    question: 'If one pathway closes, does the whole circuit go silent?',
+    introduction: 'Choose one of two connections: in the example circuit I3→O1 is assigned as excitatory and I4→O1 as inhibitory. Run the same conditions with the connection on and with the contribution of the chosen connection removed. This intervention is applied to the connection only; it does not switch off the source or target cell as a whole.',
+    changed: 'Only the contribution in the model of the chosen I3→O1 or I4→O1 connection.',
+    held: 'The other connections, the S1 stimulus, the time constant and the initial state of all cells.',
+    predictionPrompt: 'What might the peak value of O1 do when the connection you chose is removed?',
+    predictionOptions: [
+      { id: 'decrease', label: 'It may be lower' },
+      { id: 'similar', label: 'It may stay close or the same' },
+      { id: 'increase', label: 'It may be higher' },
+      { id: 'unsure', label: 'I’m not sure; I’ll compare first' },
+    ],
+    observe: 'Think about which inputs O1 still has. Removing an excitatory contribution and removing an inhibitory contribution are not the same intervention. In this circuit the 0–1 limit also affects the result. The result for O1 does not show that all the other cells went silent.',
+    boundary: 'Here “removing” is the intervention that sets the contribution of a single connection to zero in the simulation. It does not represent all the side effects of a procedure done to a cell or a synapse in a real animal.',
+  },
+  {
+    id: 'tau',
+    title: 'Change the time constant of the response',
+    short: 'Change the time constant',
+    question: 'With the same input, does the shape of the curve over time change?',
+    introduction: 'τ is the time constant that sets, in this model, how fast a cell changes toward its effective input. In this experiment we increase only the τ value of O1; the other seven cells stay at 30 ms. A larger τ makes a slower update under the same momentary conditions. With an input that changes over time, the direction of the peak value has to be read separately from the result.',
+    changed: 'Only the model time constant τ of cell O1.',
+    held: 'The τ value of the other seven cells (30 ms), the circuit and its weights, the stimulus amplitude, onset and duration, the initial state and the computation step.',
+    predictionPrompt: 'How might the peak value change when the time constant of O1 increases?',
+    predictionOptions: [
+      { id: 'increase', label: 'It may be higher' },
+      { id: 'decrease', label: 'It may be lower' },
+      { id: 'similar', label: 'It may stay close or the same' },
+      { id: 'unsure', label: 'I’m not sure; I’ll compare first' },
+    ],
+    observe: 'Do not stop at reading the peak time alone. Compare the part after the stimulus turns off and the value at the end of the experiment too. In an experiment of fixed duration, the final value need not have returned to rest yet.',
+    boundary: 'The τ values are model parameters chosen for teaching; they are not presented as the measured membrane time constant of a particular animal cell. The ms in the chart is the model’s time scale.',
+  },
+]
+
+/** English twin of `guidedPrinciples`, in the same order. */
+export const guidedPrinciplesEn: typeof guidedPrinciples = [
+  'First write down which quantity you changed. Check that the other conditions stayed fixed.',
+  'A prediction is optional. It can be written before the result is seen too; it is not an achievement score.',
+  'Changing a parameter does not update the recorded result. Run again for the new settings.',
+  'Read the numbers and the lines from the same condition record; do not interpret an old result as if it belonged to the new settings.',
+  'A result holds under the assumptions of this model. A real animal requires independent validation.',
+]

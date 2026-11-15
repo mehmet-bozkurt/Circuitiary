@@ -32,7 +32,7 @@ describe('sampleRows', () => {
     expect(rows).toEqual([{ timeMs: 0, values: [0.5, null] }, { timeMs: 10, values: [null, null] }, { timeMs: 20, values: [null, null] }])
   })
 
-  it('returns no rows for an empty recording and honours another interval', () => {
+  it('returns no rows for an empty recording and honors another interval', () => {
     expect(sampleRows([], [{ id: 'x', values: [] }], 10)).toEqual([])
     expect(sampleRows(grid(1, 100), [{ id: 'x', values: grid(1, 100) }], 25).map(row => row.timeMs)).toEqual([0, 25, 50, 75, 100])
   })

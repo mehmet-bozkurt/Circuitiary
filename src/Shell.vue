@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
+import { defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
 import ExperimentPage from './App.vue'
 import { useTheme } from './theme'
 import { activeHint } from './terms/activeHint'
 import { BASE, appPath, withBase } from './siteBase'
+import { LOCALES, followStoredLocale, isLocale, locale, localeNames, setLocale, useMessages } from './i18n'
+import { messages } from './Shell.messages'
 
 const { preference: themePreference, changeTheme } = useTheme()
+const m = useMessages(messages)
+function changeLanguage(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  if (isLocale(value)) setLocale(value)
+}
 
 type Page = 'experiment' | 'lesson' | 'guided' | 'reading' | 'assumptions' | 'atlas' | 'builder' | 'glossary'
 const lessonPath = '/ogren/norondan-devreye'
@@ -16,16 +23,6 @@ const atlasPath = '/ogren/turler-atlasi'
 const builderPath = '/ogren/devre-kur'
 const glossaryPath = '/ogren/sozluk'
 const originalTitle = document.title
-const pageTitles: Record<Page, string> = {
-  experiment: 'Circuitiary · Devre deneyleri',
-  lesson: 'Nörondan devreye · Circuitiary',
-  guided: 'Rehberli deneyler · Circuitiary',
-  reading: 'Devreyi okumak · Circuitiary',
-  assumptions: 'Gerçek veri ve varsayımlar · Circuitiary',
-  atlas: 'Türler atlası · Circuitiary',
-  builder: 'Devre kur · Circuitiary',
-  glossary: 'Sözlük · Circuitiary',
-}
 const mainIds: Record<Page, string> = { experiment: 'top', lesson: 'neuron-lesson', guided: 'guided-experiments', reading: 'circuit-reading', assumptions: 'real-assumptions', atlas: 'species-atlas', builder: 'circuit-builder', glossary: 'glossary-page' }
 const knownPaths = ['', lessonPath, guidedPath, readingPath, assumptionsPath, atlasPath, builderPath, glossaryPath]
 // An address outside the app still opens the experiment page, but says so.
@@ -64,8 +61,8 @@ const glossaryRegion = ref<HTMLDivElement>()
 // A page chunk can fail to load (offline, or a tab left open across a new build).
 // Retry once on its own, then say so instead of leaving a blank page.
 const PageLoadError = () => h('div', { class: 'page-load-error', role: 'alert' }, [
-  h('p', 'Bu sayfa yüklenemedi. İnternet bağlantını denetleyip sayfayı yenile; yeni sürüm yayımlandıysa açık sekme eski dosyaları arıyor olabilir.'),
-  h('button', { type: 'button', onClick: () => location.reload() }, 'Sayfayı yenile'),
+  h('p', m.value.loadError),
+  h('button', { type: 'button', onClick: () => location.reload() }, m.value.reload),
 ])
 const lazyPage = (loader: () => Promise<Component>) => defineAsyncComponent({
   loader,
@@ -82,10 +79,11 @@ const GlossaryPage = lazyPage(() => import('./components/GlossaryPage.vue'))
 let pendingFocus: { page: Page; hash: string; scroll: boolean } | undefined
 let inspectionToken = 0
 const handoffLoading = ref(false)
-const handoffError = ref('')
+// Kept as a function so the message follows a later language change.
+const handoffError = ref<(() => string) | null>(null)
 
 function updateTitle() {
-  document.title = notFoundPath.value ? 'Sayfa bulunamadı · Circuitiary' : pageTitles[page.value]
+  document.title = notFoundPath.value ? m.value.notFoundTitle : m.value.titles[page.value]
 }
 
 function completeFocus() {
@@ -117,7 +115,7 @@ function completeFocus() {
 function showPage(url: URL, scroll: boolean) {
   activeHint.value = null
   inspectionToken++
-  handoffError.value = ''
+  handoffError.value = null
   page.value = pageFor(url.pathname)
   notFoundPath.value = unknownPath(url.pathname)
   if (page.value === 'experiment') experimentMounted.value = true
@@ -150,7 +148,7 @@ async function inspectFromReading(request: { neuronId: string }) {
   if (handoffLoading.value) return
   const token = ++inspectionToken
   handoffLoading.value = true
-  handoffError.value = ''
+  handoffError.value = null
   try {
     experimentMounted.value = true
     await nextTick()
@@ -160,12 +158,12 @@ async function inspectFromReading(request: { neuronId: string }) {
     if (!controller) throw new Error('Experiment view not ready')
     const outcome = await controller.inspectAnatomicalNeuron(request.neuronId, canCommit)
     if (!canCommit() || (!outcome.ok && outcome.cancelled)) return
-    if (!outcome.ok) { handoffError.value = outcome.message; return }
+    if (!outcome.ok) { const message = outcome.message; handoffError.value = typeof message === 'function' ? message : () => message; return }
     const url = new URL(`${BASE}#graph-panel-${outcome.graphView}`, location.href)
     history.pushState(null, '', `${url.pathname}${url.hash}`)
     showPage(url, true)
   } catch {
-    handoffError.value = 'Devre görünümü açılamadı. Seçimin korunuyor; yeniden deneyebilirsin.'
+    handoffError.value = () => m.value.handoffFailed
   } finally { handoffLoading.value = false }
 }
 
@@ -175,8 +173,11 @@ function historyChanged() {
   // Same-page fragment traversal stays under the browser's scroll restoration.
 }
 
+let stopFollowingLocale: (() => void) | undefined
+watch(locale, updateTitle)
 onMounted(() => {
   updateTitle()
+  stopFollowingLocale = followStoredLocale()
   experimentRegion.value?.querySelector('main')?.setAttribute('tabindex', '-1')
   window.addEventListener('popstate', historyChanged)
   if (page.value !== 'experiment') {
@@ -184,40 +185,49 @@ onMounted(() => {
     completeFocus()
   }
 })
-onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); document.title = originalTitle })
+onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); stopFollowingLocale?.(); document.title = originalTitle })
 </script>
 
 <template>
   <div class="circuitiary-shell" @click="navigateClick">
-    <a class="shell-skip-link" :href="`#${mainIds[page]}`">İçeriğe geç</a>
-    <nav class="section-navigation" aria-label="Öğrenme ve deneyler">
+    <a class="shell-skip-link" :href="`#${mainIds[page]}`">{{ m.skip }}</a>
+    <nav class="section-navigation" :aria-label="m.navigation">
       <div class="navigation-toolbar">
-        <span class="navigation-kicker" aria-hidden="true">CIRCUITIARY / KEŞFET</span>
-        <label class="theme-picker" for="theme-preference">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20.5 13.3A8.6 8.6 0 0 1 10.7 3.5a8.6 8.6 0 1 0 9.8 9.8Z" /></svg>
-          <span>Tema</span>
-          <select id="theme-preference" :value="themePreference" @change="changeTheme">
-            <option value="system">Sistem</option>
-            <option value="light">Açık</option>
-            <option value="dark">Karanlık</option>
+        <span class="navigation-kicker" aria-hidden="true">{{ m.kicker }}</span>
+        <div class="navigation-preferences">
+        <label class="language-picker" for="language-preference">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8.6" /><path d="M3.4 12h17.2M12 3.4c2.4 2.3 3.6 5.2 3.6 8.6s-1.2 6.3-3.6 8.6c-2.4-2.3-3.6-5.2-3.6-8.6S9.6 5.7 12 3.4Z" /></svg>
+          <span>{{ m.language }}</span>
+          <select id="language-preference" :value="locale" @change="changeLanguage">
+            <option v-for="code in LOCALES" :key="code" :value="code" :lang="code">{{ localeNames[code] }}</option>
           </select>
         </label>
+        <label class="theme-picker" for="theme-preference">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20.5 13.3A8.6 8.6 0 0 1 10.7 3.5a8.6 8.6 0 1 0 9.8 9.8Z" /></svg>
+          <span>{{ m.theme }}</span>
+          <select id="theme-preference" :value="themePreference" @change="changeTheme">
+            <option value="system">{{ m.themeSystem }}</option>
+            <option value="light">{{ m.themeLight }}</option>
+            <option value="dark">{{ m.themeDark }}</option>
+          </select>
+        </label>
+        </div>
       </div>
       <div class="section-navigation-links">
-        <a :href="BASE" :aria-current="page === 'experiment' ? 'page' : undefined">Devre deneyleri</a>
-        <a :href="withBase(lessonPath)" :aria-current="page === 'lesson' ? 'page' : undefined">Nörondan devreye</a>
-        <a :href="withBase(guidedPath)" :aria-current="page === 'guided' ? 'page' : undefined">Rehberli deneyler</a>
-        <a :href="withBase(readingPath)" :aria-current="page === 'reading' ? 'page' : undefined">Devreyi okumak</a>
-        <a :href="withBase(assumptionsPath)" :aria-current="page === 'assumptions' ? 'page' : undefined">Gerçek veri ve varsayımlar</a>
-        <a :href="withBase(atlasPath)" :aria-current="page === 'atlas' ? 'page' : undefined">Türler atlası</a>
-        <a :href="withBase(builderPath)" :aria-current="page === 'builder' ? 'page' : undefined">Devre kur</a>
-        <a :href="withBase(glossaryPath)" :aria-current="page === 'glossary' ? 'page' : undefined">Sözlük</a>
+        <a :href="BASE" :aria-current="page === 'experiment' ? 'page' : undefined">{{ m.links.experiment }}</a>
+        <a :href="withBase(lessonPath)" :aria-current="page === 'lesson' ? 'page' : undefined">{{ m.links.lesson }}</a>
+        <a :href="withBase(guidedPath)" :aria-current="page === 'guided' ? 'page' : undefined">{{ m.links.guided }}</a>
+        <a :href="withBase(readingPath)" :aria-current="page === 'reading' ? 'page' : undefined">{{ m.links.reading }}</a>
+        <a :href="withBase(assumptionsPath)" :aria-current="page === 'assumptions' ? 'page' : undefined">{{ m.links.assumptions }}</a>
+        <a :href="withBase(atlasPath)" :aria-current="page === 'atlas' ? 'page' : undefined">{{ m.links.atlas }}</a>
+        <a :href="withBase(builderPath)" :aria-current="page === 'builder' ? 'page' : undefined">{{ m.links.builder }}</a>
+        <a :href="withBase(glossaryPath)" :aria-current="page === 'glossary' ? 'page' : undefined">{{ m.links.glossary }}</a>
       </div>
-      <p class="term-help">Noktalı altı çizili sözcüklerin anlamı ve kökeni için üzerine gel veya dokun. Klavyeyle odaklanarak da okuyabilirsin.</p>
+      <p class="term-help">{{ m.termHelp }}</p>
     </nav>
     <div v-if="notFoundPath" class="route-notice" role="status">
-      <p>“{{ notFoundPath }}” adresinde bir sayfa yok; devre deneyleri sayfasını gösteriyoruz.</p>
-      <a :href="BASE">Devre deneyleri sayfasına git</a>
+      <p>{{ m.notFound(notFoundPath) }}</p>
+      <a :href="BASE">{{ m.notFoundLink }}</a>
     </div>
     <!-- First visit mounts each view. Later visits preserve its independent state. -->
     <div v-show="page === 'experiment'" ref="experimentRegion" class="view-page">
@@ -230,7 +240,7 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
       <GuidedExperimentsPage v-if="guidedMounted" @ready="completeFocus" />
     </div>
     <div v-show="page === 'reading'" ref="readingRegion" class="view-page">
-      <CircuitReadingPage v-if="readingMounted" :handoff-loading="handoffLoading" :handoff-error="handoffError" @inspect="inspectFromReading" @ready="completeFocus" />
+      <CircuitReadingPage v-if="readingMounted" :handoff-loading="handoffLoading" :handoff-error="handoffError?.() ?? ''" @inspect="inspectFromReading" @ready="completeFocus" />
     </div>
     <div v-show="page === 'assumptions'" ref="assumptionsRegion" class="view-page">
       <AssumptionsLearningPage v-if="assumptionsMounted" @ready="completeFocus" />
@@ -253,9 +263,10 @@ onBeforeUnmount(() => { window.removeEventListener('popstate', historyChanged); 
 .route-notice a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 760px) { .route-notice { padding-left: 18px; padding-right: 18px; } }
 .term-help { font-size: 11px; line-height: 1.8; color: var(--muted); }
-.navigation-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
-.theme-picker { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
-.theme-picker select { min-height: 44px; padding: 8px 10px; font-size: 12px; width: 100px; }
+.navigation-toolbar { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; width: 100%; }
+.navigation-preferences { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px 16px; }
+.theme-picker, .language-picker { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.theme-picker select, .language-picker select { min-height: 44px; padding: 8px 10px; font-size: 12px; width: 100px; }
 .section-navigation { max-width: 1320px; margin: auto; padding: 16px 44px 10px; display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--theme-border, #daddd2); }
 .navigation-kicker { font-family: var(--mono); font-size: 9px; letter-spacing: 1.2px; color: var(--theme-muted, #5d6962); }
 .section-navigation-links { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -3,6 +3,7 @@ import type {
   ConnectomeDataset, ConnectomeSelection, OmittedConnections, ReadonlyRealConnectome,
   RealConnectome, RealModelParameters, SimulationConfig, SourceReference,
 } from './types'
+import { L } from '../i18n'
 
 export const defaultRealModelParameters: Readonly<RealModelParameters> = Object.freeze({ chemicalGain: 0.8, gapGain: 0.2 })
 export const chemicalNormalizationFormula = 'chemicalGain * rawWeight / max(1, totalIncomingRawWeight[target])'
@@ -239,7 +240,7 @@ export function parseRealConnectome(value: unknown): ReadonlyRealConnectome {
   return result
 }
 
-/** Anatomy is preserved; all signs, gains, time constants and rate dynamics are assumptions. */
+/** Anatomy is preserved; all signs, gains, time constants and rate dynamics are assumptions. The name, provenance, descriptions and notes are written in the interface language current when the circuit is built. */
 export function buildRealCircuit(data: ReadonlyRealConnectome, parameters: RealModelParameters = defaultRealModelParameters): Circuit {
   const validated = parseRealConnectome(data)
   const chemicalGain = number(parameters.chemicalGain, 'chemicalGain')
@@ -271,13 +272,19 @@ export function buildRealCircuit(data: ReadonlyRealConnectome, parameters: RealM
   freezeRecursively(realData)
   return {
     id: `${validated.dataset.id}:assumed-rate-model`,
-    name: 'C. elegans — anatomiden varsayımsal devre modeli',
-    provenance: `${validated.dataset.title} (${validated.dataset.version}); seçilmiş anatomik alt ağ. Kimyasal işaret bilinmiyor ve pozitif varsayılıyor. Boyutsuz dinamik, ağırlık normalizasyonu ve zaman sabitleri ölçülmüş biyoloji değildir. Dış kimyasal giriş sıfır; dış elektriksel bağlantılar kesilmiş; köşegen kayıtlar yalnızca raporlanmıştır.`,
+    name: L('C. elegans — anatomiden varsayımsal devre modeli', 'C. elegans — assumed circuit model built from anatomy'),
+    provenance: L(
+      `${validated.dataset.title} (${validated.dataset.version}); seçilmiş anatomik alt ağ. Kimyasal işaret bilinmiyor ve pozitif varsayılıyor. Boyutsuz dinamik, ağırlık normalizasyonu ve zaman sabitleri ölçülmüş biyoloji değildir. Dış kimyasal giriş sıfır; dış elektriksel bağlantılar kesilmiş; köşegen kayıtlar yalnızca raporlanmıştır.`,
+      `${validated.dataset.title} (${validated.dataset.version}); selected anatomical subnetwork. The chemical sign is unknown and assumed positive. The dimensionless dynamics, the weight normalization and the time constants are not measured biology. External chemical input is zero; external electrical connections are cut; diagonal entries are only reported.`,
+    ),
     neurons: validated.neurons.map((neuron, index) => {
       const angle = -Math.PI / 2 + (index * 2 * Math.PI) / validated.neurons.length
       return {
         id: neuron.id, label: neuron.label, role: 'unspecified', cellType: neuron.cellType, sourceRef: neuron.sourceRef,
-        description: `${neuron.id}: kaynak hücre sınıfı “${neuron.cellType}”. Uyarılan/okunan hücre seçimi deney ayarıdır; giriş veya çıkış görevi atanmamıştır. Aktivite ve zaman sabiti varsayımsal model değerleridir.`,
+        description: L(
+          `${neuron.id}: kaynak hücre sınıfı “${neuron.cellType}”. Uyarılan/okunan hücre seçimi deney ayarıdır; giriş veya çıkış görevi atanmamıştır. Aktivite ve zaman sabiti varsayımsal model değerleridir.`,
+          `${neuron.id}: source cell class “${neuron.cellType}”. Which cell is stimulated or read out is an experiment setting; no input or output role has been assigned. Activity and time constant are assumed model values.`,
+        ),
         position: { x: 390 + 280 * Math.cos(angle), y: 320 + 260 * Math.sin(angle) },
       }
     }),
@@ -288,7 +295,10 @@ export function buildRealCircuit(data: ReadonlyRealConnectome, parameters: RealM
         return {
           id: edge.id, source: edge.source, target: edge.target, kind: 'chemical' as const,
           rawWeight: edge.rawWeight, weight, sourceRef: edge.sourceRef, evidence: 'anatomy-with-assumed-dynamics' as const,
-          note: `Kaynakta yönlü kimyasal anatomik bağlantı; ham ağırlık ${edge.rawWeight}. İşaret bilinmiyor; pozitif etki varsayıldı. Normalize model ağırlığı ölçülmüş güç değildir.`,
+          note: L(
+            `Kaynakta yönlü kimyasal anatomik bağlantı; ham ağırlık ${edge.rawWeight}. İşaret bilinmiyor; pozitif etki varsayıldı. Normalize model ağırlığı ölçülmüş güç değildir.`,
+            `Directed chemical anatomical connection in the source; raw weight ${edge.rawWeight}. The sign is unknown; a positive effect was assumed. The normalized model weight is not a measured strength.`,
+          ),
         }
       }),
       ...validated.gapEdges.map((edge) => {
@@ -298,7 +308,10 @@ export function buildRealCircuit(data: ReadonlyRealConnectome, parameters: RealM
           id: edge.id, source: edge.a, target: edge.b, kind: 'gap' as const,
           rawWeight: edge.rawWeight, weight, sourceRef: edge.sourceRef, reciprocalSourceRef: edge.reciprocalSourceRef,
           evidence: 'anatomy-with-assumed-dynamics' as const,
-          note: `Kaynakta simetrik elektriksel anatomik bağlantı; ham ağırlık ${edge.rawWeight}. Tek fiziksel kenar iki yönde g·(komşu−hücre) yayılımı uygular; g boyutsuz varsayımdır.`,
+          note: L(
+            `Kaynakta simetrik elektriksel anatomik bağlantı; ham ağırlık ${edge.rawWeight}. Tek fiziksel kenar iki yönde g·(komşu−hücre) yayılımı uygular; g boyutsuz varsayımdır.`,
+            `Symmetric electrical anatomical connection in the source; raw weight ${edge.rawWeight}. One physical edge applies g·(neighbor−cell) diffusion in both directions; g is a dimensionless assumption.`,
+          ),
         }
       }),
     ],

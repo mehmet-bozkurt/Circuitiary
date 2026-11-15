@@ -2,8 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import type { GlossaryTerm } from '../terms/glossary'
 import { activeHint } from '../terms/activeHint'
+import { locale, useMessages } from '../i18n'
+import { messages } from './TermHint.messages'
 
 const props = defineProps<{ term: GlossaryTerm; label: string }>()
+const m = useMessages(messages)
 const id = `term-${useId()}`
 const wrapper = ref<HTMLElement>()
 const trigger = ref<HTMLButtonElement>()
@@ -90,6 +93,8 @@ watch(open, async visible => {
   place()
 })
 watch(() => props.label, () => close())
+// A language change replaces the card's text (and its size) under the reader; the card closes instead of showing a half-placed one.
+watch(locale, () => close())
 onBeforeUnmount(() => { close(); clearClose(); removeListeners() })
 </script>
 
@@ -97,13 +102,13 @@ onBeforeUnmount(() => { close(); clearClose(); removeListeners() })
   <span ref="wrapper" class="term-hint" @pointerenter="event => { if (event.pointerType === 'mouse') show() }" @pointerleave="leave" @focusout="focusOut">
     <button ref="trigger" type="button" class="term-trigger" :data-term="term.id" aria-haspopup="dialog" :aria-expanded="open" :aria-controls="open ? id : undefined" @focus="show" @click.stop="toggle" @keydown.arrow-down.prevent="panel?.querySelector<HTMLButtonElement>('button')?.focus()">{{ label }}</button>
     <span v-if="open" :id="id" ref="panel" class="term-popover" role="dialog" :aria-labelledby="`${id}-title`" :style="position" @pointerenter="clearClose" @click.stop>
-      <span class="term-popover-kicker">SÖZCÜĞÜ TANI</span>
+      <span class="term-popover-kicker">{{ m.kicker }}</span>
       <span :id="`${id}-title`" class="term-popover-title">{{ term.title }}</span>
-      <button type="button" class="term-close" aria-label="Terim açıklamasını kapat" @click="close(true)">×</button>
-      <span class="term-popover-section"><strong>Anlamı</strong><span>{{ term.meaning }}</span></span>
-      <span class="term-popover-section"><strong>Sözcük kökeni</strong><span>{{ term.origin }}</span></span>
-      <span v-if="term.context" class="term-popover-section"><strong>Projede</strong><span>{{ term.context }}</span></span>
-      <span class="term-sources"><strong>Kaynaklar</strong><a v-for="source in term.sources" :key="source.url" class="term-source-link" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }} <span aria-hidden="true">↗</span></a></span>
+      <button type="button" class="term-close" :aria-label="m.close" @click="close(true)">×</button>
+      <span class="term-popover-section"><strong>{{ m.meaning }}</strong><span>{{ term.meaning }}</span></span>
+      <span class="term-popover-section"><strong>{{ m.origin }}</strong><span>{{ term.origin }}</span></span>
+      <span v-if="term.context" class="term-popover-section"><strong>{{ m.context }}</strong><span>{{ term.context }}</span></span>
+      <span class="term-sources"><strong>{{ m.sources }}</strong><a v-for="source in term.sources" :key="source.url" class="term-source-link" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }} <span aria-hidden="true">↗</span></a></span>
     </span>
   </span>
 </template>

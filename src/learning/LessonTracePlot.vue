@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { decimal } from '../format'
+import { useMessages } from '../i18n'
+import { messages } from './LessonTracePlot.messages'
 import { TICK_FRACTIONS, plotX, plotY, tracePath, useChartWidth } from './plotBox'
 
 export interface LessonTrace {
@@ -11,13 +13,16 @@ export interface LessonTrace {
   dashed?: boolean
 }
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   times: number[]
   traces: LessonTrace[]
   title: string
   yLabel?: string
   markerTime?: number
-}>(), { yLabel: 'Göreli düzey' })
+}>()
+const m = useMessages(messages)
+// A prop default would be fixed in the language of the first render; the fallback is read when rendering instead.
+const axisLabel = computed(() => props.yLabel ?? m.value.yLabel)
 const svg = ref<SVGSVGElement | null>(null)
 const width = useChartWidth(svg, { initial: 560 })
 const height = 240
@@ -32,10 +37,10 @@ const paths = computed(() => props.traces.map(trace => ({ ...trace, path: traceP
 <template>
   <figure class="lesson-plot">
     <figcaption>{{ title }}</figcaption>
-    <div class="plot-legend" role="group" aria-label="Grafik çizgileri">
+    <div class="plot-legend" role="group" :aria-label="m.legend">
       <span v-for="trace in traces" :key="trace.id"><i :style="{ borderColor: trace.color, borderStyle: trace.dashed ? 'dashed' : 'solid' }"></i>{{ trace.label }}</span>
     </div>
-    <svg ref="svg" :viewBox="`0 0 ${width} ${height}`" role="img" :aria-label="`${title}. Dikey eksen ${yLabel}, 0 ile 1 arasında. Yatay eksen öğretici zaman; biyolojik zaman birimi değildir.`">
+    <svg ref="svg" :viewBox="`0 0 ${width} ${height}`" role="img" :aria-label="m.plot(title, axisLabel)">
       <g v-for="tick in TICK_FRACTIONS" :key="tick">
         <line :x1="pad.left" :x2="width - pad.right" :y1="y(tick)" :y2="y(tick)" stroke="var(--theme-border, #dce1d3)" :stroke-dasharray="tick ? '3 5' : undefined" />
         <text :x="pad.left - 9" :y="y(tick) + 3" text-anchor="end">{{ decimal(tick, 2) }}</text>
@@ -43,8 +48,8 @@ const paths = computed(() => props.traces.map(trace => ({ ...trace, path: traceP
       <g v-for="fraction in TICK_FRACTIONS" :key="fraction">
         <text :x="x(lastTime * fraction)" :y="height - pad.bottom + 18" text-anchor="middle">{{ decimal(lastTime * fraction, 2) }}</text>
       </g>
-      <text :x="pad.left" y="11" class="axis-name">{{ yLabel }}</text>
-      <text :x="pad.left + plotWidth / 2" :y="height - 5" text-anchor="middle" class="axis-name">Öğretici zaman · boyutsuz</text>
+      <text :x="pad.left" y="11" class="axis-name">{{ axisLabel }}</text>
+      <text :x="pad.left + plotWidth / 2" :y="height - 5" text-anchor="middle" class="axis-name">{{ m.timeAxis }}</text>
       <line v-if="markerTime !== undefined" :x1="x(markerTime)" :x2="x(markerTime)" :y1="pad.top" :y2="height - pad.bottom" stroke="var(--theme-muted, #7a7864)" stroke-dasharray="2 4" />
       <path v-for="trace in paths" :key="trace.id" :d="trace.path" fill="none" :stroke="trace.color" stroke-width="2.8" :stroke-dasharray="trace.dashed ? '7 5' : undefined" stroke-linejoin="round" />
     </svg>

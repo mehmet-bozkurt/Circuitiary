@@ -14,7 +14,7 @@ set -euo pipefail
 
 REPO="mehmet-bozkurt/Circuitiary"
 HOMEPAGE="https://mehmet-bozkurt.github.io/Circuitiary/"
-DESCRIPTION="Interactive teaching notebook for small neuron circuits: parameterised rate model, 2D/3D views, lessons and a circuit builder (Turkish UI); optional C. elegans connectome subgraph from locally imported data · Sinir devrelerini kurarak öğrenmek için etkileşimli deney defteri"
+DESCRIPTION="Interactive teaching notebook for small neuron circuits: parameterised rate model, 2D/3D views, lessons and a circuit builder (Turkish and English UI); optional C. elegans connectome subgraph from locally imported data · Sinir devrelerini kurarak öğrenmek için etkileşimli deney defteri"
 TOPICS="neuroscience connectome c-elegans neural-circuits computational-neuroscience education interactive simulation vue typescript turkish"
 TAG="v0.1.0"
 PAGES_WORKFLOW="pages.yml"
@@ -367,7 +367,7 @@ Kod ve özgün metinler MIT lisanslıdır. Katkı: [CONTRIBUTING.md](CONTRIBUTIN
 
 ---
 
-An interactive teaching notebook (Turkish UI) for learning small neuron circuits by building and probing them: an eight-cell illustrative circuit and, if you import the data locally, a 30-neuron *C. elegans* subgraph (Cook et al. 2019), a parameterised rate model with connection and time-constant interventions, 2D/3D views, guided lessons, glossary, species atlas, circuit builder, sharing/export/print and offline use.
+An interactive teaching notebook (Turkish UI, optional English) for learning small neuron circuits by building and probing them: an eight-cell illustrative circuit and, if you import the data locally, a 30-neuron *C. elegans* subgraph (Cook et al. 2019), a parameterised rate model with connection and time-constant interventions, 2D/3D views, guided lessons, glossary, species atlas, circuit builder, sharing/export/print and offline use.
 
 **Scope:** a parameterised teaching model, not a measurement, a behaviour simulation or a brain emulation. The real *C. elegans* data is **not** distributed with this repository (its redistribution licence was never verified); real-data mode works only after you import the data yourself as described in the README. The online demo contains the eight-cell circuit and the lessons only. Code and original text are MIT-licensed.
 NOTES

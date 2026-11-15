@@ -1,20 +1,24 @@
 <script setup lang="ts">
 import TermText from './components/TermText.vue'
-import { BASE, DEMO, DEMO_DATA_NOTICE, LOCAL_DATA_URL, appPath } from './siteBase'
+import { BASE, DEMO, LOCAL_DATA_URL, appPath, demoDataNotice } from './siteBase'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import CircuitGraph from './components/CircuitGraph.vue'
 import CircuitGraph3D from './components/CircuitGraph3D.vue'
 import ActivationChart from './components/ActivationChart.vue'
 import ChartDataTable from './components/ChartDataTable.vue'
+import PinnedComparison from './components/PinnedComparison.vue'
+import type { PinnedCurve } from './pinnedCurve'
 import { SHORTCUT_STEP_MS, stepTime, useExperimentShortcuts } from './useExperimentShortcuts'
 import type { ShortcutAction } from './useExperimentShortcuts'
-import { illustrativeCircuit, defaultConfig } from './model/circuit'
+import { illustrativeCircuit, illustrativeCircuitEn, defaultConfig } from './model/circuit'
 import { simulate } from './model/simulation'
 import { parseRealConnectome, buildRealCircuit, defaultRealModelParameters } from './model/realConnectome'
 import type { SimulationConfig } from './model/types'
 import { prepareRealInspection } from './learning/readingHandoff'
 import type { ExperimentDraft } from './learning/readingHandoff'
-import { decimal } from './format'
+import { decimal, withComma } from './format'
+import { L, useMessages } from './i18n'
+import { messages } from './App.messages'
 import ExperimentTools from './components/ExperimentTools.vue'
 import { csvFile, jsonFile } from './exportData'
 import { version as appVersion } from '../package.json'
@@ -24,6 +28,7 @@ import type { ShareParse, ShareState } from './shareState'
 // The shell keeps this page mounted but hidden behind the lesson pages; the
 // playback loop stays idle there and continues from the same time on return.
 const props = defineProps<{ suspended?: boolean }>()
+const m = useMessages(messages)
 type Condition = 'baseline' | 'silenced' | 'tau'
 type GraphView = '2d' | '3d'
 const graphView = ref<GraphView>('2d')
@@ -31,20 +36,23 @@ type RealData = ReturnType<typeof parseRealConnectome>
 const mode = ref<'illustrative' | 'real'>('illustrative')
 const realData = shallowRef<RealData>()
 const dataLoading = ref(false)
-const dataError = ref('')
+// Status and error lines are kept as functions so they follow a later language change.
+const dataError = ref<(() => string) | null>(null)
 const chemicalGain = ref(defaultRealModelParameters.chemicalGain)
 const gapGain = ref(defaultRealModelParameters.gapGain)
 const focusConnections = ref(true)
 const scaleToResponse = ref(false)
 const isReal = computed(() => mode.value === 'real')
+// Both branches read the language (buildRealCircuit writes its text in it), so the circuit's text follows a switch.
 const circuit = computed(() => isReal.value && realData.value
   ? buildRealCircuit(realData.value, { chemicalGain: chemicalGain.value, gapGain: gapGain.value })
-  : illustrativeCircuit)
-const conditions: { id: Condition; label: string; short: string; color: string }[] = [
-  { id: 'baseline', label: 'Referans', short: 'A', color: 'var(--theme-trace-green, #2f7960)' },
-  { id: 'silenced', label: 'Bağlantı susturuldu', short: 'B', color: 'var(--theme-trace-red, #bb695e)' },
-  { id: 'tau', label: 'Zaman sabiti değişti', short: 'C', color: 'var(--theme-trace-blue, #647fb3)' },
+  : L(illustrativeCircuit, illustrativeCircuitEn))
+const conditionStyles: { id: Condition; short: string; color: string }[] = [
+  { id: 'baseline', short: 'A', color: 'var(--theme-trace-green, #2f7960)' },
+  { id: 'silenced', short: 'B', color: 'var(--theme-trace-red, #bb695e)' },
+  { id: 'tau', short: 'C', color: 'var(--theme-trace-blue, #647fb3)' },
 ]
+const conditions = computed(() => conditionStyles.map(({ id, short, color }) => ({ id, label: m.value.conditions[id], short, color })))
 const activeCondition = ref<Condition>('baseline')
 const stimulusTarget = ref('S1')
 const amplitude = ref(defaultConfig.stimulus.amplitude)
@@ -87,11 +95,33 @@ const displayedTimeMs = computed(() => currentResult.value.timesMs[sampleIndex.v
 const nodeActivity = computed(() => Object.fromEntries(circuit.value.neurons.map(neuron => [neuron.id, currentResult.value.activity[neuron.id]?.[sampleIndex.value] ?? 0])))
 const selected = computed(() => circuit.value.neurons.find(neuron => neuron.id === selectedNeuron.value) ?? circuit.value.neurons[0]!)
 const selectedAnatomy = computed(() => realData.value?.neurons.find(n => n.id === selectedNeuron.value))
-const traces = computed(() => conditions.map(condition => ({ ...condition, values: results.value[condition.id].activity[outputNeuron.value] ?? [] })))
-const peaks = computed(() => Object.fromEntries(conditions.map(condition => [condition.id, Math.max(...(results.value[condition.id].activity[outputNeuron.value] ?? [0]))])) as Record<Condition, number>)
+const traces = computed(() => conditions.value.map(condition => ({ ...condition, values: results.value[condition.id].activity[outputNeuron.value] ?? [] })))
+const peaks = computed(() => Object.fromEntries(conditionStyles.map(condition => [condition.id, Math.max(...(results.value[condition.id].activity[outputNeuron.value] ?? [0]))])) as Record<Condition, number>)
+// Pin and compare: one recorded curve stays on the chart while the settings change (pinnedCurve.ts).
+const pinned = shallowRef<PinnedCurve | null>(null)
+const PINNED_COLOR = 'var(--theme-trace-neutral, #5f665c)'
+const PINNED_DASH = '9 3 2 3'
+function pinCurve() {
+  pinned.value = {
+    condition: activeCondition.value, output: outputNeuron.value,
+    timesMs: currentResult.value.timesMs, values: currentResult.value.activity[outputNeuron.value] ?? [],
+    peak: peaks.value[activeCondition.value], settings: { ...shareState.value },
+  }
+}
+// A pinned curve belongs to one circuit: the other mode has other cells.
+watch(mode, () => { pinned.value = null })
+const conditionNames = computed(() => Object.fromEntries(conditions.value.map(condition => [condition.id, `${condition.short} · ${condition.label}`])) as Record<Condition, string>)
+const chartTraces = computed(() => {
+  const curve = pinned.value
+  if (!curve) return traces.value
+  const short = conditionStyles.find(condition => condition.id === curve.condition)!.short
+  return [...traces.value, { id: 'pinned', short: '◆', label: m.value.pinnedTrace(short, curve.output), color: PINNED_COLOR, values: curve.values as number[], times: curve.timesMs, dash: PINNED_DASH }]
+})
+const tablePeaks = computed<Record<string, number>>(() => pinned.value ? { ...peaks.value, pinned: pinned.value.peak } : peaks.value)
+const edgeName = (id: string) => { const edge = circuit.value.connections.find(candidate => candidate.id === id); return edge ? edgeLabel(edge) : id }
 const chartYMax = computed(() => {
   if (!scaleToResponse.value) return 1
-  const target = Math.max(0.01, ...Object.values(peaks.value)) * 1.15
+  const target = Math.max(0.01, ...Object.values(peaks.value), pinned.value?.peak ?? 0) * 1.15
   const decade = 10 ** Math.floor(Math.log10(target))
   const ratio = target / decade
   const nice = [1, 2, 5, 10].find(value => value >= ratio) ?? 10
@@ -107,15 +137,15 @@ const convergenceError = computed(() => {
   }
   return maxError
 })
-const roleName = (role: string) => ({ input: 'Giriş hücresi', interneuron: 'Ara hücre', output: 'Çıktı hücresi', unspecified: 'Kaynak nöronu' } as Record<string, string>)[role] ?? role
+const roleName = (role: string) => m.value.roles[role] ?? role
 const format = (value: number, digits = 3) => decimal(value, digits)
 const edgeLabel = (edge: typeof circuit.value.connections[number]) => `${edge.source} ${edge.kind === 'gap' ? '↔' : '→'} ${edge.target}`
 const selectedConnection = computed(() => circuit.value.connections.find(e => e.id === selectedEdge.value))
 const interpretation = computed(() => activeCondition.value === 'baseline'
-  ? 'Bu koşul karşılaştırmanın referansı. Diğer deneylerde uyaran ve başlangıç durumu aynı kalıyor.'
+  ? m.value.readBaseline
   : activeCondition.value === 'silenced'
-    ? `${selectedConnection.value ? edgeLabel(selectedConnection.value) : selectedEdge.value} bağlantısının model ağırlığı sıfırlandı. Hücreler devrede kalıyor; ${selectedConnection.value?.kind === 'gap' ? 'bu elektriksel çiftin iki yönlü etkisi kaldırılıyor.' : 'yalnızca bu aktarım kaldırılıyor.'}`
-    : `${changedNeuron.value} için τ ${changedTau.value} ms. Daha büyük τ, bu denklemde etkinliğin değişimini yavaşlatır; daha güçlü yanıtı garanti etmez.`)
+    ? m.value.readSilenced(selectedConnection.value ? edgeLabel(selectedConnection.value) : selectedEdge.value, selectedConnection.value?.kind === 'gap')
+    : m.value.readTau(changedNeuron.value, changedTau.value))
 
 function chooseGraphView(next: GraphView, focusTab = false) {
   graphView.value = next
@@ -147,17 +177,20 @@ function togglePlayback() {
 watch(() => props.suspended, suspended => { if (suspended) stopLoop(); else if (playing.value) startLoop() })
 function seek(time: number) { pause(); cursorMs.value = time }
 // Page-level keys (Space, arrows, Home); the pure decision lives in useExperimentShortcuts.ts.
-const shortcutMessage = ref('')
+const shortcutMessage = ref<(() => string) | null>(null)
 function runShortcut(action: ShortcutAction) {
   if (action === 'toggle-playback') {
     togglePlayback()
-    shortcutMessage.value = playing.value ? 'Oynatılıyor.' : 'Duraklatıldı.'
+    const nowPlaying = playing.value
+    shortcutMessage.value = () => nowPlaying ? m.value.statusPlaying : m.value.statusPaused
     return
   }
   const time = action === 'to-start' ? 0 : stepTime(cursorMs.value, action === 'step-forward' ? 1 : -1, defaultConfig.durationMs)
   seek(time)
   const recorded = currentResult.value.timesMs
-  shortcutMessage.value = `Zaman ${format(recorded[Math.min(recorded.length - 1, Math.round(time / dt.value))] ?? time, timeDigits.value)} ms.`
+  const shownTime = recorded[Math.min(recorded.length - 1, Math.round(time / dt.value))] ?? time
+  const digits = timeDigits.value
+  shortcutMessage.value = () => m.value.statusTime(format(shownTime, digits))
 }
 useExperimentShortcuts({ suspended: () => Boolean(props.suspended), onAction: runShortcut })
 function reset() {
@@ -182,8 +215,8 @@ async function chooseMode(next: 'illustrative' | 'real') {
   if (next === mode.value) return
   if (next === 'real' && !realData.value) {
     // The online demo has no local data endpoint: say so instead of asking for it.
-    if (DEMO) { dataError.value = DEMO_DATA_NOTICE; return }
-    dataLoading.value = true; dataError.value = ''
+    if (DEMO) { dataError.value = demoDataNotice; return }
+    dataLoading.value = true; dataError.value = null
     dataRequest = new AbortController()
     const timeout = setTimeout(() => dataRequest?.abort(), 10000)
     try {
@@ -191,7 +224,7 @@ async function chooseMode(next: 'illustrative' | 'real') {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       realData.value = parseRealConnectome(await response.json())
     } catch {
-      dataError.value = 'Yerel gerçek veri yüklenemedi. README içindeki ithalat komutunu çalıştırıp yerel Vite sunucusunu kullanın. Sekiz hücreli deney hazır.'
+      dataError.value = () => m.value.dataLoadFailed
       return
     } finally { clearTimeout(timeout); dataRequest = undefined; dataLoading.value = false }
   }
@@ -218,13 +251,14 @@ function applyExperimentDraft(draft: Readonly<ExperimentDraft>) {
   if (draft.playing) togglePlayback()
 }
 async function inspectAnatomicalNeuron(neuronId: string, shouldCommit: () => boolean = () => true): Promise<
-  { ok: true; graphView: GraphView } | { ok: false; message: string; cancelled?: boolean }
+  { ok: true; graphView: GraphView } | { ok: false; message: () => string; cancelled?: boolean }
 > {
-  if (!shouldCommit()) return { ok: false, message: '', cancelled: true }
-  if (dataLoading.value) return { ok: false, message: 'Ana deneyde veri yükleniyor. Yükleme tamamlandıktan sonra yeniden dene.' }
+  // Messages are returned as functions so the caller's error line follows a later language change.
+  if (!shouldCommit()) return { ok: false, message: () => '', cancelled: true }
+  if (dataLoading.value) return { ok: false, message: () => m.value.inspectLoading }
   if (!realData.value) {
-    if (DEMO) return { ok: false, message: DEMO_DATA_NOTICE }
-    dataLoading.value = true; dataError.value = ''
+    if (DEMO) return { ok: false, message: demoDataNotice }
+    dataLoading.value = true; dataError.value = null
     dataRequest = new AbortController()
     const timeout = setTimeout(() => dataRequest?.abort(), 10000)
     try {
@@ -232,16 +266,16 @@ async function inspectAnatomicalNeuron(neuronId: string, shouldCommit: () => boo
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       realData.value = parseRealConnectome(await response.json())
     } catch {
-      return { ok: false, message: 'Ana deney için yerel gerçek veri yüklenemedi. Bu sayfadaki seçimin korunuyor; yeniden deneyebilirsin.' }
+      return { ok: false, message: () => m.value.inspectLoadFailed }
     } finally { clearTimeout(timeout); dataRequest = undefined; dataLoading.value = false }
   }
   // Navigation during the fetch cancels the handoff, rather than changing a
   // hidden experiment or pulling the user away from their newer destination.
-  if (!shouldCommit()) return { ok: false, message: '', cancelled: true }
+  if (!shouldCommit()) return { ok: false, message: () => '', cancelled: true }
   const before = captureExperimentDraft()
   let next: Readonly<ExperimentDraft>
   try { next = prepareRealInspection(before, realData.value, neuronId) }
-  catch { return { ok: false, message: 'Seçilen hücre mevcut deney altgrafında bulunamadı. Deney ayarların değiştirilmedi.' } }
+  catch { return { ok: false, message: () => m.value.inspectNotInSubgraph } }
   if (before.mode === 'real') selectedNeuron.value = neuronId
   else {
     readingToyDraft ??= before
@@ -253,9 +287,8 @@ defineExpose({ inspectAnatomicalNeuron })
 function exportExperiment() {
   const record = {
     schemaVersion: isReal.value ? 2 : 1, project: 'Circuitiary', circuit: circuit.value,
-    scope: isReal.value
-      ? 'Cook2019 anatomik altgrafı ve açıkça varsayımsal dinamikler; doğrulanmış davranış veya biyolojik beyin emülasyonu değildir. Yalnız yerel kullanım; yeniden dağıtım lisansı doğrulanmadı.'
-      : 'Öğretici kurgusal devre; biyolojik veri veya doğrulanmış davranış emülasyonu değildir.',
+    // The scope sentence and the circuit's own text are written in the language current at the moment of export.
+    scope: isReal.value ? m.value.exportScopeReal : m.value.exportScopeIllustrative,
     model: { equation: isReal.value
       ? 'tau_i * dx_i/dt = -x_i + clip(sum_j(w_ij * x_j) + I_i(t), 0, 1) + sum_j(g_ij * (x_j - x_i))'
       : 'tau_i * dx_i/dt = -x_i + clip(sum_j(w_ij * x_j) + I_i(t), 0, 1)',
@@ -279,7 +312,7 @@ function exportExperiment() {
 }
 // Share link and exports (cluster share-export). The state that defines the experiment goes into
 // query keys (see shareState.ts); the cursor and the playing flag stay out. Nothing here writes the address bar.
-const shareNoticeText = ref('')
+const shareNoticeText = ref<(() => string) | null>(null)
 const shareState = computed<ShareState>(() => ({
   mode: mode.value, graphView: graphView.value, activeCondition: activeCondition.value,
   chemicalGain: chemicalGain.value, gapGain: gapGain.value, focusConnections: focusConnections.value, scaleToResponse: scaleToResponse.value,
@@ -288,7 +321,7 @@ const shareState = computed<ShareState>(() => ({
   selectedEdge: selectedEdge.value, outputNeuron: outputNeuron.value, selectedNeuron: selectedNeuron.value, dt: dt.value,
 }))
 const shareUrl = computed(() => buildShareUrl(shareState.value, new URL(BASE, location.href).href))
-const activeConditionLabel = computed(() => conditions.find(condition => condition.id === activeCondition.value)?.label ?? '')
+const activeConditionLabel = computed(() => conditions.value.find(condition => condition.id === activeCondition.value)?.label ?? '')
 const csvExport = () => csvFile({ mode: mode.value, condition: activeCondition.value, circuit: circuit.value, result: currentResult.value })
 const jsonExport = () => jsonFile({ mode: mode.value, circuit: circuit.value, results: results.value, outputCell: outputNeuron.value, appVersion, dataset: realData.value?.dataset })
 async function loadRealForLink(): Promise<boolean> {
@@ -335,7 +368,8 @@ async function applyShareLink(parsed: ShareParse) {
   if (v.scaleToResponse !== undefined) scaleToResponse.value = v.scaleToResponse
   // The status line must already be on the page, empty, when its text arrives, or screen readers do not announce it.
   await nextTick()
-  shareNoticeText.value = shareNotice({ applied: Object.keys(v).length, ignored: link.ignored, realUnavailable })
+  const outcome = { applied: Object.keys(v).length, ignored: link.ignored, realUnavailable }
+  shareNoticeText.value = () => shareNotice(outcome)
 }
 // Only the experiment page reads a link; another page's own query is none of its business.
 if (!appPath(location.pathname).replace(/\/$/, '').startsWith('/ogren/')) void applyShareLink(parseShareQuery(location.search))
@@ -344,168 +378,169 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
 
 <template>
   <header class="site-header">
-    <a class="brand" href="#top" aria-label="Circuitiary başlangıcı">
+    <a class="brand" href="#top" :aria-label="m.brandHome">
       <svg viewBox="0 0 44 44" aria-hidden="true"><path d="M10 22 22 9 34 22 22 35Z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10 22h24M22 9v26" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="22" cy="22" r="4" fill="currentColor"/><circle cx="10" cy="22" r="2.6" fill="currentColor"/><circle cx="34" cy="22" r="2.6" fill="currentColor"/></svg>
       Circuitiary
     </a>
     <span class="brand-subtitle">AN ATLAS OF ANIMAL CIRCUITS</span>
-    <a class="header-link" href="#assumptions">Modeli anlamak <span aria-hidden="true">↗</span></a>
+    <a class="header-link" href="#assumptions">{{ m.understandModel }} <span aria-hidden="true">↗</span></a>
   </header>
 
   <main id="top">
     <section class="intro">
       <div>
-        <p class="eyebrow"><span class="status-dot"></span> DENEY DEFTERİ / <TermText :text="isReal ? '002' : '001'" /></p>
-        <h1>Bir uyaranın<br><em>izini sür.</em></h1>
-        <p class="intro-copy">Küçük bir devreye sinyal ver. Etkinliğin nasıl yayıldığını izle.<br class="desktop-break"> Aynı bağlantılar, farklı varsayımlar: sonuç nasıl değişiyor?</p>
+        <p class="eyebrow"><span class="status-dot"></span> {{ m.notebookKicker }} <TermText :text="isReal ? '002' : '001'" /></p>
+        <h1>{{ m.heroLine1 }}<br><em>{{ m.heroLine2 }}</em></h1>
+        <p class="intro-copy">{{ m.introCopy1 }}<br class="desktop-break"> {{ m.introCopy2 }}</p>
       </div>
       <div class="intro-note">
-        <span class="tag">{{ isReal ? 'GERÇEK ANATOMİ · VARSAYIMSAL DİNAMİK' : 'ÖĞRETİCİ · KURGUSAL DEVRE' }}</span>
-        <p>Önce sekiz hücre.<br>Sonra bir solucanın bağlantıları.</p>
-        <span class="small-muted">Bağlantı haritasından işleyişe, adım adım.</span>
+        <span class="tag">{{ isReal ? m.tagReal : m.tagIllustrative }}</span>
+        <p>{{ m.introNote1 }}<br>{{ m.introNote2 }}</p>
+        <span class="small-muted">{{ m.introNoteSmall }}</span>
       </div>
     </section>
 
-    <section class="dataset-switch" aria-label="Devre seçimi">
-      <div><span class="eyebrow">İNCELEYECEĞİN DEVRE</span><p><TermText :text="isReal ? 'Cook2019 · yetişkin hermafrodit · AVER / AVAR çevresi' : 'Elle tasarlanmış sekiz hücre · dinamikleri öğren'" /></p></div>
-      <div class="mode-buttons" role="group" aria-label="Devre modu">
-        <button :aria-pressed="!isReal" :disabled="dataLoading" @click="chooseMode('illustrative')">Sekiz hücreli örnek</button>
-        <button :aria-pressed="isReal" :disabled="dataLoading" @click="chooseMode('real')">{{ dataLoading ? 'Veri okunuyor…' : 'C. elegans · gerçek veri' }}</button>
+    <section class="dataset-switch" :aria-label="m.circuitChoice">
+      <div><span class="eyebrow">{{ m.circuitKicker }}</span><p><TermText :text="isReal ? m.circuitReal : m.circuitIllustrative" /></p></div>
+      <div class="mode-buttons" role="group" :aria-label="m.circuitMode">
+        <button :aria-pressed="!isReal" :disabled="dataLoading" @click="chooseMode('illustrative')">{{ m.modeIllustrative }}</button>
+        <button :aria-pressed="isReal" :disabled="dataLoading" @click="chooseMode('real')">{{ dataLoading ? m.dataReading : m.modeReal }}</button>
       </div>
-      <p v-if="dataError" class="data-error" role="alert">{{ dataError }}</p>
+      <p v-if="dataError" class="data-error" role="alert">{{ dataError() }}</p>
     </section>
 
-    <section v-if="isReal && realData" class="data-summary" aria-label="Gerçek veri kaynağı ve sınırları">
-      <div><span class="tag">COOK2019 · DÜZELTME TEMMUZ 2020</span><h2><TermText :text="circuit.neurons.length" /><TermText text=" nöron. Gerçek anatomik bağlantılar." /></h2><p>Kimyasal işaretler ve zaman sabitleri bu dosyada ölçülmüyor. Aşağıdaki etkinlik, bu bağlantı haritasına eklediğimiz varsayımsal modelin sonucudur.</p></div>
-      <div class="data-facts"><span><strong>{{ chemicalCount }}</strong> yönlü kimyasal bağlantı</span><span><strong>{{ gapCount }}</strong> tekil gap junction çifti</span><span>Ham birim: <strong>seri EM kesiti ağırlığı</strong></span><span>Kaynak dosyalar ve altküme: <strong>yalnız yerel</strong></span></div>
+    <section v-if="isReal && realData" class="data-summary" :aria-label="m.dataSummary">
+      <div><span class="tag">{{ m.dataTag }}</span><h2><TermText :text="circuit.neurons.length" /><TermText :text="m.dataHeadingRest" /></h2><p>{{ m.dataLead }}</p></div>
+      <div class="data-facts"><span><strong>{{ chemicalCount }}</strong> {{ m.factChemical }}</span><span><strong>{{ gapCount }}</strong> {{ m.factGap }}</span><span>{{ m.factUnitLabel }} <strong>{{ m.factUnitValue }}</strong></span><span>{{ m.factFilesLabel }} <strong>{{ m.factFilesValue }}</strong></span></div>
     </section>
 
-    <section class="experiment-layout" :aria-label="isReal ? 'Gerçek anatomik altgraf deneyi' : 'Sekiz hücreli devre deneyi'">
+    <section class="experiment-layout" :aria-label="isReal ? m.experimentReal : m.experimentIllustrative">
       <div class="experiment-main">
         <div class="circuit-panel">
           <div class="panel-heading dark-heading">
-            <div><span class="eyebrow">01 / BAĞLANTILAR</span><h2>Bir devrenin içinden</h2></div>
-            <span class="graph-stats">{{ circuit.neurons.length }} hücre <span>·</span> {{ circuit.connections.length }} bağlantı</span>
+            <div><span class="eyebrow">{{ m.connectionsKicker }}</span><h2>{{ m.connectionsHeading }}</h2></div>
+            <span class="graph-stats">{{ m.cellCount(circuit.neurons.length) }} <span>·</span> {{ m.connectionCount(circuit.connections.length) }}</span>
           </div>
-          <div class="condition-tabs" role="group" aria-label="Grafikte gösterilen deney koşulu">
+          <div class="condition-tabs" role="group" :aria-label="m.conditionShown">
             <button v-for="condition in conditions" :key="condition.id" :aria-pressed="activeCondition === condition.id" :class="{ active: activeCondition === condition.id }" @click="activeCondition = condition.id">
               <span>{{ condition.short }}</span>{{ condition.label }}
             </button>
           </div>
-          <div class="graph-view-tabs" role="tablist" aria-label="Devre görünümü" @keydown="graphTabKeydown">
-            <button id="graph-tab-2d" type="button" role="tab" :aria-selected="graphView === '2d'" aria-controls="graph-panel-2d" :tabindex="graphView === '2d' ? 0 : -1" @click="chooseGraphView('2d')">2D · bağlantı haritası</button>
-            <button id="graph-tab-3d" type="button" role="tab" :aria-selected="graphView === '3d'" aria-controls="graph-panel-3d" :tabindex="graphView === '3d' ? 0 : -1" @click="chooseGraphView('3d')">3D · şematik uzay</button>
+          <div class="graph-view-tabs" role="tablist" :aria-label="m.graphViewLabel" @keydown="graphTabKeydown">
+            <button id="graph-tab-2d" type="button" role="tab" :aria-selected="graphView === '2d'" aria-controls="graph-panel-2d" :tabindex="graphView === '2d' ? 0 : -1" @click="chooseGraphView('2d')">{{ m.view2d }}</button>
+            <button id="graph-tab-3d" type="button" role="tab" :aria-selected="graphView === '3d'" aria-controls="graph-panel-3d" :tabindex="graphView === '3d' ? 0 : -1" @click="chooseGraphView('3d')">{{ m.view3d }}</button>
           </div>
           <div id="graph-panel-2d" v-show="graphView === '2d'" role="tabpanel" aria-labelledby="graph-tab-2d">
             <CircuitGraph v-if="graphView === '2d'" :key="mode" :focus-connections="isReal && focusConnections" :circuit="circuit" :activity="nodeActivity" :selected-node="selectedNeuron" :silenced-connection-id="activeCondition === 'silenced' ? selectedEdge : undefined" @select="selectedNeuron = $event" />
           </div>
           <div id="graph-panel-3d" v-show="graphView === '3d'" role="tabpanel" aria-labelledby="graph-tab-3d">
             <CircuitGraph3D v-if="graphView === '3d'" :key="mode" :focus-connections="isReal && focusConnections" :circuit="circuit" :activity="nodeActivity" :selected-node="selectedNeuron" :silenced-connection-id="activeCondition === 'silenced' ? selectedEdge : undefined" @select="selectedNeuron = $event" @request2d="chooseGraphView('2d', true)" />
-            <div v-if="graphView === '3d'" class="spatial-selection" role="group" aria-label="3D görünümünde seçili nöron ayrıntıları">
+            <div v-if="graphView === '3d'" class="spatial-selection" role="group" :aria-label="m.selected3d">
               <div><span class="eyebrow" aria-live="polite">{{ selected.id }} / {{ roleName(selected.role) }}</span><p>{{ selected.description }}</p></div>
-              <div class="spatial-activity"><span>Model etkinliği</span><output data-testid="three-d-selected-activity">{{ format(nodeActivity[selected.id] ?? 0, 3) }}</output><small>boyutsuz · {{ format(displayedTimeMs, timeDigits) }} ms</small></div>
+              <div class="spatial-activity"><span>{{ m.modelActivity }}</span><output data-testid="three-d-selected-activity">{{ format(nodeActivity[selected.id] ?? 0, 3) }}</output><small>{{ m.dimensionless }} · {{ format(displayedTimeMs, timeDigits) }} ms</small></div>
             </div>
           </div>
-          <div v-if="isReal" class="graph-key real-key"><span>→ Kimyasal · yönlü</span><span>↔ Gap junction · iki yönlü</span><label><input v-model="focusConnections" type="checkbox" aria-label="Yalnız seçili hücrenin bağlantıları"> Seçili hücreye odaklan</label></div>
-          <div v-else class="graph-key"><span><i class="input-key"></i>Giriş</span><span><i class="interneuron-key"></i>Ara hücre</span><span><i class="output-key"></i>Çıktı</span><span class="inhibition-key">⊣ Baskılayıcı bağlantı</span></div>
+          <div v-if="isReal" class="graph-key real-key"><span>{{ m.keyChemical }}</span><span>{{ m.keyGap }}</span><label><input v-model="focusConnections" type="checkbox" :aria-label="m.focusLabel"> {{ m.focusText }}</label></div>
+          <div v-else class="graph-key"><span><i class="input-key"></i>{{ m.keyInput }}</span><span><i class="interneuron-key"></i>{{ m.keyInterneuron }}</span><span><i class="output-key"></i>{{ m.keyOutput }}</span><span class="inhibition-key">{{ m.keyInhibition }}</span></div>
           <div class="timeline">
-            <button class="play-button" @click="togglePlayback" :aria-label="playing ? 'Oynatmayı duraklat' : 'Etkinliği oynat'">{{ playing ? 'Ⅱ' : '▶' }}</button>
-            <input type="range" min="0" :max="defaultConfig.durationMs" :step="dt" :value="displayedTimeMs" :aria-valuetext="`${format(displayedTimeMs, timeDigits)} ms`" aria-label="Simülasyon zamanı" @input="seek(Number(($event.target as HTMLInputElement).value))">
+            <button class="play-button" @click="togglePlayback" :aria-label="playing ? m.pausePlayback : m.playActivity">{{ playing ? 'Ⅱ' : '▶' }}</button>
+            <input type="range" min="0" :max="defaultConfig.durationMs" :step="dt" :value="displayedTimeMs" :aria-valuetext="`${format(displayedTimeMs, timeDigits)} ms`" :aria-label="m.simulationTime" @input="seek(Number(($event.target as HTMLInputElement).value))">
             <output>{{ format(displayedTimeMs, timeDigits) }} <span>ms</span></output>
           </div>
           <details class="shortcut-help">
-            <summary>Klavye kısayolları</summary>
+            <summary>{{ m.shortcutsSummary }}</summary>
             <dl>
-              <div><dt><kbd>Boşluk</kbd></dt><dd>Oynat / duraklat</dd></div>
-              <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Zaman imlecini {{ SHORTCUT_STEP_MS }} ms geri / ileri al; oynatmayı duraklatır</dd></div>
-              <div><dt><kbd>Home</kbd></dt><dd>Başa dön (0 ms)</dd></div>
+              <div><dt><kbd>{{ m.keySpace }}</kbd></dt><dd>{{ m.shortcutToggle }}</dd></div>
+              <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>{{ m.shortcutStep(SHORTCUT_STEP_MS) }}</dd></div>
+              <div><dt><kbd>Home</kbd></dt><dd>{{ m.shortcutHome }}</dd></div>
             </dl>
-            <p>Tuşlar odak bir kontrolde, kaydırıcıda, bağlantıda, açıklama kartında ya da başka bir kaydırılabilir alanda değilken ve bu sayfa görünürken çalışır. Çalışmıyorsa sayfanın boş bir yerine tıkla. Ctrl, Cmd, Alt ve Shift ile birlikte çalışmaz.</p>
+            <p>{{ m.shortcutsNote }}</p>
           </details>
-          <p class="sr-only" role="status" data-testid="shortcut-status">{{ shortcutMessage }}</p>
-          <p class="graph-caption">Düğüme tıkla veya aşağıdan bir hücre seç. Parlaklık hesaplanan etkinliği gösterir.<template v-if="isReal"> {{ visibleEdgeCount }}/{{ circuit.connections.length }} bağlantı çiziliyor; görünüm filtresi hesaplamayı değiştirmez. Yerleşim şematiktir, anatomik konum değildir.<template v-if="graphView === '2d'"> Çizgi kalınlığı model ağırlığına bağlıdır. Grafiği sürükle, yakınlaştır veya sığdır.</template><template v-else> Çizgiler bağlantı türünü ve yönünü gösterir; ağırlıkları tabloda inceleyebilirsin.</template></template></p>
+          <p class="sr-only" role="status" data-testid="shortcut-status">{{ shortcutMessage?.() }}</p>
+          <p class="graph-caption">{{ m.captionBase }}<template v-if="isReal"> {{ m.captionReal(visibleEdgeCount, circuit.connections.length) }}<template v-if="graphView === '2d'">{{ m.caption2d }}</template><template v-else>{{ m.caption3d }}</template></template></p>
         </div>
 
         <section class="chart-panel">
           <div class="panel-heading">
-            <div><span class="eyebrow">02 / MODEL ÇIKTISI</span><h2>Aynı uyaran, üç koşul</h2></div>
-            <label class="output-picker">{{ isReal ? 'Okuma' : 'Çıktı' }} <select v-model="outputNeuron" aria-label="İzlenen çıktı hücresi"><option v-for="neuron in readoutNeurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}</option></select></label>
+            <div><span class="eyebrow">{{ m.outputKicker }}</span><h2>{{ m.outputHeading }}</h2></div>
+            <label class="output-picker">{{ isReal ? m.pickerReal : m.pickerIllustrative }} <select v-model="outputNeuron" :aria-label="m.watchedOutput"><option v-for="neuron in readoutNeurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}</option></select></label>
           </div>
-          <div class="trace-key"><span v-for="condition in conditions" :key="condition.id"><i :style="{ borderTop: `2px ${condition.id === 'baseline' ? 'solid' : condition.id === 'silenced' ? 'dotted' : 'dashed'} ${condition.color}` }"></i>{{ condition.label }}</span></div>
-          <ActivationChart :y-max="chartYMax" :times="results.baseline.timesMs" :traces="traces" :cursor-ms="displayedTimeMs" :stimulus="baselineSettings.stimulus" @seek="seek" />
-          <div class="peak-row"><div v-for="condition in conditions" :key="condition.id"><span>{{ condition.short }} / tepe etkinlik</span><strong :data-testid="`peak-${condition.id}`">{{ format(peaks[condition.id]) }}</strong></div></div>
-          <div class="chart-scale"><label><input v-model="scaleToResponse" type="checkbox" aria-label="Yanıta göre dikey ölçek"> Yanıta göre dikey ölçek</label><span>Dikey eksen: 0–<output data-testid="chart-y-max">{{ format(chartYMax, chartYMax < 1 ? 3 : 0) }}</output></span></div>
-          <ChartDataTable :times="results.baseline.timesMs" :traces="traces" :peaks="peaks" :output="outputNeuron" />
-          <p class="chart-note"><TermText text="Üç koşul aynı ekseni kullanır; dikey ölçek etkinlik değerlerini değiştirmez. Etkinlik 0–1 arasında ve boyutsuzdur. Sarı alan uyaran süresini gösterir. Çizgiler hareket, karar veya ölçülmüş nöron ateşleme hızı değildir." /></p>
+          <div class="trace-key"><span v-for="condition in conditions" :key="condition.id"><i :style="{ borderTop: `2px ${condition.id === 'baseline' ? 'solid' : condition.id === 'silenced' ? 'dotted' : 'dashed'} ${condition.color}` }"></i>{{ condition.label }}</span><span v-if="pinned" data-testid="pinned-key"><i :style="{ borderTop: `2px dashed ${PINNED_COLOR}` }"></i>◆ {{ chartTraces.at(-1)!.label }}</span></div>
+          <ActivationChart :y-max="chartYMax" :times="results.baseline.timesMs" :traces="chartTraces" :cursor-ms="displayedTimeMs" :stimulus="baselineSettings.stimulus" @seek="seek" />
+          <div class="peak-row"><div v-for="condition in conditions" :key="condition.id"><span>{{ condition.short }} / {{ m.peakActivity }}</span><strong :data-testid="`peak-${condition.id}`">{{ format(peaks[condition.id]) }}</strong></div></div>
+          <div class="chart-scale"><label><input v-model="scaleToResponse" type="checkbox" :aria-label="m.scaleToResponse"> {{ m.scaleToResponse }}</label><span>{{ m.verticalAxis }} 0–<output data-testid="chart-y-max">{{ format(chartYMax, chartYMax < 1 ? 3 : 0) }}</output></span></div>
+          <ChartDataTable :times="results.baseline.timesMs" :traces="chartTraces" :peaks="tablePeaks" :output="outputNeuron" />
+          <PinnedComparison :pinned="pinned" :settings="shareState" :current-peak="peaks[activeCondition]" :condition-names="conditionNames" :edge-name="edgeName" @pin="pinCurve" @unpin="pinned = null" />
+          <p class="chart-note"><TermText :text="m.chartNote" /></p>
         </section>
       </div>
 
       <aside class="control-panel">
-        <div class="panel-heading"><div><span class="eyebrow">DENEYİ KUR</span><h2>Bir şeyi değiştir.</h2></div><button class="text-button" @click="reset">Sıfırla ↺</button></div>
-        <p class="control-intro">Ayarlar değiştiğinde üç koşul da aynı girişle yeniden hesaplanır.</p>
+        <div class="panel-heading"><div><span class="eyebrow">{{ m.setupKicker }}</span><h2>{{ m.setupHeading }}</h2></div><button class="text-button" @click="reset">{{ m.reset }}</button></div>
+        <p class="control-intro">{{ m.setupIntro }}</p>
         <div class="control-section">
-          <label for="stimulus-target">Uyaranın girdiği hücre</label>
-          <select id="stimulus-target" v-model="stimulusTarget"><option v-for="neuron in inputNeurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}{{ isReal ? '' : ' · Giriş hücresi' }}</option></select><p v-if="isReal" class="field-note">Uyaran hedefi ve okunan hücre deney seçimleridir; duyusal veya motor hücre oldukları anlamına gelmez.</p>
-          <label class="slider-label" for="amplitude">Uyaran gücü <output>{{ format(amplitude, 2) }}</output></label>
+          <label for="stimulus-target">{{ m.stimulusCell }}</label>
+          <select id="stimulus-target" v-model="stimulusTarget"><option v-for="neuron in inputNeurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}{{ isReal ? '' : m.inputCellSuffix }}</option></select><p v-if="isReal" class="field-note">{{ m.targetNote }}</p>
+          <label class="slider-label" for="amplitude">{{ m.stimulusStrength }} <output>{{ format(amplitude, 2) }}</output></label>
           <input id="amplitude" v-model.number="amplitude" type="range" :aria-valuetext="format(amplitude, 2)" min="0" max="1" step="0.05">
-          <label class="slider-label" for="duration">Uyaran süresi <output>{{ pulseDuration }} ms</output></label>
+          <label class="slider-label" for="duration">{{ m.stimulusDuration }} <output>{{ pulseDuration }} ms</output></label>
           <input id="duration" v-model.number="pulseDuration" type="range" min="50" max="400" step="10">
-          <p class="field-note">Uyaran <TermText :text="defaultConfig.stimulus.onsetMs" /> ms'de başlar. Başlangıç etkinlikleri sıfırdır.</p>
+          <p class="field-note">{{ m.onsetBefore }} <TermText :text="defaultConfig.stimulus.onsetMs" /> {{ m.onsetAfter }}</p>
         </div>
         <div class="control-section">
-          <span class="condition-label"><i class="condition-b">B</i> BAĞLANTIYI SUSTUR</span>
-          <label class="sr-only" for="silenced-edge">Susturulacak bağlantı</label>
-          <select id="silenced-edge" v-model="selectedEdge"><option v-for="edge in circuit.connections" :key="edge.id" :value="edge.id">{{ edgeLabel(edge) }} · {{ edge.kind === 'gap' ? 'elektriksel çift' : isReal ? 'kimyasal · varsayımsal +' : edge.weight < 0 ? 'baskılayıcı' : 'uyarıcı' }}</option></select>
-          <p class="field-note">Seçilen bağlantının model ağırlığı sıfır olur.<template v-if="isReal"><TermText text=" Gap junction çiftinde iki yön birlikte kaldırılır. Bu bir hücre ablasyonu değildir." /></template></p>
+          <span class="condition-label"><i class="condition-b">B</i> {{ m.silenceKicker }}</span>
+          <label class="sr-only" for="silenced-edge">{{ m.silencedEdge }}</label>
+          <select id="silenced-edge" v-model="selectedEdge"><option v-for="edge in circuit.connections" :key="edge.id" :value="edge.id">{{ edgeLabel(edge) }} · {{ edge.kind === 'gap' ? m.edgeGap : isReal ? m.edgeChemicalAssumed : edge.weight < 0 ? m.edgeInhibitory : m.edgeExcitatory }}</option></select>
+          <p class="field-note">{{ m.silenceNote }}<template v-if="isReal"><TermText :text="m.silenceNoteGap" /></template></p>
         </div>
         <div class="control-section">
-          <span class="condition-label"><i class="condition-c">C</i> ZAMAN SABİTİNİ DEĞİŞTİR</span>
-          <label class="sr-only" for="changed-neuron">Zaman sabiti değiştirilen hücre</label>
+          <span class="condition-label"><i class="condition-c">C</i> {{ m.tauKicker }}</span>
+          <label class="sr-only" for="changed-neuron">{{ m.tauCell }}</label>
           <select id="changed-neuron" v-model="changedNeuron"><option v-for="neuron in circuit.neurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }} · {{ roleName(neuron.role) }}</option></select>
-          <label class="slider-label" for="changed-tau">Bu hücrenin τ değeri <output>{{ changedTau }} ms</output></label>
+          <label class="slider-label" for="changed-tau">{{ m.tauOfCell }} <output>{{ changedTau }} ms</output></label>
           <input id="changed-tau" v-model.number="changedTau" type="range" min="10" max="180" step="5">
-          <label class="slider-label" for="base-tau">Referansta tüm hücreler <output>{{ baseTau }} ms</output></label>
+          <label class="slider-label" for="base-tau">{{ m.tauReference }} <output>{{ baseTau }} ms</output></label>
           <input id="base-tau" v-model.number="baseTau" type="range" min="10" max="80" step="5">
         </div>
         <div v-if="isReal" class="control-section model-gains">
-          <span class="condition-label">VARSAYIMSAL DİNAMİK ÖLÇEKLER</span>
-          <label class="slider-label" for="chemical-gain">Kimyasal katsayı <output>{{ format(chemicalGain, 2) }}</output></label><input id="chemical-gain" v-model.number="chemicalGain" type="range" :aria-valuetext="format(chemicalGain, 2)" min="0" max="2" step="0.1">
-          <label class="slider-label" for="gap-gain">Gap katsayısı <output>{{ format(gapGain, 2) }}</output></label><input id="gap-gain" v-model.number="gapGain" type="range" :aria-valuetext="format(gapGain, 2)" min="0" max="1" step="0.1">
-          <p class="field-note">Ham anatomi değişmez. Kimyasal etkilerin tümü bu modelde pozitif varsayılır; gerçek işaretleri bu kaynaktan bilinmiyor. Katsayılar ölçülmüş iletkenlik değildir.</p>
+          <span class="condition-label">{{ m.gainsKicker }}</span>
+          <label class="slider-label" for="chemical-gain">{{ m.chemicalGain }} <output>{{ format(chemicalGain, 2) }}</output></label><input id="chemical-gain" v-model.number="chemicalGain" type="range" :aria-valuetext="format(chemicalGain, 2)" min="0" max="2" step="0.1">
+          <label class="slider-label" for="gap-gain">{{ m.gapGain }} <output>{{ format(gapGain, 2) }}</output></label><input id="gap-gain" v-model.number="gapGain" type="range" :aria-valuetext="format(gapGain, 2)" min="0" max="1" step="0.1">
+          <p class="field-note">{{ m.gainsNote }}</p>
         </div>
-        <div class="interpretation"><span class="eyebrow">BU KOŞULU NASIL OKUMALI?</span><p><TermText :text="interpretation" /></p></div>
-        <button class="export-button" @click="exportExperiment">Deney kaydını indir <span aria-hidden="true">↓</span></button>
-        <span class="export-note">Bağlantılar, varsayımlar ve üç koşulun sonuçları · JSON<template v-if="isReal"> · yerel kullanım; yeniden dağıtım izni doğrulanmadı</template></span>
+        <div class="interpretation"><span class="eyebrow">{{ m.readKicker }}</span><p><TermText :text="interpretation" /></p></div>
+        <button class="export-button" @click="exportExperiment">{{ m.downloadRecord }} <span aria-hidden="true">↓</span></button>
+        <span class="export-note">{{ m.exportNote }}<template v-if="isReal"> · {{ m.exportNoteReal }}</template></span>
       </aside>
     </section>
 
-    <section aria-label="Paylaş ve dışa aktar">
-      <ExperimentTools :url="shareUrl" :notice="shareNoticeText" :condition-label="activeConditionLabel" :output-cell="outputNeuron" :csv-file="csvExport" :json-file="jsonExport" />
+    <section :aria-label="m.shareSection">
+      <ExperimentTools :url="shareUrl" :notice="shareNoticeText?.() ?? ''" :condition-label="activeConditionLabel" :output-cell="outputNeuron" :csv-file="csvExport" :json-file="jsonExport" />
     </section>
 
-    <section class="node-inspector" :class="{ 'real-inspector': isReal }" aria-label="Hücre etkinlikleri ve seçilen hücre">
-      <div class="node-buttons" role="group" aria-label="İncelenecek hücre"><button v-for="neuron in circuit.neurons" :key="neuron.id" :aria-pressed="selectedNeuron === neuron.id" :class="{ selected: selectedNeuron === neuron.id }" @click="selectedNeuron = neuron.id"><span>{{ neuron.id }}</span><small>{{ format(nodeActivity[neuron.id] ?? 0, 2) }}</small></button></div>
-      <div class="node-description"><span class="eyebrow">{{ selected.id }} / {{ roleName(selected.role) }}</span><p><TermText :text="selected.description" /></p><p v-if="isReal && selectedAnatomy">SI4 hücre sınıfı: <strong><TermText :text="selectedAnatomy.cellType" /></strong>. Deney rolü: <TermText :text="selected.id === stimulusTarget ? 'uyaran hedefi' : selected.id === outputNeuron ? 'okunan hücre' : 'diğer nöron'" />.</p></div>
+    <section class="node-inspector" :class="{ 'real-inspector': isReal }" :aria-label="m.inspector">
+      <div class="node-buttons" role="group" :aria-label="m.inspectCell"><button v-for="neuron in circuit.neurons" :key="neuron.id" :aria-pressed="selectedNeuron === neuron.id" :class="{ selected: selectedNeuron === neuron.id }" @click="selectedNeuron = neuron.id"><span>{{ neuron.id }}</span><small>{{ format(nodeActivity[neuron.id] ?? 0, 2) }}</small></button></div>
+      <div class="node-description"><span class="eyebrow">{{ selected.id }} / {{ roleName(selected.role) }}</span><p><TermText :text="selected.description" /></p><p v-if="isReal && selectedAnatomy">{{ m.si4Class }} <strong><TermText :text="selectedAnatomy.cellType" /></strong>{{ m.experimentRole }} <TermText :text="selected.id === stimulusTarget ? m.roleStimulusTarget : selected.id === outputNeuron ? m.roleReadout : m.roleOther" />.</p></div>
     </section>
 
     <section id="assumptions" class="assumption-section">
-      <div class="section-intro"><span class="eyebrow">03 / VARSAYIM DEFTERİ</span><h2>Haritada olan.<br><em>Modele eklediğimiz.</em></h2><p>Bir bağlantının varlığı, işleyişinin bütün ayrıntılarını vermez. <TermText :text="isReal ? 'Bu deneyde anatomi kaynaktan geliyor; işaret, dinamik ölçek ve zaman sabitlerini biz seçiyoruz.' : 'Bu deneyde ikisini de biz tanımladık; değiştirerek sonuçlarını araştırıyoruz.'" /></p></div>
+      <div class="section-intro"><span class="eyebrow">{{ m.assumptionsKicker }}</span><h2>{{ m.assumptionsHeading1 }}<br><em>{{ m.assumptionsHeading2 }}</em></h2><p>{{ m.assumptionsIntro }} <TermText :text="isReal ? m.assumptionsIntroReal : m.assumptionsIntroIllustrative" /></p></div>
       <div class="assumption-content">
-        <div v-if="isReal && realData" class="scope-card" data-testid="real-assumptions"><span class="tag">ANATOMİ: KAYNAKTAN · DİNAMİK: VARSAYIM</span><p><TermText text="Kimyasal matrisin satırı kaynak, sütunu hedeftir. Ham ağırlık seri EM kesitidir; sinaps adedi veya sinaptik güç değildir. Pozitif kimyasal işaret, boyutsuz etkinlik ve ms zaman ölçeği bizim seçimimizdir." /></p><p>Seçim: AVAR/AVER ve bir bağlantı uzaklığındaki adaylar; önce kimyasal toplam, sonra ayrı gap toplamı, sonra hücre adı. İlk 28 aday ve iki başlangıç hücresi; aralarındaki tüm bağlantılar korunur.</p><p><TermText text="Dış kimyasal girdi sıfır kabul edilir. Dış bağlantılar kesilir; dış gap junction etkisi modellenmez. Dış hücreler sıfıra sabitlenmez. Altgraf işlevsel olarak kapalı değildir." /></p><p v-if="realData.selection.omittedExternal">Çıkarılan dış bağlantılar: <TermText :text="realData.selection.omittedExternal.chemicalIncomingCount" /> gelen kimyasal, <TermText :text="realData.selection.omittedExternal.chemicalOutgoingCount" /> giden kimyasal ve <TermText :text="realData.selection.omittedExternal.gapCount" /> gap çifti. Tüm kayıtlar JSON'da yer alır.</p></div>
-        <div v-else class="scope-card"><span class="tag">ÖLÇÜLMÜŞ BİYOLOJİK VERİ: YOK</span><p>Sekiz hücre ve bağlantıları öğretim için oluşturuldu. Her bağlantının işareti ve ağırlığı da bir model tercihi. Bu modda gerçek hayvan verisi kullanılmaz.</p></div>
-        <div class="equation-card"><span class="eyebrow">KULLANDIĞIMIZ DİNAMİK</span><code>τᵢ dxᵢ/dt = −xᵢ + clip(Σⱼ wᵢⱼxⱼ + Iᵢ(t), 0, 1)<template v-if="isReal"> + Σⱼ gᵢⱼ(xⱼ − xᵢ)</template></code><p v-if="isReal">Kimyasal: w = katsayı × ham ağırlık / max(1, hedefin altgraf içi gelen ham toplamı). Gap: g = katsayı × ham ağırlık / max(1, iki uçtaki altgraf içi gap toplamlarının büyüğü). Gap terimi iki yönde aynı g katsayısını kullanır; işaretli kimyasal ağırlıkla birleştirilmez.</p><p><strong>x</strong> etkinlik · <strong>w</strong> bağlantı ağırlığı · <strong>I</strong> uyaran · <strong>τ</strong> zaman sabiti. Hücreler eşzamanlı Euler adımlarıyla ilerler. Gürültü, spike, öğrenme, beden ve kimyasal süreçler bu modele eklenmedi.</p>
-          <div class="numerical-check"><label for="dt">Zaman adımı <select id="dt" v-model.number="dt"><option :value="0.0625">0,0625 ms</option><option :value="0.125">0,125 ms</option><option :value="0.25">0,25 ms</option><option :value="0.5">0,5 ms</option><option :value="1">1 ms</option><option :value="2">2 ms</option></select></label><span>dt/2 ile en büyük fark: <strong data-testid="convergence-error">{{ format(convergenceError, 5) }}</strong></span></div>
-          <p v-if="convergenceError > 0.01" class="numerical-warning" role="status" data-testid="numerical-warning">Bu ayarlarda zaman adımı duyarlılığı belirgin. Daha küçük adım seçip farkın azalmasını kontrol et. 0,01 eşiği yalnız bir inceleme uyarısıdır; doğruluk garantisi değildir.</p>
-          <p class="field-note">Referans koşul, yarı zaman adımıyla tekrar hesaplanır ve aynı zamanlardaki tüm hücreler karşılaştırılır. Küçük fark sayısal tutarlılığı gösterir; biyolojik doğruluk kanıtı değildir.</p>
+        <div v-if="isReal && realData" class="scope-card" data-testid="real-assumptions"><span class="tag">{{ m.scopeTagReal }}</span><p><TermText :text="m.scopeMatrix" /></p><p>{{ m.scopeSelection }}</p><p><TermText :text="m.scopeBoundary" /></p><p v-if="realData.selection.omittedExternal">{{ m.omittedLead }} <TermText :text="realData.selection.omittedExternal.chemicalIncomingCount" /> {{ m.omittedIncoming }} <TermText :text="realData.selection.omittedExternal.chemicalOutgoingCount" /> {{ m.omittedOutgoing }} <TermText :text="realData.selection.omittedExternal.gapCount" /> {{ m.omittedGap }}</p></div>
+        <div v-else class="scope-card"><span class="tag">{{ m.scopeTagIllustrative }}</span><p>{{ m.scopeIllustrative }}</p></div>
+        <div class="equation-card"><span class="eyebrow">{{ m.dynamicsKicker }}</span><code>τᵢ dxᵢ/dt = −xᵢ + clip(Σⱼ wᵢⱼxⱼ + Iᵢ(t), 0, 1)<template v-if="isReal"> + Σⱼ gᵢⱼ(xⱼ − xᵢ)</template></code><p v-if="isReal">{{ m.normalization }}</p><p><strong>x</strong> {{ m.symbolActivity }} · <strong>w</strong> {{ m.symbolWeight }} · <strong>I</strong> {{ m.symbolStimulus }} · <strong>τ</strong> {{ m.symbolTauAndMethod }}</p>
+          <div class="numerical-check"><label for="dt">{{ m.timeStep }} <select id="dt" v-model.number="dt"><option :value="0.0625">{{ withComma('0.0625') }} ms</option><option :value="0.125">{{ withComma('0.125') }} ms</option><option :value="0.25">{{ withComma('0.25') }} ms</option><option :value="0.5">{{ withComma('0.5') }} ms</option><option :value="1">1 ms</option><option :value="2">2 ms</option></select></label><span>{{ m.halfStepDifference }} <strong data-testid="convergence-error">{{ format(convergenceError, 5) }}</strong></span></div>
+          <p v-if="convergenceError > 0.01" class="numerical-warning" role="status" data-testid="numerical-warning">{{ m.numericalWarning(format(0.01, 2)) }}</p>
+          <p class="field-note">{{ m.numericalNote }}</p>
         </div>
-        <details class="connection-table"><summary>Tüm bağlantıları ve ağırlıkları incele <span>{{ circuit.connections.length }} {{ isReal ? 'anatomik bağlantı + model ağırlığı' : 'model tercihi' }}</span></summary><div class="table-scroll"><table><caption class="sr-only">{{ isReal ? 'Kaynak anatomisi ve ayrı model ağırlıkları' : 'Kurgusal devrenin yönlü bağlantıları' }}</caption><thead><tr><th>Bağlantı</th><th v-if="isReal">Ham EM kesiti</th><th>Model ağırlığı</th><th>Etki</th><th><TermText :text="isReal ? 'Model varsayımı' : 'Öğretici amaç'" /></th></tr></thead><tbody><tr v-for="edge in circuit.connections" :key="edge.id"><td><TermText :text="edgeLabel(edge)" /></td><td v-if="isReal"><TermText :text="edge.rawWeight" /></td><td>{{ format(edge.weight, isReal ? 4 : 2) }}</td><td><TermText :text="edge.kind === 'gap' ? 'Difüzyon' : isReal ? 'Varsayımsal +' : edge.weight < 0 ? 'Baskılayıcı' : 'Uyarıcı'" /></td><td><TermText :text="edge.note" /></td></tr></tbody></table></div></details>
-      <details v-if="isReal && realData" class="provenance-details"><summary>Dosya sürümünü, bütünlüğünü ve lisans durumunu incele</summary><p>Birleşik EM serileri ve bağlantı ekstrapolasyonları içeren Cook2019 kaynağıdır; tek hayvanın eksiksiz ölçümü olarak yorumlanmaz. Kaynakta kesin ayrıştırılmayan ekstrapolasyonlar için kenar düzeyinde sahte etiket üretilmedi.</p><div v-for="source in realData.dataset.sources" :key="source.sha256"><a :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.name }} ↗</a><code>SHA-256 {{ source.sha256 }}</code><p>İndirme UTC: <TermText :text="source.downloadedAtUtc" /></p></div><p>Lisans: dosyaya özgü yeniden dağıtım izni doğrulanmadı. XLSX ve türetilmiş altküme yerel klasördedir; üretim paketine eklenmez.</p><p><TermText text="Diagonal gap kayıtları dinamik çift olarak kullanılmaz; kaynak koordinatları ve seçim raporunda ayrı korunur. Kimyasal matrisin nöron kaynak/hedef kapsamındaki bilinen eksiklikleri de ithalat raporundadır." /></p></details>
+        <details class="connection-table"><summary>{{ m.tableSummary }} <span>{{ circuit.connections.length }} {{ isReal ? m.tableCountReal : m.tableCountIllustrative }}</span></summary><div class="table-scroll"><table><caption class="sr-only">{{ isReal ? m.tableCaptionReal : m.tableCaptionIllustrative }}</caption><thead><tr><th>{{ m.columnConnection }}</th><th v-if="isReal">{{ m.columnRaw }}</th><th>{{ m.columnWeight }}</th><th>{{ m.columnEffect }}</th><th><TermText :text="isReal ? m.columnNoteReal : m.columnNoteIllustrative" /></th></tr></thead><tbody><tr v-for="edge in circuit.connections" :key="edge.id"><td><TermText :text="edgeLabel(edge)" /></td><td v-if="isReal"><TermText :text="edge.rawWeight" /></td><td>{{ format(edge.weight, isReal ? 4 : 2) }}</td><td><TermText :text="edge.kind === 'gap' ? m.effectGap : isReal ? m.effectAssumed : edge.weight < 0 ? m.effectInhibitory : m.effectExcitatory" /></td><td><TermText :text="edge.note" /></td></tr></tbody></table></div></details>
+      <details v-if="isReal && realData" class="provenance-details"><summary>{{ m.provenanceSummary }}</summary><p>{{ m.provenanceLead }}</p><div v-for="source in realData.dataset.sources" :key="source.sha256"><a :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.name }} ↗</a><code>SHA-256 {{ source.sha256 }}</code><p>{{ m.downloadedUtc }} <TermText :text="source.downloadedAtUtc" /></p></div><p>{{ m.licenceNote }}</p><p><TermText :text="m.diagonalNote" /></p></details>
       </div>
     </section>
 
-    <section class="next-step"><div><span class="eyebrow">{{ isReal ? 'BU DENEYİN SINIRI / ÖLÇÜMLE KARŞILAŞTIRMA' : 'İKİNCİ SAYFA / GERÇEK BAĞLANTILAR' }}</span><h2>Bir solucanın devresinden<br>küçük bir bölüm.</h2></div><div><p><TermText text="C. elegans'ın yayımlanmış bağlantı tablosundan AVER/AVAR çevresinde en fazla 30 nöron seçiyoruz. Anatomik ağırlık, bağlantı türü, eksik bilgi ve bizim dinamik varsayımlarımız ayrı kaydediliyor." /></p><p class="small-muted">Randi2023 işlevsel ölçümlerine bağlantı bir okuma önerisidir; bu model ölçülmüş kalsiyum yanıtlarına uydurulmadı. Gerçek bağlantılar, doğrulanmış davranış anlamına gelmez.</p><a href="https://wormwiring.org/pages/adjacency.html" target="_blank" rel="noopener noreferrer">WormWiring veri kaynağı ↗</a><a href="https://www.nature.com/articles/s41586-023-06683-4" target="_blank" rel="noopener noreferrer">İşlevsel ölçüm referansı ↗</a></div></section>
+    <section class="next-step"><div><span class="eyebrow">{{ isReal ? m.nextKickerReal : m.nextKickerIllustrative }}</span><h2>{{ m.nextHeading1 }}<br>{{ m.nextHeading2 }}</h2></div><div><p><TermText :text="m.nextLead" /></p><p class="small-muted">{{ m.nextLimit }}</p><a href="https://wormwiring.org/pages/adjacency.html" target="_blank" rel="noopener noreferrer">{{ m.linkWormWiring }}</a><a href="https://www.nature.com/articles/s41586-023-06683-4" target="_blank" rel="noopener noreferrer">{{ m.linkFunctional }}</a></div></section>
   </main>
-  <footer><span>Circuitiary</span><p>Kur. Gözlemle. Varsayımını sorgula.</p><span class="footer-note">{{ isReal ? '002 · YEREL ANATOMİ DENEYİ' : '001 · BAŞLANGIÇ DEVRESİ' }}</span></footer>
+  <footer><span>Circuitiary</span><p>{{ m.footerMotto }}</p><span class="footer-note">{{ isReal ? m.footerReal : m.footerIllustrative }}</span></footer>
 </template>
 
 <style scoped>

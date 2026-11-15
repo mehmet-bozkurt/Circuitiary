@@ -1,16 +1,25 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { glossaryAlphabetical, termAnchorId, type GlossaryTerm } from '../terms/glossary'
-import { foldTurkish, resultsMessage, searchGlossary, termIdFromHash } from '../terms/glossarySearch'
+import { L, locale, useMessages } from '../i18n'
+import { glossaryAlphabetical, glossaryAlphabeticalEn, termAnchorId, type GlossaryTerm } from '../terms/glossary'
+import { foldText, resultsMessage, searchGlossary, termIdFromHash } from '../terms/glossarySearch'
+import { messages } from './GlossaryPage.messages'
 
 const emit = defineEmits<{ ready: [] }>()
 const query = ref('')
 const root = ref<HTMLElement>()
 const searchInput = ref<HTMLInputElement>()
-const results = computed(() => searchGlossary(glossaryAlphabetical, query.value))
-const status = computed(() => resultsMessage(query.value, results.value.length, glossaryAlphabetical.length))
+const m = useMessages(messages)
+// Each language has its own list, in its own alphabetical order; the ids (and so the #term-<id> anchors) are shared.
+const terms = computed(() => L(glossaryAlphabetical, glossaryAlphabeticalEn))
+const results = computed(() => searchGlossary(terms.value, query.value))
+const status = computed(() => resultsMessage(query.value, results.value.length, terms.value.length))
 // Aliases that only repeat the title are not shown; the others explain why a search found the term.
-const otherForms = (term: GlossaryTerm) => term.aliases.filter(alias => foldTurkish(alias) !== foldTurkish(term.title))
+// In English a regular plural (neurons) only repeats the title as well; irregular and adjective forms (ganglia, synaptic) are shown.
+function otherForms(term: GlossaryTerm) {
+  const title = foldText(term.title)
+  return term.aliases.filter(alias => foldText(alias) !== title && !(locale.value === 'en' && foldText(alias) === `${title}s`))
+}
 
 function clearSearch() {
   query.value = ''
@@ -46,28 +55,28 @@ onMounted(async () => {
 <template>
   <main id="glossary-page" ref="root" tabindex="-1" class="glossary-page">
     <header class="glossary-intro">
-      <p class="glossary-eyebrow">CIRCUITIARY / SÖZLÜK</p>
-      <h1>Sözlük</h1>
-      <p class="glossary-summary">Derslerde ve devre ekranında noktalı altı çizili görünen sözcüklerin hepsi burada. Her sözcük için kısa anlamını, adının hangi eski sözcüğe dayandığını ve bunları nereden özetlediğimizi oku.</p>
+      <p class="glossary-eyebrow">{{ m.eyebrow }}</p>
+      <h1>{{ m.title }}</h1>
+      <p class="glossary-summary">{{ m.summary }}</p>
     </header>
     <div class="glossary-boundary">
-      <strong>Bu sözlük bir öğrenme notudur, bilimsel bir tanım kaynağı değil.</strong>
-      <p>Anlamlar ve kökenler her sözcüğün altındaki kaynaklardan özetlenmiştir. Köken, sözcüğün tarihini anlatır; sözcüğün Türkçeye hangi dilden ve hangi yoldan girdiğini iddia etmez. “Bu projede” notları ise Circuitiary’nin modelinin sınırlarını söyler, kaynakların sözü değildir. Kaynak bağlantıları yeni sekmede açılır.</p>
+      <strong>{{ m.boundaryTitle }}</strong>
+      <p>{{ m.boundaryBody }}</p>
     </div>
 
     <form class="glossary-search" role="search" @submit.prevent>
-      <label for="glossary-search">Sözcük ara</label>
+      <label for="glossary-search">{{ m.searchLabel }}</label>
       <div class="glossary-search-row">
         <input id="glossary-search" ref="searchInput" v-model="query" type="search" autocomplete="off" spellcheck="false" aria-describedby="glossary-search-hint glossary-status" />
-        <button v-if="query" type="button" class="glossary-clear" @click="clearSearch">Aramayı temizle</button>
+        <button v-if="query" type="button" class="glossary-clear" @click="clearSearch">{{ m.clear }}</button>
       </div>
-      <p id="glossary-search-hint" class="glossary-hint">Sözcüğün adında, başka biçimlerinde ve anlamında aranır. Türkçe harfleri yazmasan da bulunur: “noron” yazınca Nöron da çıkar.</p>
+      <p id="glossary-search-hint" class="glossary-hint">{{ m.searchHint }}</p>
       <p id="glossary-status" class="glossary-status" role="status" data-testid="glossary-status">{{ status }}</p>
     </form>
 
     <div v-if="!results.length" class="glossary-empty" data-testid="glossary-empty">
-      <p>Eşleşen sözcük yok. Aramayı kısaltmayı ya da sözcüğü başka bir yazılışla yazmayı dene. Köken ve kaynak metinlerinde arama yapılmaz.</p>
-      <button type="button" class="glossary-clear" @click="clearSearch">Aramayı temizle, bütün sözcükleri göster</button>
+      <p>{{ m.empty }}</p>
+      <button type="button" class="glossary-clear" @click="clearSearch">{{ m.clearAll }}</button>
     </div>
 
     <ul class="glossary-list" data-testid="glossary-list">
@@ -76,16 +85,16 @@ onMounted(async () => {
           <div class="glossary-term-head">
             <div class="glossary-title-row">
               <h2 :id="`${termAnchorId(term.id)}-title`">{{ term.title }}</h2>
-              <a class="glossary-permalink" :href="`#${termAnchorId(term.id)}`" :aria-label="`${term.title} sözcüğünün kalıcı bağlantısı`"><span aria-hidden="true">#</span></a>
+              <a class="glossary-permalink" :href="`#${termAnchorId(term.id)}`" :aria-label="m.permalink(term.title)"><span aria-hidden="true">#</span></a>
             </div>
-            <p v-if="otherForms(term).length" class="glossary-forms">Başka biçimler: {{ otherForms(term).join(', ') }}</p>
+            <p v-if="otherForms(term).length" class="glossary-forms">{{ m.otherForms(otherForms(term).join(', ')) }}</p>
           </div>
           <dl class="glossary-facts">
-            <div><dt>Anlamı</dt><dd>{{ term.meaning }}</dd></div>
-            <div><dt>Sözcük kökeni</dt><dd>{{ term.origin }}</dd></div>
-            <div v-if="term.context"><dt>Bu projede</dt><dd>{{ term.context }}</dd></div>
+            <div><dt>{{ m.meaning }}</dt><dd>{{ term.meaning }}</dd></div>
+            <div><dt>{{ m.origin }}</dt><dd>{{ term.origin }}</dd></div>
+            <div v-if="term.context"><dt>{{ m.context }}</dt><dd>{{ term.context }}</dd></div>
             <div>
-              <dt>Kaynaklar</dt>
+              <dt>{{ m.sources }}</dt>
               <dd><ul class="glossary-sources"><li v-for="source in term.sources" :key="source.url"><a :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title }} <span aria-hidden="true">↗</span></a></li></ul></dd>
             </div>
           </dl>

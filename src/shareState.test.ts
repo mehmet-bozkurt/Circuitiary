@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { locale } from './i18n'
 import { buildShareUrl, dtChoices, numberRanges, parseShareQuery, restrictToCircuit, shareFields, shareNotice, withoutRealSelections } from './shareState'
 import type { ShareIds, ShareState } from './shareState'
 
@@ -144,5 +145,40 @@ describe('shareNotice', () => {
     expect(shareNotice({ applied: 2, ignored: [], realUnavailable: true })).toContain('yerel veri bu bilgisayarda yok')
     expect(shareNotice({ applied: 2, ignored: [], realUnavailable: true })).toContain('sekiz hücreli örneğe')
     expect(shareNotice({ applied: 0, ignored: ['mode'], realUnavailable: false })).toContain('geçerli ayar bulunamadı')
+  })
+})
+
+describe('share text in English', () => {
+  afterEach(() => { locale.value = 'tr' })
+
+  it('has an English name beside every Turkish field name', () => {
+    for (const field of Object.values(shareFields)) {
+      expect(field.label).not.toBe('')
+      expect(field.labelEn).not.toBe('')
+      expect(field.labelEn).not.toMatch(/[ğĞşŞıİçÇöÖüÜ]/)
+    }
+    expect(shareFields.amplitude.label).toBe('Uyaran gücü')
+  })
+
+  it('writes the notice in the language of the moment it is called', () => {
+    const outcome = { applied: 4, ignored: ['amplitude', 'dt'], realUnavailable: false } as const
+    const turkish = shareNotice(outcome)
+    locale.value = 'en'
+    expect(shareNotice({ applied: 4, ignored: [], realUnavailable: false })).toBe('The settings in the link were applied.')
+    expect(shareNotice(outcome)).toBe('The settings in the link were applied. Parts ignored because they were invalid: Stimulus strength, Time step.')
+    expect(shareNotice({ applied: 2, ignored: [], realUnavailable: true })).toContain('the local data is not on this computer')
+    expect(shareNotice({ applied: 2, ignored: [], realUnavailable: true })).toContain('eight-cell example')
+    expect(shareNotice({ applied: 0, ignored: ['mode'], realUnavailable: false })).toBe('No valid setting was found in the link; the default experiment was opened. Parts ignored because they were invalid: Circuit mode.')
+    for (const realUnavailable of [true, false]) for (const applied of [0, 3]) {
+      expect(shareNotice({ applied, ignored: Object.keys(shareFields) as Array<keyof typeof shareFields>, realUnavailable })).not.toMatch(/[ğĞşŞıİçÇöÖüÜ]/)
+    }
+    locale.value = 'tr'
+    expect(shareNotice(outcome)).toBe(turkish)
+  })
+
+  it('builds the same link in both languages', () => {
+    const turkish = buildShareUrl(real, 'http://localhost/')
+    locale.value = 'en'
+    expect(buildShareUrl(real, 'http://localhost/')).toBe(turkish)
   })
 })

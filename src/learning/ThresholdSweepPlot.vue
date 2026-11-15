@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { decimal } from '../format'
+import { useMessages } from '../i18n'
 import { TICK_FRACTIONS, plotX, plotY, tracePath, useChartWidth } from './plotBox'
+import { messages } from './ThresholdSweepPlot.messages'
 import type { CompletedPoint, SweepPoint } from './thresholdSweep'
 
 const props = defineProps<{ points: readonly SweepPoint[]; thresholdGain: number }>()
+const m = useMessages(messages)
 const chart = ref<SVGSVGElement | null>(null)
 const width = useChartWidth(chart, { initial: 600 })
 const height = 270
@@ -39,20 +42,20 @@ const ticks = computed(() => {
 })
 const thresholdInside = computed(() => props.thresholdGain >= xMin.value && props.thresholdGain <= xMin.value + xSpan.value)
 const rightEdge = computed(() => width.value - pad.right)
-const label = computed(() => `Kimyasal model çarpanına göre AVAR’ın tepe ve kayıt sonu aktivitesi. Yatay eksen çarpan, ${decimal(xMin.value, 1)}–${decimal(xMin.value + xSpan.value, 1)}; dikey eksen boyutsuz aktivite, 0–1. Eşik ${decimal(props.thresholdGain, 1)} çarpanında işaretli. Ayrıntılı sayılar aşağıdaki tabloda.`)
+const label = computed(() => m.value.label(decimal(xMin.value, 1), decimal(xMin.value + xSpan.value, 1), decimal(props.thresholdGain, 1)))
 </script>
 
 <template>
   <figure class="sweep-plot">
-    <figcaption>AVAR’ın tepe ve kayıt sonu aktivitesi · çarpana göre</figcaption>
-    <div class="sweep-legend"><span><i class="peak-key"></i>Kayıt içindeki tepe</span><span><i class="end-key"></i>Son örnekte aktivite (700 model ms)</span><span><b></b>Eşiğin üstü</span><span v-if="failed.length"><u aria-hidden="true">×</u>Hesaplanamadı</span></div>
+    <figcaption>{{ m.caption }}</figcaption>
+    <div class="sweep-legend"><span><i class="peak-key"></i>{{ m.peakKey }}</span><span><i class="end-key"></i>{{ m.endKey }}</span><span><b></b>{{ m.aboveKey }}</span><span v-if="failed.length"><u aria-hidden="true">×</u>{{ m.failedKey }}</span></div>
     <svg ref="chart" data-testid="sweep-plot" :data-point-count="completed.length" :data-threshold-x="x(thresholdGain)" role="img" :aria-label="label" :viewBox="`0 0 ${width} ${height}`">
       <rect v-if="thresholdInside" data-testid="sweep-above-band" :x="x(thresholdGain)" :y="pad.top" :width="Math.max(0, rightEdge - x(thresholdGain))" :height="height - pad.top - pad.bottom" fill="var(--theme-warning-bg, #e7d7ad)" opacity=".5" />
       <g v-for="fraction in TICK_FRACTIONS" :key="fraction"><line :x1="pad.left" :x2="rightEdge" :y1="y(fraction)" :y2="y(fraction)" stroke="var(--theme-border, #dce2d3)" :stroke-dasharray="fraction ? '3 5' : undefined" /><text data-axis="y" :data-value="fraction" :x="pad.left - 8" :y="y(fraction) + 3" text-anchor="end">{{ decimal(fraction, 2) }}</text></g>
-      <text :x="pad.left" y="12">Boyutsuz AVAR aktivitesi</text>
+      <text :x="pad.left" y="12">{{ m.yAxis }}</text>
       <g v-for="tick in ticks" :key="tick"><line :x1="x(tick)" :x2="x(tick)" :y1="y(0)" :y2="y(0) + 4" stroke="var(--theme-muted, #5a6a5f)" /><text data-axis="x" :data-value="tick" :x="x(tick)" :y="height - pad.bottom + 18" text-anchor="middle">{{ decimal(tick, 1) }}</text></g>
-      <text :x="pad.left + (rightEdge - pad.left) / 2" :y="height - 6" text-anchor="middle">Kimyasal model çarpanı · boyutsuz</text>
-      <g v-if="thresholdInside"><line data-testid="sweep-threshold-line" :x1="x(thresholdGain)" :x2="x(thresholdGain)" :y1="pad.top" :y2="y(0)" stroke="var(--theme-warning, #7a5a30)" stroke-width="2" stroke-dasharray="5 4" /><text data-testid="sweep-threshold-label" :x="x(thresholdGain) - 6" :y="pad.top + 11" text-anchor="end" class="threshold-label">eşik: {{ decimal(thresholdGain, 1) }}</text></g>
+      <text :x="pad.left + (rightEdge - pad.left) / 2" :y="height - 6" text-anchor="middle">{{ m.xAxis }}</text>
+      <g v-if="thresholdInside"><line data-testid="sweep-threshold-line" :x1="x(thresholdGain)" :x2="x(thresholdGain)" :y1="pad.top" :y2="y(0)" stroke="var(--theme-warning, #7a5a30)" stroke-width="2" stroke-dasharray="5 4" /><text data-testid="sweep-threshold-label" :x="x(thresholdGain) - 6" :y="pad.top + 11" text-anchor="end" class="threshold-label">{{ m.threshold(decimal(thresholdGain, 1)) }}</text></g>
       <g v-for="(segment, index) in segments" :key="index">
         <path data-sweep-series="end" :d="path(segment, 'endValue')" fill="none" stroke="var(--theme-trace-green, #35694f)" stroke-width="2.5" stroke-dasharray="7 4" stroke-linejoin="round" />
         <path data-sweep-series="peak" :d="path(segment, 'peak')" fill="none" stroke="var(--theme-trace-blue, #456e91)" stroke-width="2.5" stroke-linejoin="round" />
@@ -61,7 +64,7 @@ const label = computed(() => `Kimyasal model çarpanına göre AVAR’ın tepe v
       <circle v-for="point in completed" :key="`peak-${point.gain}`" data-sweep-marker="peak" :data-gain="point.gain" :data-value="point.peak" :cx="x(point.gain)" :cy="y(point.peak)" :r="marker - 1" fill="var(--theme-trace-blue, #456e91)" />
       <path v-for="point in failed" :key="`failed-${point.gain}`" data-sweep-marker="failed" :data-gain="point.gain" :d="`M${x(point.gain) - 5},${y(0) - 10} l10,10 m-10,0 l10,-10`" fill="none" stroke="var(--theme-danger, #92574b)" stroke-width="2.5" />
     </svg>
-    <p>Noktalar hesaplanan çarpanlardır. Aralarındaki çizgiler yalnız gözü yönlendirir; hesaplanmamış değerleri göstermez. Dikey eksen sabit 0–1 aralığıdır.</p>
+    <p>{{ m.note }}</p>
   </figure>
 </template>
 

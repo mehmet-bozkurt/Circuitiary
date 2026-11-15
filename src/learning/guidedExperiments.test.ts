@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { DEFAULT_LOCALE, locale } from '../i18n'
 import { defaultConfig, illustrativeCircuit } from '../model/circuit'
 import { simulate } from '../model/simulation'
 import type { SimulationConfig } from '../model/types'
 import {
-  GUIDED_REPORTING_LEVEL, runGuidedExperiment,
+  GUIDED_REPORTING_LEVEL, guidedAssumptions, guidedConditionLabel, guidedVariableLabel, runGuidedExperiment,
   type GuidedExperimentId, type GuidedRunOptions,
 } from './guidedExperiments'
+
+afterEach(() => { locale.value = DEFAULT_LOCALE })
 
 function originalConfig(): SimulationConfig {
   return structuredClone(defaultConfig)
@@ -171,5 +174,47 @@ describe('recorded metrics and completed run snapshots', () => {
     expect(() => runGuidedExperiment('tau', 1, { connectionId: 'I3-O1' })).toThrow(RangeError)
     expect(() => runGuidedExperiment('stimulus', 1, { extra: true } as GuidedRunOptions)).toThrow(RangeError)
     expect(() => runGuidedExperiment('stimulus', 1, null as unknown as GuidedRunOptions)).toThrow(RangeError)
+  })
+})
+
+describe('text of a recorded run follows the interface language', () => {
+  const turkishLetters = /[ğşıİçöüĞŞÇÖÜ]/
+  const cases: { id: GuidedExperimentId; options: GuidedRunOptions; tr: [string, string, string]; en: [string, string, string] }[] = [
+    { id: 'stimulus', options: {}, tr: ['S1 uyaranı 0,40', 'S1 uyaranı 0,80', 'Uyaran genliği'], en: ['S1 stimulus 0.40', 'S1 stimulus 0.80', 'Stimulus amplitude'] },
+    { id: 'connection', options: {}, tr: ['I3 → O1 bağlantısı etkin', 'I3 → O1 model katkısı sıfır', 'Tek bağlantının model katkısı'], en: ['I3 → O1 connection active', 'I3 → O1 model contribution zero', 'Model contribution of a single connection'] },
+    { id: 'connection', options: { connectionId: 'I4-O1' }, tr: ['I4 → O1 bağlantısı etkin', 'I4 → O1 model katkısı sıfır', 'Tek bağlantının model katkısı'], en: ['I4 → O1 connection active', 'I4 → O1 model contribution zero', 'Model contribution of a single connection'] },
+    { id: 'tau', options: {}, tr: ['O1 zaman sabiti 30 ms', 'O1 zaman sabiti 90 ms', 'O1 zaman sabiti'], en: ['O1 time constant 30 ms', 'O1 time constant 90 ms', 'O1 time constant'] },
+    { id: 'tau', options: { comparisonTauMs: 180 }, tr: ['O1 zaman sabiti 30 ms', 'O1 zaman sabiti 180 ms', 'O1 zaman sabiti'], en: ['O1 time constant 30 ms', 'O1 time constant 180 ms', 'O1 time constant'] },
+  ]
+
+  it.each(cases)('names the conditions and the changed setting of $id / $options in Turkish and in English', testCase => {
+    const run = runGuidedExperiment(testCase.id, 1, testCase.options)
+    const read = () => [guidedConditionLabel(run, 'baseline'), guidedConditionLabel(run, 'comparison'), guidedVariableLabel(run)]
+    expect(read()).toEqual(testCase.tr)
+    expect(read()).toEqual([run.baseline.label, run.comparison.label, run.controlledVariable.label])
+    locale.value = 'en'
+    expect(read()).toEqual(testCase.en)
+    locale.value = 'tr'
+    expect(read()).toEqual(testCase.tr)
+  })
+
+  it('records the same snapshot whatever the language was when the run was made', () => {
+    const turkish = runGuidedExperiment('connection', 1, { connectionId: 'I4-O1' })
+    locale.value = 'en'
+    expect(runGuidedExperiment('connection', 1, { connectionId: 'I4-O1' })).toEqual(turkish)
+  })
+
+  it('gives the assumptions of a run in the same order and number in both languages, with every limit kept', () => {
+    const run = runGuidedExperiment('stimulus', 1)
+    expect(guidedAssumptions(run)).toEqual(run.assumptions)
+    locale.value = 'en'
+    const english = guidedAssumptions(run)
+    expect(english).toHaveLength(run.assumptions.length)
+    for (const line of english) expect(line).not.toMatch(turkishLetters)
+    expect(english.join(' ')).toContain('0.10 reporting level is not a biological firing threshold')
+    expect(english.join(' ')).toContain('not a membrane voltage, a calcium measurement, a firing rate or an event count')
+    expect(english.join(' ')).toContain('is not an intervention performed in a living animal')
+    expect(english.join(' ')).toContain('does not show that the biological conduction speed')
+    expect(run.assumptions.join(' ')).toContain('0,10 raporlama düzeyi biyolojik ateşleme eşiği değildir')
   })
 })
