@@ -13,6 +13,7 @@ npm ci --ignore-scripts   # bağımlılıkları package-lock.json'a göre kurar
 npm run dev               # Vite'in yazdığı yerel adreste açılır (varsayılan 5173)
 npm test                  # Vitest birim testleri
 npm run typecheck         # vue-tsc
+npm run lint              # ESLint (hata kuralları; biçim kuralı yok)
 npm run build             # tür denetimi + üretim derlemesi
 ```
 
@@ -33,7 +34,7 @@ python3 -m venv .venv
 .venv/bin/python -m unittest discover -s scripts/tests -v
 ```
 
-CI (`.github/workflows/ci.yml`) her pull request'te tür denetimini, `npm test`'i, derlemeyi ve Python testlerini koşar. Tarayıcı senaryoları CI'de koşmaz; değişikliğiniz arayüze dokunuyorsa kendi makinenizde koşturup sonucu PR'a yazın.
+CI (`.github/workflows/ci.yml`) her pull request'te tür denetimini, ESLint'i (`npm run lint`), `npm test`'i, derlemeyi ve Python testlerini koşar. Tarayıcı senaryoları CI'de koşmaz; değişikliğiniz arayüze dokunuyorsa kendi makinenizde koşturup sonucu PR'a yazın.
 
 ## Yerel veri ve lisansı
 
@@ -55,7 +56,7 @@ Her pull request şu beş şeye göre okunur:
 4. **Her davranışın testi.** Yeni ya da değişen davranış için Vitest birim testi ekleyin; arayüze dokunuyorsa `tests/` altında bir Playwright senaryosu da ekleyin. Hata düzeltmesi, önce hatayı yakalayan bir testle gelir.
 5. **Veri dosyası yok.** Yukarıdaki bölüme bakın.
 
-Ek olarak: **küçük ve odaklı PR'lar** açın (tek konu, tek amaç), tür denetimi ve testler yerelde geçsin, gereksiz bağımlılık eklemeyin (yeni bağımlılık için önce issue açın), commit ve PR açıklamaları Türkçe ya da İngilizce olabilir. Arayüz Türkçe açılır; İngilizce ikinci dildir.
+Ek olarak: **küçük ve odaklı PR'lar** açın (tek konu, tek amaç), tür denetimi, `npm run lint` ve testler yerelde geçsin, gereksiz bağımlılık eklemeyin (yeni bağımlılık için önce issue açın), commit ve PR açıklamaları Türkçe ya da İngilizce olabilir. Arayüz Türkçe açılır; İngilizce ikinci dildir.
 
 ## İlk katkı fikirleri
 
@@ -82,7 +83,7 @@ Aşağıdakiler kodda gerçekten eksik olan, kapsamı küçük işlerdir. Bir is
 
 Thanks for contributing. Any size helps: a typo, a sourced glossary entry, a challenge to a lesson sentence, a new builder preset.
 
-**Run it:** Node 22.12+/24/26+, `npm ci --ignore-scripts`, `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`. Browser specs: `npm run test:browser` needs Google Chrome (or set `CIRCUITIARY_CHROME_PATH`). Importer tests: `python -m unittest discover -s scripts/tests -v` after installing `requirements-importer.txt`. CI runs typecheck, unit tests, build and the Python tests, but not the browser specs.
+**Run it:** Node 22.12+/24/26+, `npm ci --ignore-scripts`, `npm run dev`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Browser specs: `npm run test:browser` needs Google Chrome (or set `CIRCUITIARY_CHROME_PATH`). Importer tests: `python -m unittest discover -s scripts/tests -v` after installing `requirements-importer.txt`. CI runs typecheck, unit tests, build and the Python tests, but not the browser specs.
 
 **Local data:** the real C. elegans data (Cook et al. 2019 subgraph) is not in the repo because its redistribution licence was never verified; `data/raw/` and `data/local/` are git-ignored. Never add data files to a pull request (raw, derived, or transcribed). Without the local data the app runs with the eight-cell teaching circuit, and a few browser specs cannot run. The MIT licence covers code and original text only.
 

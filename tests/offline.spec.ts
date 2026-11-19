@@ -13,6 +13,7 @@ import { navLabels, navLink } from './support/ui'
  * The dev server never registers a worker, so only the production profile runs this.
  */
 test.use({ serviceWorkers: 'allow' })
+// eslint-disable-next-line no-empty-pattern -- Playwright reads the fixture names from an object pattern; `_` is rejected
 test.beforeEach(({}, testInfo) => {
   test.skip(!testInfo.project.name.startsWith('production'), 'The service worker is registered by production builds only')
 })

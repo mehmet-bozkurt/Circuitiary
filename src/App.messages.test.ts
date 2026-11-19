@@ -12,7 +12,8 @@ function texts(group: typeof messages.tr): string[] {
     else if (typeof value === 'object') out.push(...Object.values(value))
   }
   out.push(group.cellCount(8), group.connectionCount(12), group.shortcutStep(10), group.statusTime('250'), group.captionReal(23, 246),
-    group.readSilenced('I3 → O1', false), group.readSilenced('AVAL ↔ AVAR', true), group.readTau('O1', 90), group.numericalWarning('0,01'))
+    group.readSilenced('I3 → O1', false), group.readSilenced('AVAL ↔ AVAR', true), group.readTau('O1', 90), group.numericalWarning('0,01'),
+    group.noiseSeed(3), group.inputLegend('pulse', true, 10), group.inputLegend('ramp', false, 10), group.inputLegend('sine', true, 10))
   return out
 }
 
@@ -48,6 +49,28 @@ describe('main experiment page text', () => {
     expect(en.numericalWarning('0.01')).toContain('it is not a guarantee of accuracy')
     expect(en.nextLimit).toContain('Real connections do not mean validated behavior.')
     expect(en.exportScopeReal).toContain('not validated behavior or a biological brain emulation')
+  })
+
+  it('names the stimulus protocol and says what it is not, in both languages', () => {
+    const { tr, en } = messages
+    expect(tr.shapes).toEqual({ pulse: 'Darbe', ramp: 'Rampa', sine: 'Sinüs' })
+    expect(en.shapes).toEqual({ pulse: 'Pulse', ramp: 'Ramp', sine: 'Sine' })
+    expect(tr.noiseSeed(3)).toBe('Tohum 3')
+    expect(en.noiseSeed(3)).toBe('Seed 3')
+    expect(tr.protocolNote).toContain('sözde rastgele')
+    expect(tr.protocolNote).toContain('biyolojik gürültünün modeli değildir')
+    expect(tr.protocolNote).toContain('ölçülmüş bir uyaran değildir')
+    expect(en.protocolNote).toContain('pseudo-random')
+    expect(en.protocolNote).toContain('it is not a model of biological noise')
+    expect(en.protocolNote).toContain('No input here is a measured stimulus.')
+    // The legend names only the symbols of the formula shown, and the noise caveat only with noise on.
+    expect(tr.inputLegend('ramp', false, 10)).toContain('T uyaran süresi')
+    expect(tr.inputLegend('ramp', false, 10)).not.toContain('sözde rastgele')
+    expect(tr.inputLegend('sine', true, 10)).toContain('P sinüs periyodu')
+    expect(tr.inputLegend('sine', true, 10)).toContain('h = 10 ms')
+    expect(tr.inputLegend('pulse', true, 10)).toContain('biyolojik gürültünün modeli değildir')
+    expect(en.inputLegend('pulse', true, 10)).toContain('it is not a model of biological noise')
+    expect(en.inputLegend('sine', false, 10)).toContain('P the sine period')
   })
 
   it('follows the language', () => {

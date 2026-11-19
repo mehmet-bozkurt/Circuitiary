@@ -170,16 +170,42 @@ export interface Circuit {
   realData?: RealCircuitMetadata
 }
 
+/** How the input changes inside the stimulus window; an absent shape is the rectangular pulse. */
+export type StimulusShape = 'pulse' | 'ramp' | 'sine'
+
+/**
+ * A reproducible pseudo-random addition to the input inside the stimulus window: piecewise constant
+ * over `holdMs`, so it does not depend on the time step. It is a teaching input, not a model of
+ * biological noise.
+ */
+export interface StimulusNoise {
+  /** Largest absolute value of the addition; dimensionless, in [0, 1]. */
+  amplitude: number
+  /** Integer in [0, 4294967295]; the same seed gives the same sequence. */
+  seed: number
+  /** Length of one constant interval, counted from the stimulus onset. */
+  holdMs: number
+}
+
+export interface StimulusConfig {
+  target: string
+  onsetMs: number
+  durationMs: number
+  /** Dimensionless, in [0, 1]: the pulse height, the end value of the ramp, the top of the sine. */
+  amplitude: number
+  /** Absent means 'pulse'. */
+  shape?: StimulusShape
+  /** Period of the sine shape; required for it and unused by the other shapes. */
+  periodMs?: number
+  /** Absent means no addition. */
+  noise?: StimulusNoise
+}
+
 export interface SimulationConfig {
   durationMs: number
   dtMs: number
   tauMs: number
-  stimulus: {
-    target: string
-    onsetMs: number
-    durationMs: number
-    amplitude: number
-  }
+  stimulus: StimulusConfig
   silencedConnectionId?: string
   tauOverrides?: Record<string, number>
   /** Dimensionless activity in [0, 1]. Unspecified neurons start at zero. */

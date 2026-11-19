@@ -1,6 +1,7 @@
 import { plainNumber } from './exportData'
 import { L } from './i18n'
 import type { ExperimentDraft } from './learning/readingHandoff'
+import { stimulusDefaults, stimulusRanges, stimulusShapes } from './stimulusProtocol'
 
 /**
  * Everything in the experiment that changes the curves or the selection. The
@@ -21,6 +22,10 @@ export const shareFields: Record<ShareField, { key: string; label: string; label
   stimulusTarget: { key: 'st', label: 'Uyaranın girdiği hücre', labelEn: 'Cell the stimulus enters' },
   amplitude: { key: 'am', label: 'Uyaran gücü', labelEn: 'Stimulus strength' },
   pulseDuration: { key: 'du', label: 'Uyaran süresi', labelEn: 'Stimulus duration' },
+  stimulusShape: { key: 'sh', label: 'Uyaran biçimi', labelEn: 'Stimulus shape' },
+  sinePeriod: { key: 'sp', label: 'Sinüs periyodu', labelEn: 'Sine period' },
+  noiseAmplitude: { key: 'na', label: 'Girdi gürültüsü', labelEn: 'Input noise' },
+  noiseSeed: { key: 'ns', label: 'Gürültü tohumu', labelEn: 'Noise seed' },
   baseTau: { key: 'tb', label: 'Referans zaman sabiti', labelEn: 'Reference time constant' },
   changedNeuron: { key: 'tn', label: 'Zaman sabiti değişen hücre', labelEn: 'Cell whose time constant is changed' },
   changedTau: { key: 'tc', label: 'Değişen zaman sabiti', labelEn: 'Changed time constant' },
@@ -34,6 +39,13 @@ export const shareFields: Record<ShareField, { key: string; label: string; label
   scaleToResponse: { key: 'sc', label: 'Yanıta göre dikey ölçek', labelEn: 'Vertical scale fitted to the response' },
 }
 const fieldOrder = Object.keys(shareFields) as ShareField[]
+/**
+ * The stimulus protocol is written into a link only where it differs from its default, so the link of an
+ * experiment that does not use it is the link it always was, and a link without these keys opens with the defaults.
+ */
+const protocolFields = Object.keys(stimulusDefaults) as Array<keyof typeof stimulusDefaults>
+const isProtocolDefault = (state: ShareState, field: ShareField): boolean =>
+  (protocolFields as ShareField[]).includes(field) && (state[field] ?? stimulusDefaults[field as keyof typeof stimulusDefaults]) === stimulusDefaults[field as keyof typeof stimulusDefaults]
 
 /** The slider ranges of the experiment controls; a Playwright test checks them against the page. */
 export const numberRanges = {
@@ -60,6 +72,7 @@ const ranged = (range: Range) => (text: string): number | undefined => {
 }
 const oneOf = <T extends string>(choices: readonly T[]) => (text: string): T | undefined => choices.find(choice => choice === text)
 /** Syntax only (length, no control characters); membership in the circuit is checked by restrictToCircuit. */
+// eslint-disable-next-line no-control-regex -- rejecting control characters is the purpose of this check
 const idText = (text: string): string | undefined => text.length >= 1 && text.length <= 64 && !/[\u0000-\u001f\u007f]/.test(text) ? text : undefined
 const flag = (text: string): boolean | undefined => text === '1' ? true : text === '0' ? false : undefined
 const timeStep = (text: string): number | undefined => {
@@ -75,6 +88,10 @@ const parsers: { [K in ShareField]: (text: string) => ShareState[K] | undefined 
   stimulusTarget: idText,
   amplitude: ranged(numberRanges.amplitude),
   pulseDuration: ranged(numberRanges.pulseDuration),
+  stimulusShape: oneOf(stimulusShapes),
+  sinePeriod: ranged(stimulusRanges.sinePeriod),
+  noiseAmplitude: ranged(stimulusRanges.noiseAmplitude),
+  noiseSeed: ranged(stimulusRanges.noiseSeed),
   baseTau: ranged(numberRanges.baseTau),
   changedNeuron: idText,
   changedTau: ranged(numberRanges.changedTau),
@@ -145,14 +162,19 @@ export function withoutRealSelections(parse: ShareParse): ShareParse {
 
 const serialise = (value: string | number | boolean): string => typeof value === 'number' ? plainNumber(value) : typeof value === 'boolean' ? (value ? '1' : '0') : value
 
-/** The full link for a state; `base` is the app address without query. Real-only keys are written only in real mode. */
+/**
+ * The full link for a state; `base` is the app address without query. Real-only keys are written only in real mode,
+ * and the stimulus protocol keys only where they differ from their defaults.
+ */
 export function buildShareUrl(state: ShareState, base: string): string {
   const url = new URL(base)
   url.hash = ''
   const params = new URLSearchParams()
   for (const field of fieldOrder) {
     if (state.mode !== 'real' && realOnly.includes(field)) continue
-    params.set(shareFields[field].key, serialise(state[field]))
+    const value = state[field]
+    if (value === undefined || isProtocolDefault(state, field)) continue
+    params.set(shareFields[field].key, serialise(value))
   }
   url.search = params.toString()
   return url.href

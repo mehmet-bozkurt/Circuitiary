@@ -40,6 +40,42 @@ describe('changedSettings', () => {
   })
 })
 
+describe('changedSettings and the stimulus protocol', () => {
+  const defaults: ShareState = { ...base, stimulusShape: 'pulse', sinePeriod: 100, noiseAmplitude: 0, noiseSeed: 1 }
+
+  it('treats a record without protocol fields as the default protocol', () => {
+    expect(changedSettings(base, defaults)).toEqual([])
+    expect(changedSettings(defaults, base)).toEqual([])
+    expect(changedSettings(base, { ...base, stimulusShape: 'ramp' })).toEqual(['stimulusShape'])
+    expect(changedSettings({ ...defaults, noiseAmplitude: 0.1 }, base)).toEqual(['noiseAmplitude'])
+  })
+
+  it('always counts the shape and the noise amplitude, in a fixed place after the stimulus duration', () => {
+    expect(changedSettings(defaults, { ...defaults, pulseDuration: 100, stimulusShape: 'ramp', noiseAmplitude: 0.2, baseTau: 45 }))
+      .toEqual(['pulseDuration', 'stimulusShape', 'noiseAmplitude', 'baseTau'])
+  })
+
+  it('counts the sine period only when one of the two curves used the sine', () => {
+    expect(changedSettings(defaults, { ...defaults, sinePeriod: 200 })).toEqual([])
+    expect(changedSettings({ ...defaults, stimulusShape: 'ramp' }, { ...defaults, stimulusShape: 'ramp', sinePeriod: 200 })).toEqual([])
+    const sine: ShareState = { ...defaults, stimulusShape: 'sine' }
+    expect(changedSettings(sine, { ...sine, sinePeriod: 200 })).toEqual(['sinePeriod'])
+    expect(changedSettings(sine, { ...defaults, sinePeriod: 200 })).toEqual(['stimulusShape', 'sinePeriod'])
+    expect(changedSettings({ ...defaults, sinePeriod: 200 }, sine)).toEqual(['stimulusShape', 'sinePeriod'])
+    // The same period on both sides is no change, whatever the shapes.
+    expect(changedSettings(sine, defaults)).toEqual(['stimulusShape'])
+  })
+
+  it('counts the noise seed only when one of the two curves had noise on', () => {
+    expect(changedSettings(defaults, { ...defaults, noiseSeed: 5 })).toEqual([])
+    const noisy: ShareState = { ...defaults, noiseAmplitude: 0.1 }
+    expect(changedSettings(noisy, { ...noisy, noiseSeed: 5 })).toEqual(['noiseSeed'])
+    expect(changedSettings(noisy, { ...defaults, noiseSeed: 5 })).toEqual(['noiseAmplitude', 'noiseSeed'])
+    expect(changedSettings({ ...defaults, noiseSeed: 5 }, noisy)).toEqual(['noiseAmplitude', 'noiseSeed'])
+    expect(changedSettings(noisy, defaults)).toEqual(['noiseAmplitude'])
+  })
+})
+
 describe('a pinned curve in the data table', () => {
   const grid = (dt: number, duration = 700) => Array.from({ length: Math.round(duration / dt) + 1 }, (_, index) => index * dt)
 

@@ -24,6 +24,7 @@ import { csvFile, jsonFile } from './exportData'
 import { version as appVersion } from '../package.json'
 import { buildShareUrl, parseShareQuery, restrictToCircuit, shareNotice, withoutRealSelections } from './shareState'
 import type { ShareParse, ShareState } from './shareState'
+import { NOISE_HOLD_MS, exportedStimulusModel, hasCustomInput, inputWaveform, nextNoiseSeed, protocolStimulus, resolveProtocol, stimulusDefaults, stimulusRanges, stimulusShapes } from './stimulusProtocol'
 
 // The shell keeps this page mounted but hidden behind the lesson pages; the
 // playback loop stays idle there and continues from the same time on return.
@@ -57,6 +58,11 @@ const activeCondition = ref<Condition>('baseline')
 const stimulusTarget = ref('S1')
 const amplitude = ref(defaultConfig.stimulus.amplitude)
 const pulseDuration = ref(defaultConfig.stimulus.durationMs)
+// Stimulus protocol (stimulusProtocol.ts): the shape of the input and an optional reproducible pseudo-random addition.
+const stimulusShape = ref(stimulusDefaults.stimulusShape)
+const sinePeriod = ref(stimulusDefaults.sinePeriod)
+const noiseAmplitude = ref(stimulusDefaults.noiseAmplitude)
+const noiseSeed = ref(stimulusDefaults.noiseSeed)
 const baseTau = ref(defaultConfig.tauMs)
 const changedTau = ref(90)
 const changedNeuron = ref('O1')
@@ -80,8 +86,17 @@ const visibleEdgeCount = computed(() => isReal.value && focusConnections.value
   : circuit.value.connections.length)
 const baselineSettings = computed<SimulationConfig>(() => ({
   ...defaultConfig, dtMs: dt.value, tauMs: baseTau.value,
-  stimulus: { ...defaultConfig.stimulus, target: stimulusTarget.value, amplitude: amplitude.value, durationMs: pulseDuration.value },
+  // With the default protocol this is exactly the stimulus object the page always passed: no extra keys.
+  stimulus: protocolStimulus(
+    { ...defaultConfig.stimulus, target: stimulusTarget.value, amplitude: amplitude.value, durationMs: pulseDuration.value },
+    { stimulusShape: stimulusShape.value, sinePeriod: sinePeriod.value, noiseAmplitude: noiseAmplitude.value, noiseSeed: noiseSeed.value },
+  ),
 }))
+// The input I(t) at the recorded times, for the chart; null for the plain pulse, which the yellow band already shows. Not a simulation run.
+const inputValues = computed(() => hasCustomInput(baselineSettings.value.stimulus) ? inputWaveform(baselineSettings.value.stimulus, baselineResult.value.timesMs) : null)
+const INPUT_COLOR = 'var(--theme-trace-gold, #8c6417)'
+const INPUT_FORMULAS = { pulse: 'I(t) = A', ramp: 'I(t) = A · (t − t₀) / T', sine: 'I(t) = A · (1 − cos(2π(t − t₀) / P)) / 2' } as const
+const NOISE_FORMULA = ' + g · u(s, ⌊(t − t₀) / h⌋)'
 // One computed per condition: a control only re-runs the simulations it feeds
 // (the tau slider costs one run, not the three conditions plus the check).
 const baselineResult = computed(() => simulate(circuit.value, baselineSettings.value))
@@ -195,6 +210,8 @@ function runShortcut(action: ShortcutAction) {
 useExperimentShortcuts({ suspended: () => Boolean(props.suspended), onAction: runShortcut })
 function reset() {
   pause(); amplitude.value = defaultConfig.stimulus.amplitude; pulseDuration.value = defaultConfig.stimulus.durationMs
+  stimulusShape.value = stimulusDefaults.stimulusShape; sinePeriod.value = stimulusDefaults.sinePeriod
+  noiseAmplitude.value = stimulusDefaults.noiseAmplitude; noiseSeed.value = stimulusDefaults.noiseSeed
   baseTau.value = defaultConfig.tauMs; changedTau.value = 90
   chemicalGain.value = defaultRealModelParameters.chemicalGain; gapGain.value = defaultRealModelParameters.gapGain
   stimulusTarget.value = isReal.value ? 'AVER' : 'S1'; outputNeuron.value = isReal.value ? 'AVAR' : 'O1'
@@ -234,6 +251,7 @@ function captureExperimentDraft(): Readonly<ExperimentDraft> {
   return Object.freeze({ mode: mode.value, graphView: graphView.value, chemicalGain: chemicalGain.value, gapGain: gapGain.value,
     focusConnections: focusConnections.value, scaleToResponse: scaleToResponse.value, activeCondition: activeCondition.value,
     stimulusTarget: stimulusTarget.value, amplitude: amplitude.value, pulseDuration: pulseDuration.value,
+    stimulusShape: stimulusShape.value, sinePeriod: sinePeriod.value, noiseAmplitude: noiseAmplitude.value, noiseSeed: noiseSeed.value,
     baseTau: baseTau.value, changedTau: changedTau.value, changedNeuron: changedNeuron.value,
     selectedEdge: selectedEdge.value, outputNeuron: outputNeuron.value, selectedNeuron: selectedNeuron.value,
     dt: dt.value, cursorMs: cursorMs.value, playing: playing.value })
@@ -245,6 +263,9 @@ function applyExperimentDraft(draft: Readonly<ExperimentDraft>) {
   focusConnections.value = draft.focusConnections; scaleToResponse.value = draft.scaleToResponse
   activeCondition.value = draft.activeCondition; stimulusTarget.value = draft.stimulusTarget
   amplitude.value = draft.amplitude; pulseDuration.value = draft.pulseDuration
+  const protocol = resolveProtocol(draft)
+  stimulusShape.value = protocol.stimulusShape; sinePeriod.value = protocol.sinePeriod
+  noiseAmplitude.value = protocol.noiseAmplitude; noiseSeed.value = protocol.noiseSeed
   baseTau.value = draft.baseTau; changedTau.value = draft.changedTau; changedNeuron.value = draft.changedNeuron
   selectedEdge.value = draft.selectedEdge; outputNeuron.value = draft.outputNeuron; selectedNeuron.value = draft.selectedNeuron
   dt.value = draft.dt; cursorMs.value = draft.cursorMs
@@ -293,7 +314,8 @@ function exportExperiment() {
       ? 'tau_i * dx_i/dt = -x_i + clip(sum_j(w_ij * x_j) + I_i(t), 0, 1) + sum_j(g_ij * (x_j - x_i))'
       : 'tau_i * dx_i/dt = -x_i + clip(sum_j(w_ij * x_j) + I_i(t), 0, 1)',
       method: 'synchronous explicit Euler', activityUnit: 'dimensionless', initialState: 'all zero',
-      stimulusWindow: '[onsetMs, onsetMs + durationMs)', noise: false,
+      // '[onsetMs, onsetMs + durationMs)' and `noise: false` for the plain pulse; a shape or the pseudo-random addition is described.
+      ...exportedStimulusModel(baselineSettings.value.stimulus),
       biologicalDataset: isReal.value ? realData.value?.dataset : null,
       ...(isReal.value ? { parameters: { chemicalGain: chemicalGain.value, gapGain: gapGain.value },
         chemicalSigns: 'unknown in anatomy; all positive by model assumption',
@@ -317,6 +339,7 @@ const shareState = computed<ShareState>(() => ({
   mode: mode.value, graphView: graphView.value, activeCondition: activeCondition.value,
   chemicalGain: chemicalGain.value, gapGain: gapGain.value, focusConnections: focusConnections.value, scaleToResponse: scaleToResponse.value,
   stimulusTarget: stimulusTarget.value, amplitude: amplitude.value, pulseDuration: pulseDuration.value,
+  stimulusShape: stimulusShape.value, sinePeriod: sinePeriod.value, noiseAmplitude: noiseAmplitude.value, noiseSeed: noiseSeed.value,
   baseTau: baseTau.value, changedTau: changedTau.value, changedNeuron: changedNeuron.value,
   selectedEdge: selectedEdge.value, outputNeuron: outputNeuron.value, selectedNeuron: selectedNeuron.value, dt: dt.value,
 }))
@@ -355,6 +378,10 @@ async function applyShareLink(parsed: ShareParse) {
   if (v.stimulusTarget !== undefined) stimulusTarget.value = v.stimulusTarget
   if (v.amplitude !== undefined) amplitude.value = v.amplitude
   if (v.pulseDuration !== undefined) pulseDuration.value = v.pulseDuration
+  if (v.stimulusShape !== undefined) stimulusShape.value = v.stimulusShape
+  if (v.sinePeriod !== undefined) sinePeriod.value = v.sinePeriod
+  if (v.noiseAmplitude !== undefined) noiseAmplitude.value = v.noiseAmplitude
+  if (v.noiseSeed !== undefined) noiseSeed.value = v.noiseSeed
   if (v.baseTau !== undefined) baseTau.value = v.baseTau
   if (v.changedNeuron !== undefined) changedNeuron.value = v.changedNeuron
   if (v.changedTau !== undefined) changedTau.value = v.changedTau
@@ -465,12 +492,12 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
             <div><span class="eyebrow">{{ m.outputKicker }}</span><h2>{{ m.outputHeading }}</h2></div>
             <label class="output-picker">{{ isReal ? m.pickerReal : m.pickerIllustrative }} <select v-model="outputNeuron" :aria-label="m.watchedOutput"><option v-for="neuron in readoutNeurons" :key="neuron.id" :value="neuron.id">{{ neuron.id }}</option></select></label>
           </div>
-          <div class="trace-key"><span v-for="condition in conditions" :key="condition.id"><i :style="{ borderTop: `2px ${condition.id === 'baseline' ? 'solid' : condition.id === 'silenced' ? 'dotted' : 'dashed'} ${condition.color}` }"></i>{{ condition.label }}</span><span v-if="pinned" data-testid="pinned-key"><i :style="{ borderTop: `2px dashed ${PINNED_COLOR}` }"></i>◆ {{ chartTraces.at(-1)!.label }}</span></div>
-          <ActivationChart :y-max="chartYMax" :times="results.baseline.timesMs" :traces="chartTraces" :cursor-ms="displayedTimeMs" :stimulus="baselineSettings.stimulus" @seek="seek" />
+          <div class="trace-key"><span v-for="condition in conditions" :key="condition.id"><i :style="{ borderTop: `2px ${condition.id === 'baseline' ? 'solid' : condition.id === 'silenced' ? 'dotted' : 'dashed'} ${condition.color}` }"></i>{{ condition.label }}</span><span v-if="pinned" data-testid="pinned-key"><i :style="{ borderTop: `2px dashed ${PINNED_COLOR}` }"></i>◆ {{ chartTraces.at(-1)!.label }}</span><span v-if="inputValues" data-testid="input-key"><i :style="{ borderTop: `1px solid ${INPUT_COLOR}` }"></i>{{ m.inputTrace }}</span></div>
+          <ActivationChart :y-max="chartYMax" :times="results.baseline.timesMs" :traces="chartTraces" :cursor-ms="displayedTimeMs" :stimulus="baselineSettings.stimulus" :input="inputValues" @seek="seek" />
           <div class="peak-row"><div v-for="condition in conditions" :key="condition.id"><span>{{ condition.short }} / {{ m.peakActivity }}</span><strong :data-testid="`peak-${condition.id}`">{{ format(peaks[condition.id]) }}</strong></div></div>
           <div class="chart-scale"><label><input v-model="scaleToResponse" type="checkbox" :aria-label="m.scaleToResponse"> {{ m.scaleToResponse }}</label><span>{{ m.verticalAxis }} 0–<output data-testid="chart-y-max">{{ format(chartYMax, chartYMax < 1 ? 3 : 0) }}</output></span></div>
           <ChartDataTable :times="results.baseline.timesMs" :traces="chartTraces" :peaks="tablePeaks" :output="outputNeuron" />
-          <PinnedComparison :pinned="pinned" :settings="shareState" :current-peak="peaks[activeCondition]" :condition-names="conditionNames" :edge-name="edgeName" @pin="pinCurve" @unpin="pinned = null" />
+          <PinnedComparison :pinned="pinned" :settings="shareState" :current-peak="peaks[activeCondition]" :condition-names="conditionNames" :edge-name="edgeName" :shape-names="m.shapes" @pin="pinCurve" @unpin="pinned = null" />
           <p class="chart-note"><TermText :text="m.chartNote" /></p>
         </section>
       </div>
@@ -486,6 +513,19 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
           <label class="slider-label" for="duration">{{ m.stimulusDuration }} <output>{{ pulseDuration }} ms</output></label>
           <input id="duration" v-model.number="pulseDuration" type="range" min="50" max="400" step="10">
           <p class="field-note">{{ m.onsetBefore }} <TermText :text="defaultConfig.stimulus.onsetMs" /> {{ m.onsetAfter }}</p>
+          <label class="protocol-label" for="stimulus-shape">{{ m.stimulusShape }}</label>
+          <select id="stimulus-shape" v-model="stimulusShape" class="protocol-control"><option v-for="shape in stimulusShapes" :key="shape" :value="shape">{{ m.shapes[shape] }}</option></select>
+          <template v-if="stimulusShape === 'sine'">
+            <label class="slider-label" for="sine-period">{{ m.sinePeriod }} <output>{{ sinePeriod }} ms</output></label>
+            <input id="sine-period" v-model.number="sinePeriod" class="protocol-control" type="range" :min="stimulusRanges.sinePeriod.min" :max="stimulusRanges.sinePeriod.max" :step="stimulusRanges.sinePeriod.step">
+          </template>
+          <label class="slider-label" for="noise-amplitude">{{ m.inputNoise }} <output>{{ format(noiseAmplitude, 2) }}</output></label>
+          <input id="noise-amplitude" v-model.number="noiseAmplitude" class="protocol-control" type="range" :aria-valuetext="format(noiseAmplitude, 2)" :min="stimulusRanges.noiseAmplitude.min" :max="stimulusRanges.noiseAmplitude.max" :step="stimulusRanges.noiseAmplitude.step">
+          <div v-if="noiseAmplitude > 0" class="noise-sample">
+            <button type="button" data-testid="noise-resample" @click="noiseSeed = nextNoiseSeed(noiseSeed)">{{ m.newNoiseSample }}</button>
+            <output data-testid="noise-seed">{{ m.noiseSeed(noiseSeed) }}</output>
+          </div>
+          <p class="field-note" data-testid="protocol-note">{{ m.protocolNote }}</p>
         </div>
         <div class="control-section">
           <span class="condition-label"><i class="condition-b">B</i> {{ m.silenceKicker }}</span>
@@ -529,6 +569,7 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
         <div v-if="isReal && realData" class="scope-card" data-testid="real-assumptions"><span class="tag">{{ m.scopeTagReal }}</span><p><TermText :text="m.scopeMatrix" /></p><p>{{ m.scopeSelection }}</p><p><TermText :text="m.scopeBoundary" /></p><p v-if="realData.selection.omittedExternal">{{ m.omittedLead }} <TermText :text="realData.selection.omittedExternal.chemicalIncomingCount" /> {{ m.omittedIncoming }} <TermText :text="realData.selection.omittedExternal.chemicalOutgoingCount" /> {{ m.omittedOutgoing }} <TermText :text="realData.selection.omittedExternal.gapCount" /> {{ m.omittedGap }}</p></div>
         <div v-else class="scope-card"><span class="tag">{{ m.scopeTagIllustrative }}</span><p>{{ m.scopeIllustrative }}</p></div>
         <div class="equation-card"><span class="eyebrow">{{ m.dynamicsKicker }}</span><code>τᵢ dxᵢ/dt = −xᵢ + clip(Σⱼ wᵢⱼxⱼ + Iᵢ(t), 0, 1)<template v-if="isReal"> + Σⱼ gᵢⱼ(xⱼ − xᵢ)</template></code><p v-if="isReal">{{ m.normalization }}</p><p><strong>x</strong> {{ m.symbolActivity }} · <strong>w</strong> {{ m.symbolWeight }} · <strong>I</strong> {{ m.symbolStimulus }} · <strong>τ</strong> {{ m.symbolTauAndMethod }}</p>
+          <p v-if="inputValues" class="field-note input-formula" data-testid="input-formula">{{ m.inputFormulaLead }} <code>{{ INPUT_FORMULAS[stimulusShape] }}<template v-if="noiseAmplitude > 0">{{ NOISE_FORMULA }}</template></code>. {{ m.inputLegend(stimulusShape, noiseAmplitude > 0, NOISE_HOLD_MS) }}</p>
           <div class="numerical-check"><label for="dt">{{ m.timeStep }} <select id="dt" v-model.number="dt"><option :value="0.0625">{{ withComma('0.0625') }} ms</option><option :value="0.125">{{ withComma('0.125') }} ms</option><option :value="0.25">{{ withComma('0.25') }} ms</option><option :value="0.5">{{ withComma('0.5') }} ms</option><option :value="1">1 ms</option><option :value="2">2 ms</option></select></label><span>{{ m.halfStepDifference }} <strong data-testid="convergence-error">{{ format(convergenceError, 5) }}</strong></span></div>
           <p v-if="convergenceError > 0.01" class="numerical-warning" role="status" data-testid="numerical-warning">{{ m.numericalWarning(format(0.01, 2)) }}</p>
           <p class="field-note">{{ m.numericalNote }}</p>
@@ -544,6 +585,14 @@ onBeforeUnmount(() => { pause(); dataRequest?.abort() })
 </template>
 
 <style scoped>
+/* Stimulus protocol controls: shape, sine period, input noise and its sample button. */
+.protocol-label { margin-top: 17px; }
+select.protocol-control, input.protocol-control { min-height: 44px; }
+.noise-sample { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-top: 6px; }
+.noise-sample button { min-height: 44px; padding: 9px 14px; border: 1px solid var(--theme-border, #d1d9ca); border-radius: 5px; background: var(--theme-surface, #fafbf5); color: var(--theme-text, #263b35); font-size: 11px; }
+.noise-sample button:hover { border-color: var(--theme-text, #263b35); }
+.noise-sample output { font-family: var(--mono); font-size: 11px; }
+.input-formula code { display: inline; padding: 0; margin: 0; border: 0; background: transparent; font-family: var(--mono); font-size: inherit; color: inherit; white-space: normal; overflow-wrap: anywhere; }
 /* Keyboard shortcut list under the playback controls (the circuit panel is dark in both themes). */
 .shortcut-help { position: relative; z-index: 1; margin-top: 6px; color: #c9d8cc; font-size: 11px; }
 .shortcut-help summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; color: #d3e0d4; }

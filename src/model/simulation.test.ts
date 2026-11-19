@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig, illustrativeCircuit } from './circuit'
-import { MAX_SIMULATION_STEPS, simulate } from './simulation'
-import type { Circuit, SimulationConfig } from './types'
+import { MAX_NOISE_SEED, MAX_SIMULATION_STEPS, simulate, stimulusValue, unitNoise } from './simulation'
+import type { Circuit, SimulationConfig, StimulusConfig } from './types'
 
 const isolated: Circuit = {
   id: 'isolated', name: 'Passive cell', provenance: 'Illustrative test fixture',
@@ -350,5 +350,231 @@ describe('symmetric physical gap dynamics', () => {
     const kind = gapCircuit(); (kind.connections[0] as unknown as { kind: string }).kind = 'unknown'
     const evidence = gapCircuit(); (evidence.connections[0] as unknown as { evidence: string }).evidence = 'measured-dynamics'
     for (const circuit of [negative, diagonal, reversed, duplicate, kind, evidence]) expect(() => simulate(circuit, gapConfig())).toThrow()
+  })
+})
+
+describe('stimulus protocols: the input I(t)', () => {
+  const pulse: StimulusConfig = { target: 'A', onsetMs: 100, durationMs: 200, amplitude: 0.8 }
+  const ramp: StimulusConfig = { ...pulse, shape: 'ramp' }
+  const sine: StimulusConfig = { ...pulse, shape: 'sine', periodMs: 100 }
+  const noisy = (seed: number, base: StimulusConfig = pulse): StimulusConfig => ({ ...base, noise: { amplitude: 0.2, seed, holdMs: 5 } })
+  const grid = (dtMs: number, durationMs = 400) => Array.from({ length: Math.round(durationMs / dtMs) + 1 }, (_, index) => index * dtMs)
+
+  it('is today\'s rectangular pulse when no shape is given: amplitude on [onset, onset + duration), zero outside', () => {
+    for (const stimulus of [pulse, { ...pulse, shape: 'pulse' as const }]) {
+      expect(stimulusValue(stimulus, 0)).toBe(0)
+      expect(stimulusValue(stimulus, 99.999)).toBe(0)
+      expect(stimulusValue(stimulus, 100)).toBe(0.8)
+      expect(stimulusValue(stimulus, 299.999)).toBe(0.8)
+      expect(stimulusValue(stimulus, 300)).toBe(0)
+      expect(stimulusValue(stimulus, 700)).toBe(0)
+    }
+    // The same rule the engine applied before protocols existed, at every time of two grids.
+    for (const time of [...grid(1, 700), ...grid(0.3, 700)]) {
+      expect(stimulusValue(pulse, time)).toBe(time >= pulse.onsetMs && time < pulse.onsetMs + pulse.durationMs ? pulse.amplitude : 0)
+    }
+    expect(stimulusValue({ ...pulse, durationMs: 0 }, 100)).toBe(0)
+  })
+
+  it('ramp: zero at the onset, linear, and it reaches the amplitude at the end of the half-open window', () => {
+    expect(stimulusValue(ramp, 100)).toBe(0)
+    expect(stimulusValue(ramp, 150)).toBeCloseTo(0.2, 15)
+    expect(stimulusValue(ramp, 200)).toBeCloseTo(0.4, 15)
+    expect(stimulusValue(ramp, 300 - 1e-9)).toBeCloseTo(0.8, 9)
+    // The end itself is outside the window, exactly as for the pulse.
+    expect(stimulusValue(ramp, 300)).toBe(0)
+    expect(stimulusValue(ramp, 99)).toBe(0)
+    const inside = grid(0.5).filter(time => time >= 100 && time < 300).map(time => stimulusValue(ramp, time))
+    for (let index = 1; index < inside.length; index += 1) expect(inside[index]!).toBeGreaterThan(inside[index - 1]!)
+    expect(Math.max(...inside)).toBeLessThan(0.8)
+    expect(stimulusValue({ ...ramp, durationMs: 0 }, 100)).toBe(0)
+  })
+
+  it('sine: a raised cosine that is zero at the onset, the amplitude at half a period, and never leaves [0, amplitude]', () => {
+    expect(stimulusValue(sine, 100)).toBe(0)
+    expect(stimulusValue(sine, 125)).toBeCloseTo(0.4, 15)
+    expect(stimulusValue(sine, 150)).toBeCloseTo(0.8, 15)
+    expect(stimulusValue(sine, 200)).toBeCloseTo(0, 15)
+    expect(stimulusValue(sine, 250)).toBeCloseTo(0.8, 15)
+    expect(stimulusValue(sine, 300)).toBe(0)
+    expect(stimulusValue({ ...sine, periodMs: 400 }, 300 - 1e-9)).toBeCloseTo(0.8, 9)
+    for (const time of grid(0.25)) {
+      const value = stimulusValue(sine, time)
+      expect(value).toBeGreaterThanOrEqual(0)
+      expect(value).toBeLessThanOrEqual(0.8)
+    }
+  })
+
+  it('noise: the same seed gives the same sequence, another seed another one', () => {
+    const times = grid(1)
+    const first = times.map(time => stimulusValue(noisy(7), time))
+    expect(times.map(time => stimulusValue(noisy(7), time))).toEqual(first)
+    // Asked for in another order, each time has the same value: the noise is a function of time, not a stream.
+    expect([...times].reverse().map(time => stimulusValue(noisy(7), time)).reverse()).toEqual(first)
+    const other = times.map(time => stimulusValue(noisy(8), time))
+    expect(other).not.toEqual(first)
+    const differing = first.filter((value, index) => value !== other[index]).length
+    // Every sample inside the 200 ms window differs between the two seeds (40 hold intervals, none equal by chance).
+    expect(differing).toBe(200)
+  })
+
+  it('noise: constant within a hold interval, bounded by its amplitude, and zero outside the window', () => {
+    const stimulus = noisy(3)
+    const perInterval = new Map<number, Set<number>>()
+    for (const time of grid(0.25)) {
+      const value = stimulusValue(stimulus, time)
+      if (time < 100 || time >= 300) { expect(value).toBe(0); continue }
+      expect(Math.abs(value - 0.8)).toBeLessThanOrEqual(0.2)
+      const interval = Math.floor((time - 100) / 5)
+      perInterval.set(interval, (perInterval.get(interval) ?? new Set()).add(value))
+    }
+    expect(perInterval.size).toBe(40)
+    for (const values of perInterval.values()) expect(values.size).toBe(1)
+    // The 40 intervals do not all share one value.
+    expect(new Set([...perInterval.values()].map(values => [...values][0])).size).toBeGreaterThan(30)
+    // The addition is on top of the shape: subtracting the shape leaves the same sequence for pulse, ramp and sine.
+    for (const time of [100, 137.5, 205, 299.75]) {
+      const added = stimulusValue(stimulus, time) - stimulusValue(pulse, time)
+      expect(stimulusValue(noisy(3, ramp), time) - stimulusValue(ramp, time)).toBeCloseTo(added, 12)
+      expect(stimulusValue(noisy(3, sine), time) - stimulusValue(sine, time)).toBeCloseTo(added, 12)
+    }
+  })
+
+  it('noise: independent of the time step: dt and dt/2 read the same value at every shared time', () => {
+    for (const dtMs of [2, 1, 0.5, 0.125, 0.3]) {
+      const coarse = grid(dtMs).map(time => stimulusValue(noisy(11, sine), time))
+      const fine = grid(dtMs / 2).map(time => stimulusValue(noisy(11, sine), time))
+      coarse.forEach((value, index) => expect(fine[index * 2]).toBe(value))
+    }
+  })
+
+  it('unitNoise stays in [-1, 1], is spread over it, and is a pure function of seed and interval', () => {
+    const values = Array.from({ length: 4000 }, (_, index) => unitNoise(5, index))
+    expect(Math.min(...values)).toBeGreaterThanOrEqual(-1)
+    expect(Math.max(...values)).toBeLessThanOrEqual(1)
+    expect(Math.min(...values)).toBeLessThan(-0.99)
+    expect(Math.max(...values)).toBeGreaterThan(0.99)
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length
+    expect(Math.abs(mean)).toBeLessThan(0.05)
+    expect(unitNoise(5, 17)).toBe(unitNoise(5, 17))
+    expect(unitNoise(5, 17)).not.toBe(unitNoise(6, 17))
+    expect(unitNoise(5, 17)).not.toBe(unitNoise(5, 18))
+    // Neighbouring seeds are not shifted copies of one another.
+    const next = Array.from({ length: 4000 }, (_, index) => unitNoise(6, index))
+    for (const shift of [0, 1, 2, 3]) expect(values.slice(shift, shift + 50)).not.toEqual(next.slice(0, 50))
+    expect(Number.isFinite(unitNoise(MAX_NOISE_SEED, 0))).toBe(true)
+  })
+})
+
+describe('stimulus protocols in the simulation', () => {
+  const driven = (stimulus: Partial<StimulusConfig>, overrides: Partial<SimulationConfig> = {}): SimulationConfig => ({
+    durationMs: 400, dtMs: 1, tauMs: 30, ...overrides,
+    stimulus: { target: 'A', onsetMs: 100, durationMs: 200, amplitude: 0.8, ...stimulus },
+  })
+  const noise = { amplitude: 0.2, seed: 4, holdMs: 5 }
+
+  it('computes exactly the plain pulse, and records exactly the given settings, when no protocol field is set', () => {
+    const plain = simulate(illustrativeCircuit, config())
+    expect(Object.keys(plain.settings)).toEqual(['durationMs', 'dtMs', 'tauMs', 'stimulus'])
+    expect(Object.keys(plain.settings.stimulus)).toEqual(['target', 'onsetMs', 'durationMs', 'amplitude'])
+    expect(plain.settings).toEqual(defaultConfig)
+    // Reference values of the default experiment, taken from the engine as it was before protocols existed.
+    expect(Math.max(...plain.activity.O1!)).toBe(0.6633752699858795)
+    expect(plain.activity.S1![150]).toBe(0.6531320117941372)
+    expect(plain.activity.O1![700]).toBe(0.0004961011494682375)
+    // An explicit 'pulse' is the same computation.
+    const explicit = simulate(illustrativeCircuit, config({ stimulus: { ...defaultConfig.stimulus, shape: 'pulse' } }))
+    expect(explicit.activity).toEqual(plain.activity)
+    expect(explicit.timesMs).toEqual(plain.timesMs)
+  })
+
+  it('uses stimulusValue at the left endpoint of every step', () => {
+    for (const stimulus of [{ shape: 'ramp' as const }, { shape: 'sine' as const, periodMs: 80 }, { noise }, { shape: 'sine' as const, periodMs: 80, noise }]) {
+      const settings = driven(stimulus, { dtMs: 0.5 })
+      const result = simulate(isolated, settings)
+      let x = 0
+      result.timesMs.forEach((time, index) => {
+        expect(result.activity.A![index]).toBe(x)
+        const target = Math.max(0, Math.min(1, stimulusValue(settings.stimulus, time)))
+        x = (1 - 0.5 / 30) * x + 0.5 / 30 * target
+      })
+    }
+  })
+
+  it('each shape gives another response than the pulse, and the cell stays in [0, 1] with noise on', () => {
+    const pulse = simulate(isolated, driven({}))
+    const ramp = simulate(isolated, driven({ shape: 'ramp' }))
+    const sine = simulate(isolated, driven({ shape: 'sine', periodMs: 100 }))
+    const noisy = simulate(isolated, driven({ amplitude: 1, noise: { amplitude: 1, seed: 2, holdMs: 5 } }))
+    expect(ramp.activity.A).not.toEqual(pulse.activity.A)
+    expect(sine.activity.A).not.toEqual(pulse.activity.A)
+    expect(Math.max(...ramp.activity.A!)).toBeLessThan(Math.max(...pulse.activity.A!))
+    expect(Math.max(...sine.activity.A!)).toBeLessThan(Math.max(...pulse.activity.A!))
+    // Before the onset nothing has entered, whatever the protocol.
+    for (const result of [pulse, ramp, sine, noisy]) expect(result.activity.A!.slice(0, 101).every(value => value === 0)).toBe(true)
+    // The noise can push the input below 0 and above 1; the total input is clipped, so the activity is not.
+    for (const value of noisy.activity.A!) {
+      expect(value).toBeGreaterThanOrEqual(0)
+      expect(value).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('is reproducible for a seed and differs between seeds', () => {
+    const run = (seed: number) => simulate(illustrativeCircuit, config({ stimulus: { ...defaultConfig.stimulus, noise: { ...noise, seed } } }))
+    expect(run(4)).toEqual(run(4))
+    expect(run(4).activity.O1).not.toEqual(run(5).activity.O1)
+  })
+
+  it('converges when the time step is halved with noise on, because the noise does not depend on the step', () => {
+    const error = (dtMs: number) => {
+      const settings = config({ dtMs, stimulus: { ...defaultConfig.stimulus, shape: 'sine', periodMs: 100, noise: { amplitude: 0.3, seed: 9, holdMs: 10 } } })
+      const coarse = simulate(illustrativeCircuit, settings)
+      const fine = simulate(illustrativeCircuit, { ...settings, dtMs: dtMs / 2 })
+      let largest = 0
+      for (const id of Object.keys(coarse.activity)) coarse.activity[id]!.forEach((value, index) => { largest = Math.max(largest, Math.abs(value - fine.activity[id]![index * 2]!)) })
+      return largest
+    }
+    const errors = [2, 1, 0.5, 0.25].map(error)
+    expect(errors[0]!).toBeLessThan(0.02)
+    // First-order method: each halving roughly halves the difference.
+    for (let index = 1; index < errors.length; index += 1) {
+      expect(errors[index]!).toBeLessThan(errors[index - 1]! * 0.6)
+      expect(errors[index]!).toBeGreaterThan(errors[index - 1]! * 0.4)
+    }
+  })
+
+  it('snapshots the protocol in the settings without sharing the noise object', () => {
+    const settings = config({ stimulus: { ...defaultConfig.stimulus, shape: 'sine', periodMs: 120, noise: { ...noise } } })
+    const before = structuredClone(settings)
+    const result = simulate(illustrativeCircuit, settings)
+    expect(settings).toEqual(before)
+    settings.stimulus.noise!.seed = 99
+    settings.stimulus.periodMs = 60
+    expect(result.settings).toEqual(before)
+  })
+
+  it('rejects an unknown shape, a missing or non-positive period, and out-of-range noise', () => {
+    const invalid: Array<[Partial<StimulusConfig>, RegExp]> = [
+      [{ shape: 'square' as unknown as 'pulse' }, /Unknown stimulus shape/],
+      [{ shape: 'sine' }, /periodMs is required for the sine shape/],
+      [{ shape: 'sine', periodMs: 0 }, /Stimulus periodMs must be greater than zero/],
+      [{ shape: 'sine', periodMs: -50 }, /Stimulus periodMs must be greater than zero/],
+      [{ shape: 'sine', periodMs: Number.NaN }, /Stimulus periodMs must be finite/],
+      [{ periodMs: 0 }, /Stimulus periodMs must be greater than zero/],
+      [{ noise: { ...noise, amplitude: -0.1 } }, /Stimulus noise amplitude must be in \[0, 1\]/],
+      [{ noise: { ...noise, amplitude: 1.1 } }, /Stimulus noise amplitude must be in \[0, 1\]/],
+      [{ noise: { ...noise, amplitude: Number.NaN } }, /Stimulus noise amplitude must be finite/],
+      [{ noise: { ...noise, seed: 1.5 } }, /Stimulus noise seed must be an integer/],
+      [{ noise: { ...noise, seed: -1 } }, /Stimulus noise seed must be an integer/],
+      [{ noise: { ...noise, seed: MAX_NOISE_SEED + 1 } }, /Stimulus noise seed must be an integer/],
+      [{ noise: { ...noise, seed: Number.NaN } }, /Stimulus noise seed must be an integer/],
+      [{ noise: { ...noise, holdMs: 0 } }, /Stimulus noise holdMs must be greater than zero/],
+      [{ noise: { ...noise, holdMs: -5 } }, /Stimulus noise holdMs must be greater than zero/],
+      [{ noise: { ...noise, holdMs: Number.POSITIVE_INFINITY } }, /Stimulus noise holdMs must be finite/],
+    ]
+    for (const [stimulus, message] of invalid) expect(() => simulate(isolated, driven(stimulus)), JSON.stringify(stimulus)).toThrow(message)
+    // The valid edges are accepted.
+    expect(() => simulate(isolated, driven({ shape: 'ramp', periodMs: 100, noise: { amplitude: 0, seed: 0, holdMs: 0.5 } }))).not.toThrow()
+    expect(() => simulate(isolated, driven({ noise: { amplitude: 1, seed: MAX_NOISE_SEED, holdMs: 1000 } }))).not.toThrow()
   })
 })

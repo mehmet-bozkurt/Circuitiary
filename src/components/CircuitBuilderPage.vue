@@ -1,21 +1,29 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { downloadFile } from '../exportData'
 import { decimal } from '../format'
 import { L, useMessages } from '../i18n'
 import { messages } from './CircuitBuilderPage.messages'
+import MotifSchematic from './MotifSchematic.vue'
 import { TICK_FRACTIONS, bandWidth, plotX, plotY, tracePath, useChartWidth } from '../learning/plotBox'
 import {
-  CELL_IDS, LIMITS, LINK_TYPE_LABELS, REPORT_LEVEL, blankDraft, cellIds, cloneDraft, draftKey, linkLabel, linkTypeLabel, presetById, presets, presetsEn,
+  CELL_IDS, LIMITS, LINK_TYPE_LABELS, REPORT_LEVEL, blankDraft, cellIds, cloneDraft, draftKey, linkLabel, linkTypeLabel, motifs, motifsEn, presetById,
   runDraft, runFacts, strengthLimits, validateDraft,
   type BuilderLink, type BuilderPreset, type BuilderProblem, type BuilderRun, type CellId, type LinkType,
 } from '../learning/circuitBuilder'
+import { noPrediction, predictionFeedback, predictionRules, samePrediction, type BuilderPrediction } from '../learning/builderPrediction'
+import { CIRCUIT_FILE_MAX_BYTES, circuitFile, clearStoredDraft, parseCircuitFile, readStoredDraft, storeDraft, tooLargeFile, unreadableFile, type CircuitFileOutcome } from '../learning/circuitFile'
 
 const m = useMessages(messages)
 
 const emit = defineEmits<{ ready: [] }>()
 onMounted(async () => { await nextTick(); emit('ready') })
 
-const draft = reactive(blankDraft())
+// The circuit an earlier visit left in this browser, if it still reads as a valid circuit file; otherwise the blank circuit.
+const kept = readStoredDraft()
+const draft = reactive(kept ?? blankDraft())
+/** 'restored': the page opened with the kept circuit. 'blank': the learner then chose to start from the blank one. */
+const keepNotice = ref<'restored' | 'blank' | null>(kept ? 'restored' : null)
 const linkTypes = Object.keys(LINK_TYPE_LABELS) as LinkType[]
 let counter = 0
 const newLinkId = () => `n${++counter}`
@@ -24,7 +32,7 @@ const newLinkId = () => `n${++counter}`
 const status = ref<(() => string) | null>(null)
 const loadedPresetId = ref<BuilderPreset['id'] | null>(null)
 const loadedPreset = computed(() => loadedPresetId.value === null ? null : presetById(loadedPresetId.value))
-const presetList = computed(() => L(presets, presetsEn))
+const presetList = computed(() => L(motifs, motifsEn))
 let loadedKey = ''
 const recorded = ref<BuilderRun | null>(null)
 const recordedKey = ref('')
@@ -39,6 +47,30 @@ const stale = computed(() => recorded.value !== null && draftKey(draft) !== reco
 const presetEdited = computed(() => loadedPreset.value !== null && draftKey(draft) !== loadedKey)
 const canAddLink = computed(() => draft.links.length < LIMITS.links.max)
 
+// Keeping: every change of the circuit is written to this browser (a valid circuit only; the blank one as "nothing").
+watch(() => draftKey(draft), () => { storeDraft(draft) })
+const fileStatus = ref<(() => string) | null>(null)
+/** `rejected`: a file was refused (the circuit is unchanged). Otherwise the page's own circuit could not be saved. */
+const fileError = ref<{ code: string; rejected: boolean; text: () => string } | null>(null)
+
+// Optional prediction: ids only. `recordedPrediction` is the copy taken by the run that is on screen.
+const prediction = reactive<BuilderPrediction>(noPrediction())
+const recordedPrediction = ref<BuilderPrediction>(noPrediction())
+const predictionChanged = computed(() => recorded.value !== null && !samePrediction(prediction, recordedPrediction.value))
+const feedback = computed(() => recorded.value ? predictionFeedback(recordedPrediction.value, recorded.value) : [])
+// The peak question is about the cells other than the stimulated one. A predicted cell that left the circuit,
+// or that became the stimulated cell, is no longer a possible answer and is dropped.
+const peakCandidates = computed(() => cells.value.filter(id => id !== draft.stimulus.target))
+watch(peakCandidates, ids => { if (prediction.peak !== '' && prediction.peak !== 'unsure' && !ids.includes(prediction.peak)) prediction.peak = '' })
+
+/** A circuit replaced as a whole is a new question: the prediction, the kept-circuit notice and the file lines start over. */
+function startOver() {
+  Object.assign(prediction, noPrediction())
+  keepNotice.value = null
+  fileStatus.value = null
+  fileError.value = null
+}
+
 function replaceDraft(next: typeof draft) {
   draft.cellCount = next.cellCount
   draft.links = next.links
@@ -48,6 +80,7 @@ function replaceDraft(next: typeof draft) {
 function loadPreset(id: BuilderPreset['id']) {
   const preset = presetById(id)
   replaceDraft(cloneDraft(preset.draft))
+  startOver()
   loadedPresetId.value = id
   loadedKey = draftKey(draft)
   recorded.value = null
@@ -55,13 +88,64 @@ function loadPreset(id: BuilderPreset['id']) {
   status.value = () => m.value.statusPresetLoaded(presetById(id).title)
 }
 
-function reset() {
+function clearToBlank() {
   replaceDraft(blankDraft())
+  startOver()
   loadedPresetId.value = null
   recorded.value = null
   runNumber.value = 0
   engineProblems.value = []
+}
+
+function reset() {
+  clearToBlank()
   status.value = () => m.value.statusReset
+}
+
+/** From the notice of a restored circuit: the blank circuit, and nothing kept in the browser. */
+function startBlank() {
+  clearToBlank()
+  clearStoredDraft()
+  status.value = null
+  keepNotice.value = 'blank'
+  focusSoon('builder-cell-count')
+}
+
+function saveFile() {
+  fileStatus.value = null
+  if (problems.value.length) {
+    fileError.value = { code: 'save-blocked', rejected: false, text: () => m.value.saveBlocked }
+    return
+  }
+  fileError.value = null
+  downloadFile(circuitFile(cloneDraft(draft)))
+  fileStatus.value = () => m.value.statusFileSaved
+}
+
+async function loadFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  // Cleared so that choosing the same file again is a change again.
+  input.value = ''
+  if (!file) return
+  let outcome: CircuitFileOutcome
+  if (file.size > CIRCUIT_FILE_MAX_BYTES) outcome = tooLargeFile()
+  else {
+    try { outcome = parseCircuitFile(await file.text()) } catch { outcome = unreadableFile() }
+  }
+  if (!outcome.ok) {
+    const error = outcome.error
+    fileStatus.value = null
+    fileError.value = { code: error.code, rejected: true, text: () => error.message }
+    return
+  }
+  replaceDraft(outcome.draft)
+  startOver()
+  loadedPresetId.value = null
+  recorded.value = null
+  engineProblems.value = []
+  status.value = null
+  fileStatus.value = () => m.value.statusFileLoaded
 }
 
 function setCellCount(event: Event) {
@@ -123,6 +207,7 @@ function runCircuit() {
   engineProblems.value = []
   recorded.value = outcome.run
   recordedKey.value = draftKey(draft)
+  recordedPrediction.value = { ...prediction }
   runNumber.value += 1
   const [n, count] = [runNumber.value, outcome.run.cells.length]
   status.value = () => m.value.statusRunDone(n, count)
@@ -173,16 +258,32 @@ const facts = computed(() => recorded.value ? runFacts(recorded.value) : [])
       <p>{{ m.boundaryText }}</p>
     </div>
 
+    <div v-if="keepNotice" class="keep-notice" data-testid="builder-restored" :data-state="keepNotice" data-print-hide>
+      <p role="status" aria-live="polite">{{ keepNotice === 'restored' ? m.restored : m.startedBlank }}</p>
+      <button v-if="keepNotice === 'restored'" type="button" class="secondary-button" data-testid="builder-start-blank" @click="startBlank">{{ m.startBlank }}</button>
+    </div>
+
     <div class="builder-grid">
       <div class="builder-setup">
-        <section aria-labelledby="builder-presets-title" class="builder-card">
+        <section aria-labelledby="builder-presets-title" class="builder-card builder-gallery">
           <h2 id="builder-presets-title">{{ m.presetsTitle }}</h2>
           <p class="builder-help">{{ m.presetsHelp }}</p>
-          <div class="preset-buttons" role="group" :aria-label="m.presetsTitle">
-            <button v-for="preset in presetList" :key="preset.id" type="button" class="preset-button" :data-preset="preset.id" @click="loadPreset(preset.id)">
-              <strong>{{ preset.title }}</strong><span>{{ preset.teaches }}</span>
-            </button>
-          </div>
+          <ul class="schematic-legend" :aria-label="m.schematicLegend">
+            <li><svg width="36" height="14" viewBox="0 0 36 14" aria-hidden="true"><path d="M2 7H26" /><path class="solid" d="M34 7 26 3.4V10.6Z" /></svg>{{ m.legendExcitatory }}</li>
+            <li><svg width="36" height="14" viewBox="0 0 36 14" aria-hidden="true"><path d="M2 7H32" /><path class="bar" d="M32.5 1.5V12.5" /></svg>{{ m.legendInhibitory }}</li>
+            <li><svg width="36" height="14" viewBox="0 0 36 14" aria-hidden="true"><path d="M2 5.2H34M2 8.8H34" /></svg>{{ m.legendGap }}</li>
+            <li><svg width="36" height="14" viewBox="0 0 36 14" aria-hidden="true"><circle cx="18" cy="7" r="3.6" /><circle cx="18" cy="7" r="6.2" /></svg>{{ m.legendRing }}</li>
+          </ul>
+          <p class="builder-help motif-scroll-hint">{{ m.motifScrollHint }}</p>
+          <ul class="motif-gallery" :aria-label="m.presetsTitle" data-testid="builder-gallery">
+            <li v-for="preset in presetList" :key="preset.id" class="motif-card" :data-motif="preset.id">
+              <h3 :id="`motif-${preset.id}-title`">{{ preset.title }}</h3>
+              <MotifSchematic :draft="preset.draft" />
+              <p>{{ preset.teaches }}</p>
+              <button :id="`motif-${preset.id}-load`" type="button" class="secondary-button" :data-preset="preset.id" :aria-labelledby="`motif-${preset.id}-title motif-${preset.id}-load`" @click="loadPreset(preset.id)">{{ m.motifLoad }}</button>
+            </li>
+          </ul>
+          <p class="builder-help">{{ m.schematicNote }}</p>
           <section v-if="loadedPreset" class="preset-note" aria-labelledby="preset-note-title" data-testid="builder-preset-note" :data-preset="loadedPreset.id">
             <h3 id="preset-note-title">{{ loadedPreset.title }}</h3>
             <p><strong>{{ m.presetTeaches }}</strong> {{ loadedPreset.teaches }}</p>
@@ -275,12 +376,54 @@ const facts = computed(() => recorded.value ? runFacts(recorded.value) : [])
               <ul><li v-for="(problem, index) in problems" :key="index" :data-code="problem.code">{{ problem.message }}</li></ul>
             </template>
           </div>
+          <fieldset class="prediction" data-testid="builder-prediction">
+            <legend>{{ m.predictionTitle }}</legend>
+            <p class="builder-help">{{ m.predictionHelp }}</p>
+            <div class="field-grid">
+              <div class="field">
+                <label for="builder-predict-peak">{{ m.predictPeak }}</label>
+                <select id="builder-predict-peak" v-model="prediction.peak" aria-describedby="builder-prediction-rules">
+                  <option value="">{{ m.predictNone }}</option>
+                  <option v-for="id in peakCandidates" :key="id" :value="id">{{ m.cellOption(id) }}</option>
+                  <option value="unsure">{{ m.predictUnsure }}</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="builder-predict-end">{{ m.predictEnd }}</label>
+                <select id="builder-predict-end" v-model="prediction.end" aria-describedby="builder-prediction-rules">
+                  <option value="">{{ m.predictNone }}</option>
+                  <option value="fades">{{ m.predictFades }}</option>
+                  <option value="persists">{{ m.predictPersists }}</option>
+                  <option value="unsure">{{ m.predictUnsure }}</option>
+                </select>
+              </div>
+            </div>
+            <p id="builder-prediction-rules" class="builder-help">{{ predictionRules() }}</p>
+          </fieldset>
           <div class="builder-actions">
             <button type="button" class="primary-button" data-testid="builder-run" :disabled="problems.length > 0" aria-describedby="builder-validity" @click="runCircuit">{{ recorded ? m.runAgain : m.run }}</button>
             <button type="button" class="secondary-button" data-testid="builder-reset" @click="reset">{{ m.reset }}</button>
           </div>
           <p class="builder-status" role="status" aria-live="polite" data-testid="builder-status">{{ status?.() }}</p>
           <ul v-if="engineProblems.length" class="engine-problems" role="alert"><li v-for="problem in engineProblems" :key="problem.code">{{ problem.message }}</li></ul>
+        </section>
+
+        <section aria-labelledby="builder-keep-title" class="builder-card" data-print-hide>
+          <h2 id="builder-keep-title">{{ m.keepTitle }}</h2>
+          <p class="builder-help">{{ m.keepHelp }}</p>
+          <div class="builder-actions">
+            <button type="button" class="secondary-button" data-testid="builder-save-file" @click="saveFile">{{ m.saveFile }}</button>
+            <span class="file-picker">
+              <input id="builder-file" class="file-input" type="file" accept="application/json,.json" data-testid="builder-file-input" @change="loadFile" />
+              <label for="builder-file" class="secondary-button file-label">{{ m.loadFile }}</label>
+            </span>
+          </div>
+          <p class="builder-help">{{ m.fileHelp }}</p>
+          <p class="builder-status" role="status" aria-live="polite" data-testid="builder-file-status">{{ fileStatus?.() }}</p>
+          <div v-if="fileError" class="file-error" role="alert" data-testid="builder-file-error" :data-code="fileError.code">
+            <p v-if="fileError.rejected">{{ m.fileRejected }}</p>
+            <p>{{ fileError.text() }}</p>
+          </div>
         </section>
       </div>
 
@@ -331,6 +474,15 @@ const facts = computed(() => recorded.value ? runFacts(recorded.value) : [])
             <ul><li v-for="fact in facts" :key="fact">{{ fact }}</li></ul>
             <p>{{ m.factsCaveat }}</p>
           </div>
+          <div class="prediction-feedback" data-testid="builder-prediction-feedback" :data-predicted="feedback.length > 0" :data-changed="predictionChanged">
+            <h3>{{ m.predictionFeedbackTitle }}</h3>
+            <p v-if="!feedback.length" data-testid="builder-prediction-none">{{ m.predictionNone }}</p>
+            <template v-else>
+              <ul><li v-for="line in feedback" :key="line.question" :data-testid="`builder-prediction-${line.question}`" :data-verdict="line.verdict">{{ line.text }}</li></ul>
+              <p>{{ m.predictionNotScore }}</p>
+            </template>
+            <p v-if="predictionChanged" class="prediction-changed" role="status" data-testid="builder-prediction-changed">{{ m.predictionChanged }}</p>
+          </div>
         </div>
         </div>
       </section>
@@ -363,11 +515,41 @@ const facts = computed(() => recorded.value ? runFacts(recorded.value) : [])
 .builder-card h3 { font-size: 15px; line-height: 1.6; margin: 0 0 8px; }
 .builder-help { font-size: 13px; line-height: 1.8; color: var(--b-muted); margin: 8px 0; }
 .builder-empty { font-size: 13px; line-height: 1.8; padding: 14px; border: 1px dashed var(--b-border); border-radius: 5px; margin-bottom: 12px; }
-.preset-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
-.preset-button { display: grid; gap: 6px; align-content: start; text-align: left; min-height: 44px; padding: 12px 14px; border: 1px solid var(--b-border); border-radius: 6px; background: var(--b-soft); color: var(--b-text); font-size: 13px; line-height: 1.6; }
-.preset-button strong { font-size: 14px; font-weight: 600; }
-.preset-button span { color: var(--b-muted); font-size: 12px; line-height: 1.6; }
-.preset-button:hover { border-color: var(--b-muted); }
+.schematic-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 0; margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--b-muted); }
+.schematic-legend li { display: flex; align-items: center; gap: 7px; min-height: 22px; }
+.schematic-legend svg { flex: none; color: var(--b-text); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.schematic-legend .solid { fill: currentColor; stroke-linejoin: round; stroke-width: 1; }
+.schematic-legend .bar { stroke-width: 2.8; }
+/* One row that scrolls sideways: nine cards one under another would push the builder itself far down the page.
+   The scrollbar is always drawn, so the row reads as scrollable with a mouse too; a button inside scrolls into view on focus. */
+.motif-gallery { list-style: none; display: flex; gap: 10px; overflow-x: auto; padding: 4px 4px 10px; margin: 6px -4px 0; scrollbar-width: thin; scrollbar-color: var(--b-muted) var(--b-soft); }
+.motif-gallery::-webkit-scrollbar { height: 10px; }
+.motif-gallery::-webkit-scrollbar-track { background: var(--b-soft); border-radius: 5px; }
+.motif-gallery::-webkit-scrollbar-thumb { background: var(--b-muted); border-radius: 5px; }
+.motif-card { flex: 0 0 min(212px, 80%); display: grid; grid-template-rows: auto auto 1fr auto; gap: 8px; min-width: 0; padding: 14px; border: 1px solid var(--b-border); border-radius: 6px; background: var(--b-soft); }
+.motif-card h3 { font-size: 14px; font-weight: 600; line-height: 1.5; margin: 0; }
+.motif-card p { font-size: 12px; line-height: 1.65; color: var(--b-muted); }
+.motif-card .motif-schematic { justify-self: center; }
+.motif-card button { justify-self: start; }
+.keep-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; padding: 12px 16px; margin-bottom: 22px; border: 1px solid var(--b-border); border-left: 3px solid #7c9571; border-radius: 6px; background: var(--b-surface); font-size: 13px; line-height: 1.8; }
+.keep-notice p { flex: 1 1 260px; }
+.file-picker { position: relative; display: inline-flex; }
+/* The real file input stays focusable and labelled; only its browser-drawn box is hidden behind the label. */
+.file-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.file-label { display: inline-flex; align-items: center; cursor: pointer; }
+.file-input:focus-visible + .file-label { outline: 3px solid var(--theme-focus, #b78231); outline-offset: 4px; }
+.file-error { margin-top: 8px; padding: 10px 14px; border-left: 3px solid var(--b-problem); background: var(--b-soft); color: var(--b-problem); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.prediction { min-width: 0; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--b-border); border-radius: 6px; }
+.prediction legend { padding: 0 6px; font-size: 14px; font-weight: 600; line-height: 1.6; }
+.prediction .field-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-top: 10px; }
+/* A question that wraps onto a second line must not push its own list below its neighbour's. */
+.prediction .field { grid-template-rows: 1fr auto; }
+.prediction .field label { align-self: end; }
+.prediction-feedback { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--b-border); border-radius: 6px; font-size: 13px; line-height: 1.8; }
+.prediction-feedback ul { margin: 0 0 8px; padding-left: 18px; }
+.prediction-feedback li { margin-bottom: 6px; }
+.prediction-feedback p { color: var(--b-muted); }
+.prediction-feedback .prediction-changed { margin-top: 8px; padding-left: 12px; border-left: 2px solid #b2823e; color: var(--theme-warning, #765726); }
 .preset-note { margin-top: 16px; padding: 14px 16px; border-left: 3px solid #7c9571; background: var(--b-soft); font-size: 13px; line-height: 1.8; }
 .preset-note p { margin-top: 6px; }
 .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
@@ -434,11 +616,11 @@ const facts = computed(() => recorded.value ? runFacts(recorded.value) : [])
   .builder-boundary { font-size: 13px; padding: 14px 16px; }
   .builder-card { padding: 18px 14px; }
   .builder-card h2 { font-size: 22px; }
-  .preset-buttons { grid-template-columns: minmax(0, 1fr); }
   .metrics-table { font-size: 12px; }
   .metrics-table th, .metrics-table td { padding: 8px 4px; }
   .metrics-table thead th { font-size: 11px; }
   .builder-actions .primary-button, .builder-actions .secondary-button { flex: 1 1 140px; }
 }
+@media print { .motif-gallery { display: grid; overflow: visible; grid-template-columns: repeat(3, minmax(0, 1fr)); } .motif-scroll-hint { display: none; } }
 @media (prefers-reduced-motion: reduce) { .builder-page * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
 </style>

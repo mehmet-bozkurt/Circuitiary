@@ -1,4 +1,5 @@
 import type { ShareField, ShareState } from './shareState'
+import { resolveProtocol } from './stimulusProtocol'
 
 /**
  * One curve kept on the chart while the learner changes the experiment ("pin and compare").
@@ -17,7 +18,8 @@ export interface PinnedCurve {
   settings: ShareState
 }
 
-const shared: ShareField[] = ['activeCondition', 'outputNeuron', 'stimulusTarget', 'amplitude', 'pulseDuration', 'baseTau', 'dt']
+const beforeStimulusProtocol: ShareField[] = ['activeCondition', 'outputNeuron', 'stimulusTarget', 'amplitude', 'pulseDuration']
+const afterStimulusProtocol: ShareField[] = ['baseTau', 'dt']
 const silencedOnly: ShareField[] = ['selectedEdge']
 const tauOnly: ShareField[] = ['changedNeuron', 'changedTau']
 const realOnly: ShareField[] = ['chemicalGain', 'gapGain']
@@ -27,15 +29,29 @@ const realOnly: ShareField[] = ['chemicalGain', 'gapGain']
  * Only settings that can change one of the two curves are listed: the silenced connection counts
  * when either curve is the "connection silenced" condition, the changed cell and its time constant
  * when either is the "time constant changed" condition, and the two gains only with real data.
+ * Of the stimulus protocol, the shape and the noise amplitude always count; the sine period only when
+ * either curve used the sine, and the noise seed only when either curve had noise on. A record without
+ * protocol fields means the defaults (see stimulusProtocol.ts).
  * Viewing choices (2D/3D, selected cell, focus, vertical scale) never change a curve.
  */
 export function changedSettings(pinned: ShareState, current: ShareState): ShareField[] {
-  const conditions = [pinned.activeCondition, current.activeCondition]
-  const fields = [
-    ...shared,
+  const protocolBefore = resolveProtocol(pinned)
+  const protocolNow = resolveProtocol(current)
+  const before: ShareState = { ...pinned, ...protocolBefore }
+  const now: ShareState = { ...current, ...protocolNow }
+  const conditions = [before.activeCondition, now.activeCondition]
+  const usesSine = protocolBefore.stimulusShape === 'sine' || protocolNow.stimulusShape === 'sine'
+  const usesNoise = protocolBefore.noiseAmplitude > 0 || protocolNow.noiseAmplitude > 0
+  const fields: ShareField[] = [
+    ...beforeStimulusProtocol,
+    'stimulusShape',
+    ...(usesSine ? ['sinePeriod' as const] : []),
+    'noiseAmplitude',
+    ...(usesNoise ? ['noiseSeed' as const] : []),
+    ...afterStimulusProtocol,
     ...(conditions.includes('silenced') ? silencedOnly : []),
     ...(conditions.includes('tau') ? tauOnly : []),
-    ...(current.mode === 'real' ? realOnly : []),
+    ...(now.mode === 'real' ? realOnly : []),
   ]
-  return fields.filter(field => pinned[field] !== current[field])
+  return fields.filter(field => before[field] !== now[field])
 }

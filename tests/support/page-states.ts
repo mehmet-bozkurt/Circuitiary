@@ -36,6 +36,24 @@ const states: Record<string, Array<{ name: string; enter: (page: Page) => Promis
       await expect(main(page).getByTestId('builder-validity')).toHaveAttribute('data-valid', 'false')
       await expect(main(page).getByTestId('builder-stale')).toBeVisible()
     } },
+    // The gallery, the prediction step and the file controls. Each step replaces the circuit wholesale.
+    { name: 'new motif loaded and run with a prediction', enter: async page => {
+      await main(page).locator('button[data-preset="disinhibition"]').click()
+      await main(page).locator('#builder-predict-peak').selectOption('C')
+      await main(page).locator('#builder-predict-end').selectOption('persists')
+      await main(page).getByTestId('builder-run').click()
+      await expect(main(page).getByTestId('builder-prediction-end')).toHaveAttribute('data-verdict', 'disagree')
+    } },
+    { name: 'prediction changed after the run, file refused', enter: async page => {
+      await main(page).locator('#builder-predict-end').selectOption('fades')
+      await expect(main(page).getByTestId('builder-prediction-changed')).toBeVisible()
+      await main(page).locator('#builder-file').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"app":"Circuitiary"}') })
+      await expect(main(page).getByTestId('builder-file-error')).toHaveAttribute('data-code', 'not-circuit-file')
+    } },
+    { name: 'kept circuit restored after reload', enter: async page => {
+      await page.reload()
+      await expect(main(page).getByTestId('builder-restored')).toBeVisible()
+    } },
   ],
   '/ogren/sozluk': [
     { name: 'glossary, all terms', enter: async () => {} },
@@ -82,6 +100,13 @@ const states: Record<string, Array<{ name: string; enter: (page: Page) => Promis
       await page.getByTestId('pin-curve').click()
       await page.locator('#amplitude').fill('0.5')
       await expect(page.getByTestId('pin-changes')).toBeVisible()
+    } },
+    // A non-default input: the period slider, the seed, the input line and its legend entry, the formula line.
+    { name: 'sine input with noise on', enter: async page => {
+      await page.locator('#stimulus-shape').selectOption('sine')
+      await page.locator('#noise-amplitude').fill('0.15')
+      await page.getByTestId('noise-resample').click()
+      await expect(page.getByTestId('input-waveform')).toBeVisible()
     } },
   ],
   '/ogren/norondan-devreye': [

@@ -20,6 +20,10 @@ Anahtarlar kısadır ve bağlantıda bu sırayla yazılır. Gerçek veri modunda
 | `st` | Uyaranın girdiği hücre | Devrenin giriş hücrelerinden biri (gerçek modda her hücre) |
 | `am` | Uyaran gücü | 0–1, adım 0,05 |
 | `du` | Uyaran süresi (ms) | 50–400, adım 10 |
+| `sh` | Uyaran biçimi | `pulse`, `ramp`, `sine`; varsayılan `pulse` ise bağlantıya yazılmaz |
+| `sp` | Sinüs periyodu (ms) | 50–400, adım 10; varsayılan 100 ise yazılmaz |
+| `na` | Girdi gürültüsü genliği | 0–0,30, adım 0,05; 0 ise yazılmaz |
+| `ns` | Gürültü tohumu | 1–9999 arası tamsayı; varsayılan 1 ise yazılmaz |
 | `tb` | Referansta tüm hücrelerin τ değeri (ms) | 10–80, adım 5 |
 | `tn` | Zaman sabiti değişen hücre | Devredeki herhangi bir hücre |
 | `tc` | O hücrenin τ değeri (ms) | 10–180, adım 5 |

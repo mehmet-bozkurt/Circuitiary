@@ -340,7 +340,7 @@ test('a delayed load cannot silently override a newer illustrative-mode selectio
   })
   await page.goto('/')
   await realButton(page).click()
-  let isToyDisabled = false
+  let isToyDisabled: boolean
   try {
     await expect(modeGroup(page).getByRole('button', { name: 'Veri okunuyor…', exact: true })).toBeDisabled()
     isToyDisabled = await toyButton(page).isDisabled()

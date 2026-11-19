@@ -12,6 +12,8 @@ import { messages as tools } from './ExperimentTools.messages'
 describe('Turkish sentences built from values', () => {
   it('are the sentences the templates wrote before', () => {
     expect(chart.tr.chartLabel('1,00')).toBe('Üç koşulun boyutsuz etkinlik değerlerini zamana göre karşılaştıran grafik. Ortak dikey eksen 0–1,00.')
+    // The note on the input waveform is appended only while it is drawn; the label itself is unchanged.
+    expect(chart.tr.inputNote).toBe('Uyarılan hücreye verilen girdi I(t) de aynı eksende ince çizgiyle çizilir.')
     expect(table.tr.summary(71, 10)).toBe('71 satır · her 10 ms')
     expect(table.tr.note(701, 10, 71)).toBe('Grafikle aynı hesaplanmış değerler; ayarlar değişince birlikte güncellenir. Satırlar, kayıtlı 701 örnekten her 10 ms\'deki 71 tanesidir; aradaki örnekler tabloda yok. Tepe satırı ise tablodaki satırlardan değil, kayıtlı örneklerin hepsinden alınır. Değerler 0–1 arasında boyutsuz model etkinliğidir, ölçülmüş bir yanıt değildir.')
     expect(table.tr.caption('O1')).toBe('O1 hücresinin model etkinliği · üç koşul')

@@ -1,7 +1,7 @@
 name: CI
 
 # Tarayıcı senaryoları sistemdeki Chrome'u ve yerel veriyi kullanır; burada yalnız
-# tür denetimi, birim testleri, üretim derlemesi ve Python içe aktarıcı testleri koşar.
+# tür denetimi, ESLint, birim testleri, üretim derlemesi ve Python içe aktarıcı testleri koşar.
 on:
   push:
     branches: [main]
@@ -22,6 +22,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - run: npm run build
       - uses: actions/setup-python@v7

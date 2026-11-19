@@ -122,7 +122,8 @@ const text = defineMessages({
 
 /** Reporting level shared with the guided lessons; not a biological threshold. */
 export const REPORT_LEVEL = 0.1
-const SETTLE_MS = 5 * defaultConfig.tauMs
+/** After this long without stimulus a response has had time to fade; five time constants. */
+export const SETTLE_MS = 5 * defaultConfig.tauMs
 
 export type ProblemCode =
   | 'cell-count' | 'too-many-links' | 'unknown-cell' | 'self-gap' | 'duplicate-chemical' | 'duplicate-gap'
@@ -308,7 +309,8 @@ export function hasExcitatoryLoop(links: readonly BuilderLink[]): boolean {
   return [...next.keys()].some(id => visit(id, new Set()))
 }
 
-const joinIds = (ids: readonly string[]): string => ids.length < 2 ? (ids[0] ?? '') : `${ids.slice(0, -1).join(', ')} ${pick(text).and} ${ids.at(-1)}`
+/** “A, B ve C” / “A, B and C”, in the interface language. */
+export const joinIds = (ids: readonly string[]): string => ids.length < 2 ? (ids[0] ?? '') : `${ids.slice(0, -1).join(', ')} ${pick(text).and} ${ids.at(-1)}`
 
 export function summarizeCells(draft: BuilderDraft, result: SimulationResult): CellSummary[] {
   return cellIds(draft.cellCount).map(id => {
@@ -358,8 +360,14 @@ export function runDraft(draft: BuilderDraft, engine: typeof simulate = simulate
   }
 }
 
+/** The four first examples (`presets`); their ids, order and text are fixed. */
+type PresetId = 'chain' | 'excitation-inhibition' | 'mutual-inhibition' | 'loop'
+/** The motifs added to the gallery after them. */
+const ADDED_MOTIF_IDS = ['divergence', 'convergence', 'feedback-inhibition', 'electrical-pair', 'disinhibition'] as const
+type AddedMotifId = (typeof ADDED_MOTIF_IDS)[number]
+
 export interface BuilderPreset {
-  id: 'chain' | 'excitation-inhibition' | 'mutual-inhibition' | 'loop'
+  id: PresetId | AddedMotifId
   title: string
   /** One sentence: the single thing this example teaches. */
   teaches: string
@@ -375,7 +383,6 @@ export interface BuilderPreset {
 const link = (id: string, source: CellId, target: CellId, type: LinkType, strength: number): BuilderLink => ({ id, source, target, type, strength })
 const pulse = (target: CellId = 'A'): BuilderStimulus => ({ target, amplitude: 0.8, onsetMs: 100, durationMs: 200 })
 
-type PresetId = BuilderPreset['id']
 const PRESET_IDS: readonly PresetId[] = ['chain', 'excitation-inhibition', 'mutual-inhibition', 'loop']
 /** The circuits of the examples. They exist once; the Turkish and the English list share them. */
 const presetDrafts: Record<PresetId, BuilderDraft> = {
@@ -384,7 +391,8 @@ const presetDrafts: Record<PresetId, BuilderDraft> = {
   'mutual-inhibition': { cellCount: 3, links: [link('p1', 'A', 'B', 'excitatory', 0.9), link('p2', 'A', 'C', 'excitatory', 0.8), link('p3', 'B', 'C', 'inhibitory', 1.5), link('p4', 'C', 'B', 'inhibitory', 1.5)], stimulus: pulse() },
   loop: { cellCount: 3, links: [link('p1', 'A', 'B', 'excitatory', 1), link('p2', 'B', 'C', 'excitatory', 1), link('p3', 'C', 'A', 'excitatory', 1)], stimulus: pulse() },
 }
-const presetList = (texts: Record<PresetId, Omit<BuilderPreset, 'id' | 'draft'>>): readonly BuilderPreset[] =>
+type PresetText = Omit<BuilderPreset, 'id' | 'draft'>
+const presetList = (texts: Record<PresetId, PresetText>): readonly BuilderPreset[] =>
   PRESET_IDS.map(id => ({ id, ...texts[id], draft: presetDrafts[id] }))
 
 export const presets: readonly BuilderPreset[] = presetList({
@@ -449,5 +457,99 @@ export const presetsEn: typeof presets = presetList({
   },
 })
 
-/** The example in the interface language. Its `draft` is the same object in both languages. */
-export const presetById = (id: BuilderPreset['id']): BuilderPreset => L(presets, presetsEn).find(preset => preset.id === id)!
+/**
+ * The circuits of the motifs added to the gallery. Every sentence of their text below is a claim about what
+ * this model computes for exactly these numbers; circuitBuilder.test.ts runs each one and checks it.
+ */
+const addedMotifDrafts: Record<AddedMotifId, BuilderDraft> = {
+  divergence: { cellCount: 3, links: [link('p1', 'A', 'B', 'excitatory', 0.9), link('p2', 'A', 'C', 'excitatory', 0.5)], stimulus: pulse() },
+  convergence: { cellCount: 4, links: [link('p1', 'A', 'B', 'excitatory', 0.9), link('p2', 'A', 'C', 'excitatory', 0.9), link('p3', 'B', 'D', 'excitatory', 0.5), link('p4', 'C', 'D', 'excitatory', 0.5)], stimulus: pulse() },
+  'feedback-inhibition': { cellCount: 2, links: [link('p1', 'A', 'B', 'excitatory', 1.5), link('p2', 'B', 'A', 'inhibitory', 1.5)], stimulus: pulse() },
+  'electrical-pair': { cellCount: 2, links: [link('p1', 'A', 'B', 'gap', 0.5)], stimulus: pulse() },
+  disinhibition: { cellCount: 4, links: [link('p1', 'A', 'B', 'excitatory', 0.9), link('p2', 'A', 'C', 'excitatory', 0.9), link('p3', 'B', 'C', 'inhibitory', 0.9), link('p4', 'A', 'D', 'excitatory', 0.9), link('p5', 'D', 'B', 'inhibitory', 1.5)], stimulus: pulse() },
+}
+const addedMotifList = (texts: Record<AddedMotifId, PresetText>): readonly BuilderPreset[] =>
+  ADDED_MOTIF_IDS.map(id => ({ id, ...texts[id], draft: addedMotifDrafts[id] }))
+
+/**
+ * The gallery of the page: the four first examples (the same objects as in `presets`) followed by the added
+ * motifs. `presets` itself stays the four, as its tests fix it.
+ */
+export const motifs: readonly BuilderPreset[] = [...presets, ...addedMotifList({
+  divergence: {
+    title: 'Iraksama: bir hücre iki hedefi sürer',
+    teaches: 'Tek bir hücre iki hedefi aynı anda sürer; her hedef aynı sinyali kendi bağlantısının gücüyle ölçeklenmiş olarak alır.',
+    look: 'B ve C tepelerine aynı anda ulaşır; C’nin eğrisi B’ninkinin küçültülmüş kopyasıdır ve tepelerin oranı bağlantı güçlerinin oranına eşittir (0,5 / 0,9). Tabloda C 0,10 düzeyine daha geç ulaşır; bunun nedeni gecikme değil, eğrisinin daha alçak olmasıdır.',
+    tryThis: 'A→C bağlantısını kaldır ve yeniden çalıştır: C susar, B’nin eğrisi hiç değişmez. Bu modelde bir hedefe giden dal diğerini etkilemez.',
+    boundary: 'Kaynağın çıktısı burada dallar arasında bölünmez; her dal aynı etkinliği görür. Bu, modelin toplama kuralının sonucudur; gerçek bir aksonun dallarının eşit ilettiği anlamına gelmez.',
+  },
+  convergence: {
+    title: 'Yakınsama: iki yol tek hedefte toplanır',
+    teaches: 'Aynı hedefe ulaşan iki uyarıcı yolun etkisi toplanır; hedef, tek bir yolun sağlayacağından daha yükseğe çıkar.',
+    look: 'A hem B’yi hem C’yi sürer; ikisi de D’ye bağlanır. D’nin tepesi (yaklaşık 0,70) tek bir yolun vereceğinin iki katıdır ve D iki adım uzakta olduğu için tepesine B ile C’den sonra ulaşır.',
+    tryThis: 'C→D bağlantısını kaldır ve yeniden çalıştır: D’nin tepesi yarıya, yaklaşık 0,35’e iner.',
+    boundary: 'Toplama burada doğrusaldır: toplam girdi 0–1 aralığında kaldıkça iki yolun etkisi düz toplanır, 1’i aşan girdi kırpılır. Gerçek hücrelerde girdilerin nasıl birleştiği bu basit kuraldan çıkarılamaz.',
+  },
+  'feedback-inhibition': {
+    title: 'Geri beslemeli baskılama',
+    teaches: 'Bir hücre, kendi uyardığı hücre tarafından baskılanınca yanıtını kendisi sınırlar: erken bir tepe yapar, sonra daha düşük bir düzeye iner.',
+    look: 'A, B’yi uyarır; B de A’yı baskılar. A’nın tepesi uyaran sürerken, erken gelir (yaklaşık 130 ms); B etkinleşince A geriler ve uyaranın bittiği 300 ms’de tepesinin belirgin biçimde altındadır.',
+    tryThis: 'B→A baskılayıcı bağlantısını kaldır ve yeniden çalıştır: A uyaran boyunca yükselmeyi sürdürür, tepesi 300 ms’ye kayar ve yaklaşık 2 katına çıkar.',
+    boundary: 'A’nın eğrisindeki küçük dalgalanma sönümlenir; bu model burada kendiliğinden süren bir salınım üretmez ve uyaran bitince etkinlik söner. Geri beslemeli baskılamanın gerçek devrelerdeki işlevi bu oyuncak modelden çıkarılamaz.',
+  },
+  'electrical-pair': {
+    title: 'Elektriksel eşleşmiş çift',
+    teaches: 'Elektriksel (gap) bağlantı etkinliği iki hücre arasında paylaştırır: uyarılan hücre bir pay verir, komşusu o payı alır.',
+    look: 'Yalnız A uyarılır, ama B de yükselir. A’nın tepesi bağlantısız hâline göre düşer (yaklaşık 0,80 yerine 0,60); eksilen pay B’dedir: iki eğrinin toplamı her an A’nın tek başına izleyeceği eğriye eşittir.',
+    tryThis: 'Gap gücünü 1’e çıkar ve yeniden çalıştır: B, A’ya yaklaşır ama ona yetişmez; A’nın tepesinin üçte biri yerine yarısına ulaşır.',
+    boundary: 'Buradaki gap, iki yönde aynı katsayıyla işleyen simetrik bir yayılma kuralıdır. Gerçek elektriksel sinapsların doğrultucu ya da hücre çiftine özgü davranışını içermez.',
+  },
+  disinhibition: {
+    title: 'Baskının baskılanması (disinhibisyon)',
+    teaches: 'Baskılayan hücrenin kendisi baskılanınca hedef serbest kalır: baskılayanı baskılamak hedefin yanıtını yükseltir.',
+    look: 'B, C’yi baskılar; D de B’yi baskılar. D etkinleşince B kısa bir yükselişten sonra susar ve C neredeyse hiç baskılanmadan yükselir: C’nin tepesi yaklaşık 0,71 olur.',
+    tryThis: 'D→B baskılayıcı bağlantısını kaldır ve yeniden çalıştır: B yüksek kalır ve C’nin tepesi yaklaşık 0,22’ye iner.',
+    boundary: 'Buradaki bütün hücreleri aynı A darbesi sürer; etki, seçilen yuvarlak ağırlıkların sonucudur. Gerçek devrelerde disinhibisyonun rolü bu oyuncak modelden çıkarılamaz.',
+  },
+})]
+
+export const motifsEn: typeof motifs = [...presetsEn, ...addedMotifList({
+  divergence: {
+    title: 'Divergence: one cell drives two targets',
+    teaches: 'A single cell drives two targets at the same time; each target receives the same signal scaled by the strength of its own connection.',
+    look: 'B and C reach their peaks at the same time; the trace of C is a scaled-down copy of the trace of B, and the ratio of the peaks equals the ratio of the connection strengths (0.5 / 0.9). In the table C reaches the 0.10 level later; the reason is not a delay but that its trace is lower.',
+    tryThis: 'Remove the A→C connection and run again: C falls silent, and the trace of B does not change at all. In this model the branch to one target does not affect the other.',
+    boundary: 'The output of the source is not divided between the branches here; each branch sees the same activity. This is a result of the summation rule of the model; it does not mean that the branches of a real axon transmit equally.',
+  },
+  convergence: {
+    title: 'Convergence: two paths sum at one target',
+    teaches: 'The effects of two excitatory paths that reach the same target add up; the target rises higher than a single path would take it.',
+    look: 'A drives both B and C; both connect to D. The peak of D (about 0.70) is twice what a single path would give, and because D is two steps away it reaches its peak after B and C.',
+    tryThis: 'Remove the C→D connection and run again: the peak of D falls to half, about 0.35.',
+    boundary: 'The summation here is linear: as long as the total input stays in the 0–1 range the effects of the two paths simply add, and input above 1 is clipped. How inputs combine in real cells cannot be inferred from this simple rule.',
+  },
+  'feedback-inhibition': {
+    title: 'Feedback inhibition',
+    teaches: 'When a cell is inhibited by the cell it excites, it limits its own response: it makes an early peak, then falls to a lower level.',
+    look: 'A excites B; B in turn inhibits A. The peak of A comes early, while the stimulus is still on (about 130 ms); once B becomes active A falls back, and at 300 ms, when the stimulus ends, it is clearly below its peak.',
+    tryThis: 'Remove the inhibitory B→A connection and run again: A keeps rising throughout the stimulus, its peak moves to 300 ms and becomes about 2 times as high.',
+    boundary: 'The small ripple in the trace of A is damped; this model does not produce a self-sustained oscillation here, and the activity dies out once the stimulus ends. The function of feedback inhibition in real circuits cannot be inferred from this toy model.',
+  },
+  'electrical-pair': {
+    title: 'Electrically coupled pair',
+    teaches: 'An electrical (gap) connection shares activity between two cells: the stimulated cell gives up a share, and its neighbor receives that share.',
+    look: 'Only A is stimulated, but B rises too. The peak of A is lower than without the connection (0.60 instead of about 0.80); the missing share is in B: at every moment the sum of the two traces equals the trace A would follow alone.',
+    tryThis: 'Raise the gap strength to 1 and run again: B comes closer to A but does not catch up with it; it reaches half of the peak of A instead of one third.',
+    boundary: 'The gap here is a symmetric diffusion rule that works with the same gain in both directions. It does not include the rectifying or cell-pair-specific behavior of real electrical synapses.',
+  },
+  disinhibition: {
+    title: 'Inhibiting the inhibitor (disinhibition)',
+    teaches: 'When the inhibiting cell is itself inhibited, the target is released: inhibiting the inhibitor raises the response of the target.',
+    look: 'B inhibits C; D in turn inhibits B. Once D becomes active, B falls silent after a brief rise and C rises almost uninhibited: the peak of C is about 0.71.',
+    tryThis: 'Remove the inhibitory D→B connection and run again: B stays high and the peak of C falls to about 0.22.',
+    boundary: 'All the cells here are driven by the same pulse into A; the effect is a result of the chosen round weights. The role of disinhibition in real circuits cannot be inferred from this toy model.',
+  },
+})]
+
+/** The example or motif in the interface language. Its `draft` is the same object in both languages. */
+export const presetById = (id: BuilderPreset['id']): BuilderPreset => L(motifs, motifsEn).find(preset => preset.id === id)!

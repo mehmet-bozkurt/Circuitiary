@@ -182,3 +182,85 @@ describe('share text in English', () => {
     expect(buildShareUrl(real, 'http://localhost/')).toBe(turkish)
   })
 })
+
+describe('stimulus protocol in the link', () => {
+  const protocol: ShareState = { ...toy, stimulusShape: 'sine', sinePeriod: 250, noiseAmplitude: 0.15, noiseSeed: 7 }
+  const defaults: ShareState = { ...toy, stimulusShape: 'pulse', sinePeriod: 100, noiseAmplitude: 0, noiseSeed: 1 }
+  // What a link of the example carries: the real-only settings are not written in that mode.
+  const inToyLink = (state: ShareState) => Object.fromEntries(Object.entries(state).filter(([field]) => !['chemicalGain', 'gapGain', 'focusConnections'].includes(field)))
+
+  it('leaves the link of a default experiment exactly as it was before the protocol existed', () => {
+    const before = 'http://localhost/?m=illustrative&v=2d&c=baseline&st=S1&am=0.8&du=200&tb=30&tn=O1&tc=90&se=I3-O1&o=O1&n=S1&dt=1&sc=0'
+    expect(buildShareUrl(toy, 'http://localhost/')).toBe(before)
+    expect(buildShareUrl(defaults, 'http://localhost/')).toBe(before)
+    expect(buildShareUrl({ ...real, ...{ stimulusShape: 'pulse', sinePeriod: 100, noiseAmplitude: 0, noiseSeed: 1 } }, 'http://localhost/')).toBe(buildShareUrl(real, 'http://localhost/'))
+  })
+
+  it('writes each key only where it differs from its default, after the stimulus duration', () => {
+    const url = new URL(buildShareUrl(protocol, 'http://localhost/'))
+    expect([...url.searchParams.keys()]).toEqual(['m', 'v', 'c', 'st', 'am', 'du', 'sh', 'sp', 'na', 'ns', 'tb', 'tn', 'tc', 'se', 'o', 'n', 'dt', 'sc'])
+    expect(url.searchParams.get('sh')).toBe('sine')
+    expect(url.searchParams.get('sp')).toBe('250')
+    expect(url.searchParams.get('na')).toBe('0.15')
+    expect(url.searchParams.get('ns')).toBe('7')
+    const onlyShape = new URL(buildShareUrl({ ...defaults, stimulusShape: 'ramp' }, 'http://localhost/'))
+    expect(onlyShape.searchParams.get('sh')).toBe('ramp')
+    for (const key of ['sp', 'na', 'ns']) expect(onlyShape.searchParams.has(key), key).toBe(false)
+    // No float noise from the slider arithmetic.
+    expect(new URL(buildShareUrl({ ...defaults, noiseAmplitude: 0.1 + 0.2 }, 'http://localhost/')).searchParams.get('na')).toBe('0.3')
+  })
+
+  it('round-trips the protocol; defaults come back as absent', () => {
+    const parsed = parseShareQuery(query(buildShareUrl(protocol, 'http://localhost/')))
+    expect(parsed.ignored).toEqual([])
+    expect(parsed.values).toEqual(inToyLink(protocol))
+    const plain = parseShareQuery(query(buildShareUrl(defaults, 'http://localhost/')))
+    expect(plain.ignored).toEqual([])
+    expect(plain.values).toEqual(inToyLink(toy))
+    for (const key of ['stimulusShape', 'sinePeriod', 'noiseAmplitude', 'noiseSeed'] as const) expect(key in plain.values, key).toBe(false)
+  })
+
+  it('round-trips every shape, both ends of both sliders and the seed range', () => {
+    for (const stimulusShape of ['pulse', 'ramp', 'sine'] as const) expect(parseShareQuery(`?sh=${stimulusShape}`).values).toEqual({ stimulusShape })
+    for (const sinePeriod of [50, 100, 400]) expect(parseShareQuery(`?sp=${sinePeriod}`).values).toEqual({ sinePeriod })
+    for (const noiseAmplitude of [0, 0.05, 0.3]) expect(parseShareQuery(`?na=${noiseAmplitude}`).values).toEqual({ noiseAmplitude })
+    for (const noiseSeed of [1, 2, 9999]) expect(parseShareQuery(`?ns=${noiseSeed}`).values).toEqual({ noiseSeed })
+    for (const [field, value] of [['sinePeriod', 50], ['sinePeriod', 400], ['noiseAmplitude', 0.3], ['noiseSeed', 9999]] as const) {
+      expect(parseShareQuery(query(buildShareUrl({ ...defaults, [field]: value }, 'http://localhost/'))).values[field]).toBe(value)
+    }
+  })
+
+  it('reports an unknown shape and values outside the range or off the step', () => {
+    const bad = parseShareQuery('?sh=square&sp=45&na=0.35&ns=0')
+    expect(bad.values).toEqual({})
+    expect(bad.found).toBe(true)
+    expect(bad.ignored).toEqual(['stimulusShape', 'sinePeriod', 'noiseAmplitude', 'noiseSeed'])
+    for (const text of ['sh=Sine', 'sh=', 'sp=410', 'sp=105', 'sp=40', 'na=0.07', 'na=-0.05', 'na=0,1', 'na=1e-1', 'ns=1.5', 'ns=10000', 'ns=-3', 'ns=abc', 'ns=', 'sh=ramp&sh=sine']) {
+      const parsed = parseShareQuery(`?${text}`)
+      expect(parsed.values, text).toEqual({})
+      expect(parsed.ignored, text).toHaveLength(1)
+    }
+    expect(shareNotice({ applied: 1, ignored: bad.ignored, realUnavailable: false }))
+      .toBe('Bağlantıdaki ayarlar uygulandı. Geçersiz olduğu için yok sayılan parçalar: Uyaran biçimi, Sinüs periyodu, Girdi gürültüsü, Gürültü tohumu.')
+  })
+
+  it('keeps the protocol through the circuit check and the fallback to the example', () => {
+    const parsed = parseShareQuery('?m=real&sh=ramp&na=0.1&ns=4&st=AVER')
+    expect(restrictToCircuit(parsed, toyIds, 'illustrative').values).toMatchObject({ stimulusShape: 'ramp', noiseAmplitude: 0.1, noiseSeed: 4 })
+    expect(withoutRealSelections(parsed).values).toEqual({ mode: 'illustrative', stimulusShape: 'ramp', noiseAmplitude: 0.1, noiseSeed: 4 })
+    expect(withoutRealSelections(parsed).ignored).toEqual([])
+  })
+
+  it('an old link without the keys parses to no protocol values and nothing ignored', () => {
+    const old = parseShareQuery('?m=illustrative&v=2d&c=baseline&st=S1&am=0.8&du=200&tb=30&tn=O1&tc=90&se=I3-O1&o=O1&n=S1&dt=1&sc=0')
+    expect(old.ignored).toEqual([])
+    expect(old.values).toEqual(inToyLink(toy))
+  })
+
+  it('names the protocol fields in both languages', () => {
+    expect(shareFields.stimulusShape).toEqual({ key: 'sh', label: 'Uyaran biçimi', labelEn: 'Stimulus shape' })
+    expect(shareFields.sinePeriod).toEqual({ key: 'sp', label: 'Sinüs periyodu', labelEn: 'Sine period' })
+    expect(shareFields.noiseAmplitude).toEqual({ key: 'na', label: 'Girdi gürültüsü', labelEn: 'Input noise' })
+    expect(shareFields.noiseSeed).toEqual({ key: 'ns', label: 'Gürültü tohumu', labelEn: 'Noise seed' })
+  })
+})

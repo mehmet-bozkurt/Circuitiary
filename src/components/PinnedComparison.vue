@@ -4,6 +4,8 @@ import { decimal, withComma } from '../format'
 import { L, useMessages } from '../i18n'
 import { changedSettings, type PinnedCurve } from '../pinnedCurve'
 import { shareFields, type ShareField, type ShareState } from '../shareState'
+import { resolveProtocol } from '../stimulusProtocol'
+import type { StimulusShape } from '../model/types'
 import { messages } from './PinnedComparison.messages'
 
 // "Pin and compare": the buttons, the two peaks and the list of settings changed since pinning.
@@ -18,6 +20,8 @@ const props = defineProps<{
   conditionNames: Record<ShareState['activeCondition'], string>
   /** Readable name of a connection id ("I3 → O1"). */
   edgeName: (id: string) => string
+  /** "Darbe", "Rampa", "Sinüs" in the current language. */
+  shapeNames: Record<StimulusShape, string>
 }>()
 const emit = defineEmits<{ pin: []; unpin: [] }>()
 const m = useMessages(messages)
@@ -35,7 +39,13 @@ function unpin() {
 }
 
 function shown(field: ShareField, state: ShareState): string {
+  // A record without the stimulus protocol fields means their defaults.
+  const protocol = resolveProtocol(state)
   switch (field) {
+    case 'stimulusShape': return props.shapeNames[protocol.stimulusShape]
+    case 'sinePeriod': return m.value.ms(String(protocol.sinePeriod))
+    case 'noiseAmplitude': return decimal(protocol.noiseAmplitude, 2)
+    case 'noiseSeed': return String(protocol.noiseSeed)
     case 'activeCondition': return props.conditionNames[state.activeCondition]
     case 'selectedEdge': return props.edgeName(state.selectedEdge)
     case 'amplitude': case 'chemicalGain': case 'gapGain': return decimal(state[field], 2)

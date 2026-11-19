@@ -1,4 +1,4 @@
-import type { Circuit, SimulationConfig, SimulationResult } from './types'
+import type { Circuit, SimulationConfig, SimulationResult, StimulusConfig } from './types'
 
 /** Bounds browser memory and prevents accidental extremely long runs. */
 export const MAX_SIMULATION_STEPS = 100_000
@@ -83,6 +83,17 @@ function validate(circuit: Circuit, config: SimulationConfig): Map<string, numbe
     throw new Error('Stimulus onset and duration must be non-negative.')
   }
   unitInterval(config.stimulus.amplitude, 'Stimulus amplitude')
+  const { shape, periodMs, noise } = config.stimulus
+  if (shape !== undefined && shape !== 'pulse' && shape !== 'ramp' && shape !== 'sine') throw new Error('Unknown stimulus shape.')
+  if (periodMs !== undefined) positive(periodMs, 'Stimulus periodMs')
+  else if (shape === 'sine') throw new Error('Stimulus periodMs is required for the sine shape.')
+  if (noise !== undefined) {
+    unitInterval(noise.amplitude, 'Stimulus noise amplitude')
+    if (!Number.isInteger(noise.seed) || noise.seed < 0 || noise.seed > MAX_NOISE_SEED) {
+      throw new Error(`Stimulus noise seed must be an integer in [0, ${MAX_NOISE_SEED}].`)
+    }
+    positive(noise.holdMs, 'Stimulus noise holdMs')
+  }
   if (config.silencedConnectionId !== undefined && !connectionIds.has(config.silencedConnectionId)) {
     throw new Error('Silenced connection is an unknown connection.')
   }
@@ -107,10 +118,60 @@ function validate(circuit: Circuit, config: SimulationConfig): Map<string, numbe
 function copySettings(config: SimulationConfig): SimulationConfig {
   return {
     ...config,
-    stimulus: { ...config.stimulus },
+    // No default is written here: a config without shape, period or noise keeps exactly its own keys.
+    stimulus: { ...config.stimulus, ...(config.stimulus.noise === undefined ? {} : { noise: { ...config.stimulus.noise } }) },
     ...(config.tauOverrides === undefined ? {} : { tauOverrides: { ...config.tauOverrides } }),
     ...(config.initialState === undefined ? {} : { initialState: { ...config.initialState } }),
   }
+}
+
+/** Largest noise seed: the seed is mixed as an unsigned 32-bit integer. */
+export const MAX_NOISE_SEED = 0xffffffff
+
+/** Murmur3's 32-bit finalizer: a fixed, well-mixing map of one unsigned 32-bit integer to another. */
+function mix32(value: number): number {
+  let h = value | 0
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b)
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35)
+  return (h ^ (h >>> 16)) >>> 0
+}
+
+/**
+ * A fixed number in [-1, 1] for each (seed, interval index) pair. It is a hash, not a generator with
+ * state: the value of an interval does not depend on which other intervals were asked for, or in what order.
+ */
+export function unitNoise(seed: number, index: number): number {
+  return mix32(mix32(Math.imul(seed, 0x9e3779b1) ^ 0x5bd1e995) ^ Math.imul(index + 1, 0x7feb352d)) / 0xffffffff * 2 - 1
+}
+
+/** The stimulus window is half open: [onsetMs, onsetMs + durationMs). */
+function inStimulusWindow(stimulus: StimulusConfig, timeMs: number): boolean {
+  return timeMs >= stimulus.onsetMs && timeMs < stimulus.onsetMs + stimulus.durationMs
+}
+
+/**
+ * The input I(t) that the stimulated cell receives at `timeMs`; zero outside the stimulus window.
+ * With s = t - onsetMs inside the window:
+ *   pulse (default)  amplitude
+ *   ramp             amplitude * s / durationMs                        (0 at the onset, approaches amplitude at the end)
+ *   sine             amplitude * (1 - cos(2 pi s / periodMs)) / 2      (a raised cosine between 0 and amplitude)
+ * and, when `noise` is given, plus noise.amplitude * u(seed, floor(s / holdMs)) with u in [-1, 1] from
+ * `unitNoise`. The addition is constant over each hold interval, so it is the same function of time for
+ * every time step, and the same seed always gives the same sequence. It is a pseudo-random teaching input,
+ * not a model of biological noise. The sum is not clipped here and can leave [0, 1]; `simulate` clips the
+ * cell's total input. The values are not validated here; `simulate` validates the configuration.
+ */
+export function stimulusValue(stimulus: StimulusConfig, timeMs: number): number {
+  if (!inStimulusWindow(stimulus, timeMs)) return 0
+  const elapsedMs = timeMs - stimulus.onsetMs
+  const shaped = stimulus.shape === 'ramp'
+    ? stimulus.amplitude * (elapsedMs / stimulus.durationMs)
+    : stimulus.shape === 'sine'
+      ? stimulus.amplitude * (1 - Math.cos(2 * Math.PI * elapsedMs / stimulus.periodMs!)) / 2
+      : stimulus.amplitude
+  const noise = stimulus.noise
+  if (noise === undefined) return shaped
+  return shaped + noise.amplitude * unitNoise(noise.seed, Math.floor(elapsedMs / noise.holdMs))
 }
 
 /**
@@ -121,11 +182,25 @@ function copySettings(config: SimulationConfig): SimulationConfig {
  * gap is one symmetric nonnegative conductance g_ij = g_ji, outside the clip.
  * Silencing a physical gap removes its contribution in both directions.
  *
- * Activity, chemical weights and gap conductances are dimensionless model
- * assumptions, not measured voltage, rates, or biophysical conductance.
- * Every update reads only the previous state. The pulse is evaluated at the
- * left endpoint, active on [onset, onset + duration). A partial final step
- * reaches durationMs exactly. dt <= tau_i / (1 + sum_j active g_ij) makes the
+ * Activity, input, chemical weights and gap conductances are dimensionless
+ * model assumptions, not measured voltage, rates, current, or biophysical
+ * conductance. Every update reads only the previous state.
+ *
+ * I_i(t) is zero for every cell except the stimulus target, and zero outside
+ * the stimulus window [onset, onset + duration). Inside it the target receives
+ * `stimulusValue`: a rectangular pulse of height `amplitude` by default, a
+ * linear ramp or a raised cosine when `stimulus.shape` asks for one, and
+ * optionally a seeded pseudo-random addition that is piecewise constant over
+ * `noise.holdMs` (a reproducible teaching input, not a model of biological
+ * noise). The input is evaluated at the left endpoint of each step and held
+ * over the step; ramp, sine and noise are therefore sampled with an O(dt)
+ * error that vanishes as dt shrinks, and the noise sequence itself does not
+ * depend on dt. The input is never clipped on its own: only the sum with the
+ * chemical drive is. Without shape, period and noise the result is exactly
+ * that of the plain pulse.
+ *
+ * A partial final step reaches durationMs exactly.
+ * dt <= tau_i / (1 + sum_j active g_ij) makes the
  * update a convex blend; the resulting state is never clipped. In real
  * arithmetic the state therefore stays in [0, 1]. In floating point it can
  * leave that interval by a few ulp (observed at most 4.4e-16) exactly at the
@@ -152,7 +227,6 @@ export function simulate(circuit: Circuit, config: SimulationConfig): Simulation
   const timesMs = [0]
   const stepCount = Math.ceil(config.durationMs / config.dtMs)
   const stimulusIndex = indices.get(config.stimulus.target)!
-  const stimulusEnd = config.stimulus.onsetMs + config.stimulus.durationMs
 
   for (let step = 1; step <= stepCount; step += 1) {
     const previousTime = timesMs[step - 1]!
@@ -168,8 +242,9 @@ export function simulate(circuit: Circuit, config: SimulationConfig): Simulation
       gapNeighborDrive[connection.source] = gapNeighborDrive[connection.source]! + connection.weight * state[connection.target]!
       gapNeighborDrive[connection.target] = gapNeighborDrive[connection.target]! + connection.weight * state[connection.source]!
     }
-    if (previousTime >= config.stimulus.onsetMs && previousTime < stimulusEnd) {
-      drive[stimulusIndex] = drive[stimulusIndex]! + config.stimulus.amplitude
+    // Outside the window nothing is added at all, so the default pulse costs and computes what it always did.
+    if (inStimulusWindow(config.stimulus, previousTime)) {
+      drive[stimulusIndex] = drive[stimulusIndex]! + stimulusValue(config.stimulus, previousTime)
     }
     state = state.map((value, index) => {
       const total = drive[index]!

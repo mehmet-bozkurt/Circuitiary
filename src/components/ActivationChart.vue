@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { decimal } from '../format'
 import { TICK_FRACTIONS, bandWidth, plotX, plotY, tracePath, useChartWidth } from '../learning/plotBox'
 import { useMessages } from '../i18n'
@@ -16,7 +16,12 @@ const props = withDefaults(defineProps<{
   stimulus: { onsetMs: number; durationMs: number }
   /** Shared upper bound in the original dimensionless units, never per trace. */
   yMax?: number
-}>(), { yMax: 1 })
+  /**
+   * The input I(t) of the stimulated cell at `times`, drawn as a thin line on the same axis. Passed only
+   * when it is not the plain pulse; the yellow band alone shows that one.
+   */
+  input?: readonly number[] | null
+}>(), { yMax: 1, input: null })
 const emit = defineEmits<{ seek: [time: number] }>()
 const chart = ref<SVGSVGElement>()
 const width = useChartWidth(chart, { initial: 720, min: 300, read: element => element.getBoundingClientRect().width })
@@ -32,6 +37,22 @@ const tickTimes = computed(() => TICK_FRACTIONS.map(fraction => fraction * maxTi
 const tickValues = computed(() => TICK_FRACTIONS.map(fraction => fraction * axisMax.value))
 const paths = computed(() => props.traces.map(trace => ({ ...trace, path: tracePath(trace.values, trace.times ?? props.times, x, y) })))
 const hasPinned = computed(() => props.traces.some(trace => trace.id === 'pinned'))
+const clipId = `input-clip-${useId()}`
+/**
+ * The input as polyline points. Samples inside a run of equal values add nothing to the line and are
+ * left out (the input is zero outside the stimulus window). Values are in the axis' own units and are
+ * not rescaled: what lies above the axis or below zero is cut off at the plot edge by the clip path.
+ */
+const inputPoints = computed(() => {
+  const values = props.input
+  if (!values || values.length === 0) return null
+  const points: string[] = []
+  values.forEach((value, index) => {
+    if (index > 0 && index < values.length - 1 && values[index - 1] === value && values[index + 1] === value) return
+    points.push(`${x(props.times[index] ?? 0).toFixed(2)},${y(value).toFixed(2)}`)
+  })
+  return points.join(' ')
+})
 
 function seek(event: MouseEvent) {
   const rect = event.currentTarget instanceof SVGElement ? event.currentTarget.getBoundingClientRect() : null
@@ -42,7 +63,7 @@ function seek(event: MouseEvent) {
 </script>
 
 <template>
-  <svg ref="chart" class="activation-chart" :viewBox="`0 0 ${width} ${height}`" role="img" :aria-label="m.chartLabel(decimal(axisMax, tickDecimals)) + (hasPinned ? ` ${m.pinnedNote}` : '')" @click="seek">
+  <svg ref="chart" class="activation-chart" :viewBox="`0 0 ${width} ${height}`" role="img" :aria-label="m.chartLabel(decimal(axisMax, tickDecimals)) + (hasPinned ? ` ${m.pinnedNote}` : '') + (inputPoints ? ` ${m.inputNote}` : '')" @click="seek">
     <rect :x="x(stimulus.onsetMs)" :y="pad.top" :width="bandWidth(x, stimulus.onsetMs, stimulus.durationMs, maxTime)" :height="height - pad.top - pad.bottom" fill="#d9b977" opacity="0.13" />
     <g v-for="tick in tickValues" :key="tick">
       <line :x1="pad.left" :x2="width - pad.right" :y1="y(tick)" :y2="y(tick)" stroke="var(--theme-border, #e1e4db)" />
@@ -50,6 +71,11 @@ function seek(event: MouseEvent) {
     </g>
     <g v-for="tick in tickTimes" :key="tick">
       <text :x="x(tick)" :y="height - 15" text-anchor="middle" class="chart-tick">{{ Math.round(tick) }}</text>
+    </g>
+    <g v-if="inputPoints" data-testid="input-waveform">
+      <!-- One unit taller than the plot on each side, so a line lying exactly on 0 or on the axis maximum keeps its full width. -->
+      <clipPath :id="clipId"><rect :x="pad.left" :y="pad.top - 1" :width="width - pad.left - pad.right" :height="height - pad.top - pad.bottom + 2" /></clipPath>
+      <polyline :points="inputPoints" :clip-path="`url(#${clipId})`" fill="none" stroke="var(--theme-trace-gold, #8c6417)" stroke-width="1.2" stroke-linejoin="round" />
     </g>
     <path v-for="trace in paths" :key="trace.id" :d="trace.path" fill="none" :stroke="trace.color" stroke-width="2.7" :stroke-dasharray="trace.dash ?? (trace.id === 'tau' ? '8 5' : trace.id === 'silenced' ? '2 5' : undefined)" />
     <line :x1="x(cursorMs)" :x2="x(cursorMs)" :y1="pad.top" :y2="height - pad.bottom" stroke="var(--theme-muted, #253a34)" stroke-dasharray="3 4" opacity="0.5" />

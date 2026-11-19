@@ -1,4 +1,4 @@
-import type { ReadonlyRealConnectome } from '../model/types'
+import type { ReadonlyRealConnectome, StimulusShape } from '../model/types'
 
 /** All existing experiment controls; this records a draft, never results. */
 export interface ExperimentDraft {
@@ -12,6 +12,14 @@ export interface ExperimentDraft {
   stimulusTarget: string
   amplitude: number
   pulseDuration: number
+  /**
+   * Stimulus protocol (stimulusProtocol.ts). A draft, link or pinned record without these fields means
+   * the defaults: the rectangular pulse with no pseudo-random addition.
+   */
+  stimulusShape?: StimulusShape
+  sinePeriod?: number
+  noiseAmplitude?: number
+  noiseSeed?: number
   baseTau: number
   changedTau: number
   changedNeuron: string
